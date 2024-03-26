@@ -34,16 +34,18 @@ def home():
 
     cursor.execute("SELECT name, email, secret FROM otp_secrets")
     otps = cursor.fetchall()
+
+    cursor.execute("SELECT id, name FROM companies")
+    companies = cursor.fetchall()
     conn.close()
 
-    # Convert each Row object to a dictionary and add the current OTP
     otps_with_current_otp = []
     for otp in otps:
-        # Convert sqlite3.Row to a dictionary
         otp_dict = dict(otp)
         otp_secret = otp_dict['secret']
         totp = pyotp.TOTP(otp_secret)
-        otp_dict['current_otp'] = totp.now()  # Adds the current OTP
+        otp_dict['current_otp'] = totp.now()
         otps_with_current_otp.append(otp_dict)
 
-    return render_template('home.html', otps=otps_with_current_otp)
+    return render_template('home.html', otps=otps_with_current_otp, companies=companies)
+

@@ -9,14 +9,14 @@
     <div class="container">
         <h1 class="text-center text-white">One Time Passwords</h1>
         
-        <!-- Search bar added here -->
         <div class="search-bar text-center">
             <input type="text" placeholder="Search for saved OTPs..." class="search-input">
-            <!-- Dropdown Menu for selecting companies -->
             <select class="company-select">
                 <option selected>All Companies</option>
-                <!-- You can add more company options here -->
-            </select>
+                {% for company in companies %}
+                <option value="{{ company.id }}">{{ company.name }}</option>
+                {% endfor %}
+            </select>            
         </div>
         
         <div class="row">
