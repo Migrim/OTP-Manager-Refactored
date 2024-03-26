@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OTP-List</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/home.css') }}">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap">
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center text-white">One Time Passwords</h1>
+        
+        <!-- Search bar added here -->
+        <div class="search-bar text-center">
+            <input type="text" placeholder="Search for saved OTPs..." class="search-input">
+            <!-- Dropdown Menu for selecting companies -->
+            <select class="company-select">
+                <option selected>All Companies</option>
+                <!-- You can add more company options here -->
+            </select>
+        </div>
+        
+        <div class="row">
+            {% for otp in otps %}
+                <div class="secret-container">
+                    <div class="otp-content" data-name="{{ otp.name }}">
+                        <p>Name: {{ otp.name }}</p>
+                        <p>Secret: <span class="spoiler">{{ '*' * (otp.secret | length) }}</span></p>
+                        <p>E-Mail: {{ otp.email or 'none' }}</p>
+                        <p>Current OTP: <span class="current-otp">{{ otp.current_otp }}</span></p>
+                        <p>Expiry time: <span class="expiry-time">30s</span></p>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    
+        <!-- Rest of your content -->
+        <div class="copyright">
+            Development Version - © {{ current_year }}. Not for production.
+        </div>
+    </div>
+    
+    <script>
+        function updateExpiryTimes() {
+            document.querySelectorAll('.expiry-time').forEach(function(span) {
+                const now = new Date();
+                const seconds = now.getSeconds();
+                const remainingSeconds = 30 - (seconds % 30);
+                span.textContent = `${remainingSeconds}s`;
+            });
+        }
+
+        // Update every second
+        setInterval(updateExpiryTimes, 1000);
+        document.addEventListener('DOMContentLoaded', updateExpiryTimes);
+
+        function fetchAndUpdateOTPs() {
+            fetch('/main/current-otps')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    data.otps.forEach(otp => {
+                        const otpElement = document.querySelector(`.otp-content[data-name="${otp.name}"]`);
+                        if (otpElement) {
+                            const currentOtpSpan = otpElement.querySelector('.current-otp');
+                            currentOtpSpan.textContent = otp.current_otp;
+                        }
+                    });
+                })
+                .catch(error => console.error('Error fetching current OTPs:', error));
+        }
+
+        setInterval(fetchAndUpdateOTPs, 1000);
+        document.addEventListener('DOMContentLoaded', fetchAndUpdateOTPs);
+    </script>
+
+    <!-- Additional scripts can be added here -->
+</body>
+</html>

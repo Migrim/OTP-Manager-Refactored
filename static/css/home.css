@@ -1,0 +1,121 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins&display=swap');
+
+.container {
+    font-family: 'Poppins', sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 1rem;
+    background-color: white;
+    color: black;
+}
+
+.search-bar {
+    margin-bottom: 2rem;
+    width: 60%;
+    display: flex;
+    gap: 15px; /* Spacing between search input and dropdown */
+    justify-content: center; /* Adjust to center */
+    align-items: center; /* Vertical alignment */
+}
+
+.search-input {
+    padding: 0.5rem;
+    flex-grow: 2; /* Allows the search input to grow twice as much as the dropdown */
+    border: 1px solid #ccc;
+    border-radius: 20px;
+    outline: none;
+    transition: border-color 0.3s ease;
+}
+
+.company-select {
+    padding: 0.5rem;
+    flex-grow: 1; /* Dropdown can grow but less than the search input */
+    border: 1px solid #ccc;
+    border-radius: 20px;
+    outline: none;
+    cursor: pointer;
+    width: auto; /* Adjust width as necessary */
+}
+
+.search-input:focus, .company-select:focus {
+    border-color: #007bff;
+}
+
+.search-input::placeholder {
+    color: #999;
+}
+
+/* Matching the dropdown styling to the search input */
+.company-select {
+    cursor: pointer;
+    flex-grow: 0; /* Prevents the dropdown from growing like the search input */
+    width: auto; /* Adjust width as necessary, could be fixed or auto depending on content */
+}
+
+.row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-around;
+    width: 100%;
+}
+
+.otp-box {
+    width: 45%;
+    padding: 1rem;
+    background-color: #ffffff;
+    color: black;
+    margin-bottom: 2%;
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); /* Each container will have a minimum width of 300px and will expand to fill the available space */
+    gap: 20px; /* Gap between grid items */
+}
+
+.secret-container {
+    background-color: #ffffff;
+    color: #000000;
+    padding: 5px;
+    border: none;
+    box-shadow: 
+        0 4px 8px rgba(0, 0, 0, 0.2),
+        inset 0 2px 4px rgba(100, 100, 100, 0.2);
+    border-radius: 10px;
+    animation: smoothFadeIn 1s cubic-bezier(0.25, 0.8, 0.25, 1);
+    overflow: auto;
+    box-sizing: border-box;
+}
+
+.otp-content {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: fit-content;
+    overflow: auto;
+    padding-left: 10px; /* Adjust the amount of space as needed */
+}
+
+.otp-content p {
+    margin: 2px 0; /* Reduced margin for less vertical space */
+    font-size: 0.9rem; /* Adjusted font size */
+}
+
+@media (max-width: 992px) {
+    .otp-box {
+        width: 48%;
+    }
+}
+
+@media (max-width: 576px) {
+    .otp-box {
+        width: 100%;
+    }
+
+    .search-input {
+        width: 90%;
+    }
+}

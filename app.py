@@ -65,7 +65,7 @@ Bootstrap(app)
 
 app.register_blueprint(db_blueprint, url_prefix='/db')
 app.register_blueprint(auth_bp, url_prefix='/auth')
-app.register_blueprint(main_bp)
+app.register_blueprint(main_bp, url_prefix='/main')
 
 login_manager = LoginManager()
 login_manager.init_app(app)
