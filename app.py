@@ -12,6 +12,7 @@ from wtforms.validators import (
     DataRequired, Length, InputRequired, NumberRange, Email, Optional
 )
 from pyotp import totp, hotp
+from flask_login import LoginManager, login_manager
 from flask_session import Session
 from flask_bcrypt import Bcrypt
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -40,6 +41,9 @@ import json
 import sys
 
 from database import db_blueprint, init_db 
+from auth import auth_bp
+from main import main_bp
+from auth.models import User
 
 #End of declaring the Imports
 
@@ -60,9 +64,12 @@ Session(app)
 Bootstrap(app)
 
 app.register_blueprint(db_blueprint, url_prefix='/db')
+app.register_blueprint(auth_bp, url_prefix='/auth')
+app.register_blueprint(main_bp)
 
 login_manager = LoginManager()
 login_manager.init_app(app)
+login_manager.login_view = 'auth.login'
 
 app.logger.handlers = []
 app.logger.propagate = False
@@ -79,6 +86,11 @@ file_handler.setFormatter(formatter)
 broadcast_message = None
 slow_requests_counter = 0
 flash_messages = []
+
+@login_manager.user_loader
+def load_user(user_id):
+    # Replace this with your User lookup logic
+    return User(id=user_id, username="test", password="test")  # Example user
 
 @app.route('/')
 def hello_world():
