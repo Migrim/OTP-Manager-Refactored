@@ -39,12 +39,13 @@ import signal
 import json
 import sys
 
-from instance.database import db_blueprint, init_db
+from database import db_blueprint, init_db 
 
 #End of declaring the Imports
 
-logging.basicConfig(filename='MV.log', level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
-my_logger = logging.getLogger('MV_logger')
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('MV_logger')
+logger.propagate = False
 
 app = Flask(__name__)
 bcrypt = Bcrypt(app)
@@ -69,12 +70,11 @@ app.logger.propagate = False
 werkzeug_logger = logging.getLogger('werkzeug')
 werkzeug_logger.disabled = True
 
-handler = logging.FileHandler('MV.log')
-handler.setLevel(logging.INFO)
-app.logger.addHandler(handler)
+file_handler = logging.FileHandler('MV.log')
+file_handler.setLevel(logging.INFO)
 
-formatter = logging.Formatter('%(asctime)s %(message)s')
-handler.setFormatter(formatter)
+formatter = logging.Formatter('%y.%m.%d | %H:%M,%S | [%(levelname)s] | %(message)s', datefmt='%y.%m.%d | %H:%M,%S')
+file_handler.setFormatter(formatter)
 
 broadcast_message = None
 slow_requests_counter = 0
@@ -85,20 +85,24 @@ def hello_world():
     return 'Hello, World!'
 
 def log_and_print(message, level='info'):
-    print(message)
+    current_time = datetime.now().strftime("%y.%m.%d | %H:%M,%S")
+    formatted_message = f"{current_time} | [{level.capitalize()}] | {message}"
+    print(formatted_message)
     if level == 'error':
-        my_logger.error(message)
+        logger.error(message)
     else:
-        my_logger.info(message)
+        logger.info(message)
 
 if __name__ == '__main__':
     port = 3000
-    log_and_print("Checking database...")
-    try:
-        init_db()
-        log_and_print("Database check complete.")
-    except Exception as e:
-        log_and_print(f"Failed to check database: {e}", 'error')
+    log_and_print("Checking database via /check_db route...")
+
+    with app.test_client() as client:
+        try:
+            response = client.get('/db/check_db')
+            log_and_print(f"Database check response: {response.data.decode()}")
+        except Exception as e:
+            log_and_print(f"Failed to check database via /check_db route: {e}", 'error')
 
     log_and_print("Starting Flask application...")
     try:
