@@ -44,12 +44,11 @@ from database import db_blueprint, init_db
 from auth import auth_bp
 from main import main_bp
 from auth.models import User
+from logger_setup import get_logger
 
 #End of declaring the Imports
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger('MV_logger')
-logger.propagate = False
+logger = get_logger('MV_logger')
 
 app = Flask(__name__)
 bcrypt = Bcrypt(app)
@@ -71,21 +70,18 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'auth.login'
 
-app.logger.handlers = []
-app.logger.propagate = False
-
 werkzeug_logger = logging.getLogger('werkzeug')
 werkzeug_logger.disabled = True
-
-file_handler = logging.FileHandler('MV.log')
-file_handler.setLevel(logging.INFO)
-
-formatter = logging.Formatter('%y.%m.%d | %H:%M,%S | [%(levelname)s] | %(message)s', datefmt='%y.%m.%d | %H:%M,%S')
-file_handler.setFormatter(formatter)
 
 broadcast_message = None
 slow_requests_counter = 0
 flash_messages = []
+
+def log_and_print(message, level='info'):
+    if level == 'error':
+        logger.error(message)
+    else:
+        logger.info(message)
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -95,15 +91,6 @@ def load_user(user_id):
 @app.route('/')
 def hello_world():
     return 'Hello, World!'
-
-def log_and_print(message, level='info'):
-    current_time = datetime.now().strftime("%y.%m.%d | %H:%M,%S")
-    formatted_message = f"{current_time} | [{level.capitalize()}] | {message}"
-    print(formatted_message)
-    if level == 'error':
-        logger.error(message)
-    else:
-        logger.info(message)
 
 if __name__ == '__main__':
     port = 3000
