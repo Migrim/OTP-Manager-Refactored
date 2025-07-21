@@ -2,7 +2,140 @@
 
 {% block title %}Home | OTP-Tool{% endblock %}
 
+{% block head %}
+<style>
+    #otpContainer {
+        max-width: 1200px;
+        padding: 2rem;
+        margin: 0 auto;
+        text-align: left;
+        width: 100%;
+    }
+    .otp-section {
+        margin-bottom: 3rem;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .company-title {
+        font-size: 1.2rem;
+        font-weight: 600;
+        margin: 1.5rem 0 1rem 0;
+        align-self: flex-start;
+        text-align: left;
+        width: 100%;
+    }
+
+    .otp-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 350px);
+        gap: 1.2rem;
+        justify-content: start;
+    }
+
+    .otp-card {
+        background: #f4f4f4;
+        border: 1px solid #ccc;
+        border-radius: 12px;
+        padding: 1rem;
+        height: 140px;
+        width: 350px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        text-align: left;
+        transition: box-shadow 0.2s ease;
+    }
+
+    .otp-card:hover {
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .otp-name {
+        font-weight: 600;
+        font-size: 1rem;
+        margin-bottom: 0.2rem;
+    }
+
+    .otp-email {
+        font-size: 0.85rem;
+        color: #555;
+        margin-bottom: 0.4rem;
+        word-break: break-word;
+    }
+
+    .otp-type {
+        font-size: 0.8rem;
+        font-weight: 500;
+        color: #333;
+    }
+    .otp-wrapper {
+        text-align: left;
+        max-width: 1200px;
+        margin: 0 auto;
+        width: 100%;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-    <h1 class="title">Bomba Template</h1>
-    <p class="subtitle">this is my Peperolli template and i love matej :3.</p>
+<div class="otp-wrapper">
+    <div id="otpContainer"></div>
+</div>
+
+<script>
+async function loadOTPs() {
+    try {
+        const res = await fetch('/api/secrets');
+        if (!res.ok) throw new Error("Failed to load OTPs");
+
+        const data = await res.json();
+        const grouped = {};
+
+        data.forEach(otp => {
+            const company = otp.company_name || "Unknown Company";
+            if (!grouped[company]) grouped[company] = [];
+            grouped[company].push(otp);
+        });
+
+        const container = document.getElementById("otpContainer");
+        container.innerHTML = "";
+
+        Object.keys(grouped).sort().forEach(company => {
+            const section = document.createElement("div");
+            section.className = "otp-section";
+
+            const title = document.createElement("h2");
+            title.className = "company-title";
+            title.textContent = company;
+
+            const grid = document.createElement("div");
+            grid.className = "otp-grid";
+
+            grouped[company]
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .forEach(entry => {
+                    const card = document.createElement("div");
+                    card.className = "otp-card";
+                    card.innerHTML = `
+                        <div class="otp-name">${entry.name}</div>
+                        <div class="otp-email">${entry.email}</div>
+                        <div class="otp-type">${entry.otp_type.toUpperCase()}</div>
+                    `;
+                    grid.appendChild(card);
+                });
+
+            section.appendChild(title);
+            section.appendChild(grid);
+            container.appendChild(section);
+        });
+    } catch (err) {
+        console.error(err);
+        alert("Failed to load OTPs");
+    }
+}
+
+loadOTPs();
+</script>
 {% endblock %}

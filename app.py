@@ -1,14 +1,20 @@
 from flask import Flask, render_template, request, redirect, url_for
+from flask import flash
 import sqlite3
 import os
 from api import api_bp  # new import
 
 app = Flask(__name__)
+app.secret_key = "your-very-secret-key" 
+
 app.register_blueprint(api_bp, url_prefix="/api")  # register your API routes
 DB_PATH = os.path.join("instance", "otp.db")
 
 @app.route("/")
 def home():
+    flash("This is a test Message!", "success")
+    flash("This is a test Message!", "error")
+    flash("This is a test Message!", "warning")
     return render_template("home.html")
 
 @app.route("/add", methods=["GET", "POST"])

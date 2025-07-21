@@ -355,3 +355,6 @@ button:disabled,
     display: inline-block;
     animation: otpDigitFlyUp 200ms ease-out;
 }
+.circle-fg.resetting {
+    transition: stroke-dashoffset 0.4s ease-out;
+}

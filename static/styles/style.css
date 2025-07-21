@@ -112,7 +112,7 @@ body {
 
 main {
     text-align: center;
-    max-width: 640px;
+
 }
 
 .title {
@@ -248,4 +248,90 @@ main {
 html.dark-mode-preload *,
 html.dark-mode-preload {
     transition: none !important;
+}
+
+#toast-container {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    pointer-events: none;
+}
+
+.toast-message {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    border: 1px solid #e5e5e5;
+    background-color: #fafafa;
+    color: #111;
+    padding: 0.4rem 0.6rem;
+    border-radius: 12px;
+    opacity: 0;
+    transform: translateY(-8px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    font-size: 13px;
+    max-width: 300px;
+    height: 42px;
+    pointer-events: auto;
+}
+
+.toast-message.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.toast-icon {
+    font-family: "Material Symbols Outlined";
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 14;
+    font-size: 16px; 
+    transform: scale(0.75); 
+    transform-origin: center;
+    line-height: 1;
+    margin-right: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.toast-text {
+    flex-grow: 1;
+}
+
+.toast-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: #aaa;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 0;
+    height: 100%;
+}
+
+.toast-message.success .toast-icon {
+    color: #5cbf72;  
+}
+.toast-message.error .toast-icon {
+    color: #e57373;  
+}
+.toast-message.warning .toast-icon {
+    color: #f6c244; 
+}
+.toast-message.info .toast-icon {
+    color: #64a6f2;  
+}
+.dark-mode .toast-message {
+    background-color: #1a1a1a;
+    color: #eee;
+    border-color: #333;
+}
+
+.dark-mode .toast-close {
+    color: #888;
 }

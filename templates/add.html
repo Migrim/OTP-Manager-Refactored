@@ -50,7 +50,7 @@
 
     <div class="button-row">
         <button type="submit" id="submitBtn">Add</button>
-        <a href="#" class="secondary-button" id="addViewBtn">Add/View</a>
+        <a href="#" class="secondary-button" id="addViewBtn">Add + View</a>
     </div>
 </form>
 
@@ -173,7 +173,7 @@ async function showLiveCard(secretId, meta) {
 
     function updateCard(data) {
         const el = document.createElement("div");
-        el.className = "otp-card loading"; // Add pulse
+        el.className = "otp-card loading";
         el.innerHTML = `
             <div class="otp-field">
                 <label>Name</label>
@@ -190,7 +190,7 @@ async function showLiveCard(secretId, meta) {
             <div class="otp-field code-field">
                 <label>Code</label>
                 <div class="otp-value code-with-timer">
-                    <span id="code" class="code-text">
+                    <span id="code" class="code-text" style="cursor: pointer;">
                         ${[...data.current_code].map((d, i) => `<span class="digit" style="animation-delay: ${i * 40}ms">${d}</span>`).join('')}
                     </span>
                     <svg class="countdown-circle" width="24" height="24" viewBox="0 0 36 36">
@@ -200,38 +200,60 @@ async function showLiveCard(secretId, meta) {
                 </div>
             </div>
         `;
+
+        const code = data.current_code;
+        const codeEl = el.querySelector(".code-text");
+
+        // Click-to-copy
+        codeEl.addEventListener("click", () => {
+            navigator.clipboard.writeText(code).then(() => {
+                alert(`Copied OTP: ${code}`);
+            });
+        });
+
+        // Remove previous copy handler if any, then attach a new one
+        document.removeEventListener("copy", window._otpCopyHandler);
+
+        window._otpCopyHandler = (e) => {
+            const selection = window.getSelection().toString();
+            if (!selection) {
+                e.preventDefault();
+                e.clipboardData.setData("text/plain", code);
+                alert(`Copied OTP: ${code}`);
+            }
+        };
+
+        document.addEventListener("copy", window._otpCopyHandler);
+
         cardContainer.innerHTML = "";
         cardContainer.appendChild(el);
         cardContainer.style.display = "block";
-        setTimeout(() => el.classList.remove("loading"), 300); // Remove pulse
+        setTimeout(() => el.classList.remove("loading"), 300);
     }
-
     await fetchCode();
     requestAnimationFrame(animate);
 
-    // Calculate ms to next 30s boundary
     const now = Date.now();
     const msUntilNext30s = 30000 - (now % 30000);
 
     setTimeout(() => {
-        fetchCode(); // fetch exactly at the next 30s mark
-        setInterval(fetchCode, 30000); // and then every 30s from there
+        fetchCode(); 
+        setInterval(fetchCode, 30000); 
     }, msUntilNext30s);
 
     function animate() {
-        const now = Date.now(); // in ms
-        const secondsSinceEpoch = now / 1000;
-        const progress = secondsSinceEpoch % 30; // 0 → 30
-        const offset = (progress / 30) * 100; // 0 → 100
+        const now = performance.now(); 
+        const elapsed = (now - lastTimestamp) / 1000; 
+        const remaining = Math.max(secondsLeft - elapsed, 0);
+        const percent = (remaining / 30) * 100; 
         const circle = document.querySelector(".circle-fg");
 
         if (circle) {
-            circle.style.strokeDashoffset = offset;
+            circle.style.strokeDashoffset = 100 - percent;
         }
 
         requestAnimationFrame(animate);
     }
-
     requestAnimationFrame(animate);
 
     setInterval(fetchCode, 30000);

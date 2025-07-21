@@ -6,6 +6,7 @@
     <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles/style.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet" />
     <script>
         (function () {
             try {
@@ -18,6 +19,9 @@
     </script>
     {% block head %}{% endblock %}
 </head>
+
+<div id="toast-container"></div>
+
 <body class="no-transition">
     
     <header class="navbar">
@@ -80,6 +84,60 @@
         window.addEventListener("load", () => {
             document.documentElement.classList.remove("preload");
         });
+
+        function showToast(message, type = "info") {
+            const container = document.getElementById("toast-container");
+            const toast = document.createElement("div");
+            toast.className = `toast-message ${type}`;
+
+            const icon = document.createElement("span");
+            icon.className = "material-symbols-outlined toast-icon";
+            switch (type) {
+                case "success":
+                    icon.textContent = "check_circle";
+                    break;
+                case "error":
+                    icon.textContent = "error";
+                    break;
+                case "warning":
+                    icon.textContent = "warning";
+                    break;
+                default:
+                    icon.textContent = "info";
+            }
+
+            const text = document.createElement("span");
+            text.className = "toast-text";
+            text.textContent = message;
+
+            const close = document.createElement("button");
+            close.className = "toast-close";
+            close.innerHTML = "&times;";
+            close.onclick = () => toast.remove();
+
+            toast.appendChild(icon);
+            toast.appendChild(text);
+            toast.appendChild(close);
+            container.appendChild(toast);
+
+            setTimeout(() => toast.classList.add("visible"), 10);
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.classList.remove("visible");
+                    setTimeout(() => toast.remove(), 300);
+                }
+            }, 5000);
+        }
+
+        window.alert = function(msg) {
+            showToast(msg, "info");
+        };
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                showToast({{ message|tojson }}, "{{ category }}");
+            {% endfor %}
+        {% endwith %}
     </script>
 </body>
 </html>
