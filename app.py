@@ -1,110 +1,37 @@
-from flask import (
-    Flask, render_template, request, redirect, url_for, flash, session,
-    make_response, jsonify, send_file, Blueprint
-)
-from flask_bootstrap import Bootstrap
-from flask_wtf import FlaskForm
-from wtforms import (
-    StringField, SubmitField, RadioField, HiddenField, IntegerField, SelectField,
-    PasswordField
-)
-from wtforms.validators import (
-    DataRequired, Length, InputRequired, NumberRange, Email, Optional
-)
-from pyotp import totp, hotp
-from flask_login import LoginManager, login_manager
-from flask_session import Session
-from flask_bcrypt import Bcrypt
-from werkzeug.security import generate_password_hash, check_password_hash
-from functools import wraps
-from datetime import datetime, timedelta
-from flask_login import LoginManager, current_user, login_user, UserMixin
-from flask_cors import CORS
-from collections import defaultdict
-from subprocess import Popen, PIPE
-from markupsafe import Markup
-from threading import Lock
-import pyotp
-import ntplib
-import time
-import requests
-import bcrypt
-import shutil
-import os
-import subprocess
+from flask import Flask, render_template, request, redirect, url_for
 import sqlite3
-import logging
-import re
-import uuid
-import signal
-import json
-import sys
-
-from database import db_blueprint, init_db 
-from auth import auth_bp
-from main import main_bp
-from auth.models import User
-from logger_setup import get_logger
-
-#End of declaring the Imports
-
-logger = get_logger('MV_logger')
+import os
+from api import api_bp  # new import
 
 app = Flask(__name__)
-bcrypt = Bcrypt(app)
-CORS(app)
-start_time = datetime.now()
+app.register_blueprint(api_bp, url_prefix="/api")  # register your API routes
+DB_PATH = os.path.join("instance", "otp.db")
 
-# Please enter your secure Secret key here!
-app.config['SECRET_KEY'] = 'enter-your-secret-key!'
-app.config['SESSION_TYPE'] = 'filesystem'
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
-Session(app)
-Bootstrap(app)
+@app.route("/")
+def home():
+    return render_template("home.html")
 
-app.register_blueprint(db_blueprint, url_prefix='/db')
-app.register_blueprint(auth_bp, url_prefix='/auth')
-app.register_blueprint(main_bp, url_prefix='/main')
+@app.route("/add", methods=["GET", "POST"])
+def add():
+    if request.method == "POST":
+        name = request.form.get("name")
+        email = request.form.get("email", "none")
+        secret = request.form.get("secret")
+        otp_type = request.form.get("otp_type", "totp")
+        refresh_time = int(request.form.get("refresh_time", 30))
+        company_id = int(request.form.get("company_id", 1))
 
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = 'auth.login'
+        with sqlite3.connect(DB_PATH) as db:
+            cursor = db.cursor()
+            cursor.execute("""
+                INSERT INTO otp_secrets (name, email, secret, otp_type, refresh_time, company_id)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (name, email, secret, otp_type, refresh_time, company_id))
+            db.commit()
 
-werkzeug_logger = logging.getLogger('werkzeug')
-werkzeug_logger.disabled = True
+        return redirect(url_for("home"))
 
-broadcast_message = None
-slow_requests_counter = 0
-flash_messages = []
+    return render_template("add.html")
 
-def log_and_print(message, level='info'):
-    if level == 'error':
-        logger.error(message)
-    else:
-        logger.info(message)
-
-@login_manager.user_loader
-def load_user(user_id):
-    # Replace this with your User lookup logic
-    return User(id=user_id, username="test", password="test")  # Example user
-
-@app.route('/')
-def hello_world():
-    return 'Hello, World!'
-
-if __name__ == '__main__':
-    port = 3000
-    log_and_print("Checking database via /check_db route...")
-
-    with app.test_client() as client:
-        try:
-            response = client.get('/db/check_db')
-            log_and_print(f"Database check response: {response.data.decode()}")
-        except Exception as e:
-            log_and_print(f"Failed to check database via /check_db route: {e}", 'error')
-
-    log_and_print("Starting Flask application...")
-    try:
-        app.run(debug=True, port=port, host='0.0.0.0')
-    except Exception as e:
-        log_and_print(f"Failed to start Flask application: {e}", 'error')
+if __name__ == "__main__":
+    app.run(port=7440, debug=True)

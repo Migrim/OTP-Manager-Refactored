@@ -1,0 +1,251 @@
+html.preload *, html.preload {
+    transition: none !important;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html, body {
+    height: 100%;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: #fff;
+    color: #111;
+    line-height: 1.5;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 1rem;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.navbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: 1px solid #e5e5e5;
+    background-color: #fafafa;
+    padding: 0.4rem 1rem;
+    border-radius: 12px;
+    width: 950px;
+    height: 42px;
+    font-size: 14px;
+    margin-bottom: 5rem;
+}
+
+.navbar-left {
+    display: flex;
+    align-items: center;
+    gap: 1.2rem;
+    font-size: 14px;
+    color: #111;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-weight: 600;
+}
+
+.logo i {
+    font-size: 14px;
+}
+
+.docs-link {
+    color: #666;
+    font-weight: 400;
+    text-decoration: none;
+}
+
+.docs-link:hover {
+    color: #111;
+}
+
+.navbar-right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.search-box {
+    display: flex;
+    align-items: center;
+    background-color: #f3f3f3;
+    border: 1px solid #e3e3e3;
+    border-radius: 8px;
+    padding: 0 0.5rem;
+    height: 28px;
+    margin-right: 10px;
+}
+
+.search-box input {
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 13px;
+    width: 200px;
+    padding: 0 4px;
+}
+
+.shortcut {
+    font-size: 11px;
+    color: #999;
+    margin-left: 0.4rem;
+}
+
+.theme-toggle,
+.github-link {
+    background: transparent;
+    border: none;
+    font-size: 15px;
+    cursor: pointer;
+    color: #111;
+    padding: 2px;
+}
+
+main {
+    text-align: center;
+    max-width: 640px;
+}
+
+.title {
+    font-size: 38px;
+    font-weight: 700;
+    margin-bottom: 1rem;
+}
+
+.subtitle {
+    font-size: 15px;
+    color: #555;
+    margin-bottom: 1.4rem;
+}
+
+.btn-row {
+    display: flex;
+    justify-content: center;
+    gap: 0.6rem;
+    margin-bottom: 2rem;
+}
+
+.btn-row a {
+    padding: 0.45rem 1rem;
+    font-size: 14px;
+    border-radius: 8px;
+    text-decoration: none;
+    transition: all 0.2s ease;
+    border: 1px solid #ccc;
+    color: #111;
+    background: #fff;
+}
+
+.btn-row a:first-child {
+    background: #111;
+    color: #fff;
+    border: none;
+}
+
+.btn-row a:hover {
+    opacity: 0.9;
+}
+
+.footer {
+    width: 100%;
+    border-top: 1px solid #e5e5e5;
+    padding: 1rem 2rem;
+    font-size: 14px;
+    color: #888;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: auto;
+    box-sizing: border-box;
+}
+
+.footer-left,
+.footer-right {
+    display: flex;
+    gap: 1.2rem;
+    align-items: center;
+}
+
+.footer a {
+    text-decoration: none;
+    color: #888;
+    transition: color 0.2s;
+}
+
+.footer a:hover {
+    color: #111;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-weight: 600;
+    text-decoration: none;
+    color: inherit;
+}
+.logo:hover {
+    opacity: 0.85;
+}
+
+.dark-mode {
+    background-color: #111;
+    color: #eee;
+}
+
+.dark-mode .navbar,
+.dark-mode .footer {
+    background-color: #1a1a1a;
+    border-color: #333;
+}
+
+.dark-mode .docs-link,
+.dark-mode .footer a,
+.dark-mode .shortcut {
+    color: #bbb;
+}
+
+.dark-mode .docs-link:hover,
+.dark-mode .footer a:hover {
+    color: #fff;
+}
+
+.dark-mode .search-box {
+    background-color: #222;
+    border-color: #444;
+}
+
+.dark-mode input {
+    color: #eee;
+}
+.theme-toggle i,
+.github-link i {
+    transition: color 0.2s ease;
+}
+
+.dark-mode .theme-toggle i,
+.dark-mode .github-link i {
+    color: #eee;
+}
+.dark-mode .logo span {
+    color: #ccc;
+}
+.dark-mode .footer-left span {
+    color: #aaa;
+}
+.no-transition * {
+    transition: none !important;
+}
+html.dark-mode-preload *,
+html.dark-mode-preload {
+    transition: none !important;
+}

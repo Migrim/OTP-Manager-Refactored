@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+
+{% block title %}Add Entry{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='styles/add.css') }}">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet" />
+{% endblock %}
+
+{% block content %}
+<form class="form-container" id="otpForm">
+    <label for="name" class="label-with-tooltip">
+        Name
+        <span class="material-symbols-outlined tooltip-icon" data-tooltip="At least 3 characters. Letters, numbers, spaces, - and _ allowed.">info</span>
+    </label>
+    <div class="input-wrapper">
+        <input type="text" id="name" name="name" placeholder="e.g. My OTP Account" required>
+        <span class="checkmark" id="check-name"><i class="fa-solid fa-check"></i></span>
+    </div>
+
+    <label for="email">Email</label>
+    <div class="input-wrapper">
+        <input type="email" id="email" name="email" placeholder="e.g. user@example.com">
+        <span class="checkmark" id="check-email"><i class="fa-solid fa-check"></i></span>
+    </div>
+
+    <label for="secret" class="label-with-tooltip">
+        Secret
+        <span class="material-symbols-outlined tooltip-icon" data-tooltip="Must be Base32 (A–Z, 2–7), at least 16 characters, and uppercase.">info</span>
+    </label>
+    <div class="input-wrapper">
+        <input type="text" id="secret" name="secret" placeholder="Paste your OTP secret here" required>
+        <span class="checkmark" id="check-secret"><i class="fa-solid fa-check"></i></span>
+    </div>
+
+    <label for="otp_type">OTP Type</label>
+    <select id="otp_type" name="otp_type">
+        <option value="totp">TOTP</option>
+        <option value="hotp">HOTP</option>
+    </select>
+
+    <label for="refresh_time">Refresh Time (sec)</label>
+    <input type="number" id="refresh_time" name="refresh_time" value="30" readonly class="readonly-input">
+
+    <label for="company_id">Company</label>
+    <select id="company_id" name="company_id">
+        <option value="1">Public</option>
+        <option value="2">Private</option>
+    </select>
+
+    <div class="button-row">
+        <button type="submit" id="submitBtn">Add</button>
+        <a href="#" class="secondary-button" id="addViewBtn">Add/View</a>
+    </div>
+</form>
+
+<div id="otpCardContainer" class="otp-card-container" style="display: none;"></div>
+
+<script>
+const form = document.getElementById('otpForm');
+const nameInput = document.getElementById('name');
+const emailInput = document.getElementById('email');
+const secretInput = document.getElementById('secret');
+const checkName = document.getElementById('check-name');
+const checkEmail = document.getElementById('check-email');
+const checkSecret = document.getElementById('check-secret');
+const submitBtn = document.getElementById('submitBtn');
+const addViewBtn = document.getElementById('addViewBtn');
+const cardContainer = document.getElementById('otpCardContainer');
+
+let mode = "redirect";
+
+submitBtn.addEventListener("click", () => {
+    mode = "redirect";
+});
+
+addViewBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    mode = "view";
+    form.requestSubmit();
+});
+
+function validateName(name) {
+    return name.length >= 3 && /^[A-Za-z0-9 _\-]+$/.test(name);
+}
+
+function validateEmail(email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function validateSecret(secret) {
+    const cleaned = secret.replace(/\s+/g, '').toUpperCase();
+    const base32Regex = /^[A-Z2-7]+=*$/;
+    return cleaned.length >= 16 && base32Regex.test(cleaned);
+}
+
+function updateValidation() {
+    const nameValid = validateName(nameInput.value);
+    const emailValid = validateEmail(emailInput.value);
+    const secretValid = validateSecret(secretInput.value);
+
+    checkName.classList.toggle('visible', nameValid);
+    checkEmail.classList.toggle('visible', emailValid);
+    checkSecret.classList.toggle('visible', secretValid);
+
+    const allValid = nameValid && emailValid && secretValid;
+    submitBtn.disabled = !allValid;
+    addViewBtn.classList.toggle('disabled', !allValid);
+}
+
+nameInput.addEventListener('input', updateValidation);
+emailInput.addEventListener('input', updateValidation);
+secretInput.addEventListener('input', () => {
+    const cursorPos = secretInput.selectionStart;
+    secretInput.value = secretInput.value.toUpperCase();
+    secretInput.setSelectionRange(cursorPos, cursorPos);
+    updateValidation();
+});
+updateValidation();
+
+form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(form);
+    const data = Object.fromEntries(formData.entries());
+    data.refresh_time = parseInt(data.refresh_time);
+    data.company_id = parseInt(data.company_id);
+
+    const res = await fetch("/api/secrets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data)
+    });
+
+    if (!res.ok) {
+        alert("An error occurred while adding the entry.");
+        return;
+    }
+
+    if (mode === "redirect") {
+        window.location.href = "/";
+    } else {
+        form.style.display = "none";
+        const response = await fetch("/api/secrets");
+        const secrets = await response.json();
+        const latest = secrets[secrets.length - 1];
+        showLiveCard(latest.id, latest);
+    }
+});
+
+async function showLiveCard(secretId, meta) {
+    let secondsLeft = 0;
+    let lastTimestamp = performance.now();
+
+    async function fetchCode() {
+        const res = await fetch(`/api/secrets/${secretId}`);
+        const data = await res.json();
+        const codeEl = document.getElementById("code");
+        if (codeEl) {
+            const oldCode = codeEl.dataset.code || "";
+            if (oldCode !== data.current_code) {
+                codeEl.dataset.code = data.current_code;
+                codeEl.innerHTML = [...data.current_code]
+                    .map((d, i) => `<span class="digit" style="animation-delay: ${i * 40}ms">${d}</span>`)
+                    .join('');
+            }
+        } else {
+            updateCard(data);
+        }
+        secondsLeft = data.seconds_remaining;
+        lastTimestamp = performance.now();
+        return secondsLeft;
+    }
+
+    function updateCard(data) {
+        const el = document.createElement("div");
+        el.className = "otp-card loading"; // Add pulse
+        el.innerHTML = `
+            <div class="otp-field">
+                <label>Name</label>
+                <div class="otp-value">${data.name}</div>
+            </div>
+            <div class="otp-field">
+                <label>Email</label>
+                <div class="otp-value">${data.email}</div>
+            </div>
+            <div class="otp-field">
+                <label>Company</label>
+                <div class="otp-value">${data.company_name}</div>
+            </div>
+            <div class="otp-field code-field">
+                <label>Code</label>
+                <div class="otp-value code-with-timer">
+                    <span id="code" class="code-text">
+                        ${[...data.current_code].map((d, i) => `<span class="digit" style="animation-delay: ${i * 40}ms">${d}</span>`).join('')}
+                    </span>
+                    <svg class="countdown-circle" width="24" height="24" viewBox="0 0 36 36">
+                        <circle class="circle-bg" cx="18" cy="18" r="16" />
+                        <circle class="circle-fg" cx="18" cy="18" r="16" stroke-dasharray="100" stroke-dashoffset="0" />
+                    </svg>
+                </div>
+            </div>
+        `;
+        cardContainer.innerHTML = "";
+        cardContainer.appendChild(el);
+        cardContainer.style.display = "block";
+        setTimeout(() => el.classList.remove("loading"), 300); // Remove pulse
+    }
+
+    await fetchCode();
+    requestAnimationFrame(animate);
+
+    // Calculate ms to next 30s boundary
+    const now = Date.now();
+    const msUntilNext30s = 30000 - (now % 30000);
+
+    setTimeout(() => {
+        fetchCode(); // fetch exactly at the next 30s mark
+        setInterval(fetchCode, 30000); // and then every 30s from there
+    }, msUntilNext30s);
+
+    function animate() {
+        const now = Date.now(); // in ms
+        const secondsSinceEpoch = now / 1000;
+        const progress = secondsSinceEpoch % 30; // 0 → 30
+        const offset = (progress / 30) * 100; // 0 → 100
+        const circle = document.querySelector(".circle-fg");
+
+        if (circle) {
+            circle.style.strokeDashoffset = offset;
+        }
+
+        requestAnimationFrame(animate);
+    }
+
+    requestAnimationFrame(animate);
+
+    setInterval(fetchCode, 30000);
+}
+</script>
+{% endblock %}
