@@ -1,0 +1,126 @@
+.log-container {
+    position: relative;
+    width: 950px;
+}
+
+.log-output {
+    text-align: left;
+    max-height: 700px;
+    overflow-y: auto;
+    background-color: #fafafa;
+    padding: 1rem;
+    border: 1px solid #e5e5e5;
+    border-radius: 8px;
+    font-size: 13px;
+    white-space: pre-wrap;
+    line-height: 1.4;
+    margin-bottom: 20px;
+}
+
+.log-dropdown-form {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 10;
+}
+
+.log-select select {
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    background-color: #fff;
+    font-size: 13px;
+    color: #111;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+    cursor: pointer;
+    appearance: none;
+}
+
+.log-select::after {
+    content: "";
+    position: absolute;
+    pointer-events: none;
+}
+
+html.dark-mode .log-output {
+    background: #1a1a1a;
+    border-color: #333;
+    color: #eee;
+}
+
+html.dark-mode .log-select select {
+    background-color: #222;
+    border-color: #444;
+    color: #eee;
+}
+
+
+.log-error {
+    color: #e74c88; 
+    font-weight: bold;
+}
+
+.log-warning {
+    color: #ff91af;
+    font-weight: bold;
+}
+
+.log-info {
+    color: #a678de; 
+}
+
+.log-critical {
+    color: #ff4c7b; 
+    font-weight: bold;
+}
+
+.log-number {
+    color: #ffb347; 
+}
+
+.log-user {
+    color: #d6336c; 
+    font-weight: bold;
+}
+
+html.dark-mode .log-error {
+    color: #ff99aa; 
+}
+
+html.dark-mode .log-warning {
+    color: #ffd3e0; 
+}
+
+html.dark-mode .log-info {
+    color: #caa6ff; 
+}
+
+html.dark-mode .log-critical {
+    color: #ff6fa5;
+}
+
+html.dark-mode .log-number {
+    color: #ffcc99; 
+}
+
+html.dark-mode .log-user {
+    color: #ff88aa; 
+    font-weight: bold;
+}
+
+.log-updated {
+    position: absolute;
+    bottom: 8px;
+    right: 12px;
+    font-size: 11px;
+    color: #999;
+    background-color: #f1f1f1;
+    padding: 3px 8px;
+    border-radius: 6px;
+    pointer-events: none;
+}
+
+html.dark-mode .log-updated {
+    background-color: #222;
+    color: #aaa;
+}

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Add Entry{% endblock %}
+{% block title %}Add Entry | OTP-Tool{% endblock %}
 
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='styles/add.css') }}">
@@ -18,7 +18,7 @@
         <span class="checkmark" id="check-name"><i class="fa-solid fa-check"></i></span>
     </div>
 
-    <label for="email">Email</label>
+    <label for="email">Email (optional)</label>
     <div class="input-wrapper">
         <input type="email" id="email" name="email" placeholder="e.g. user@example.com">
         <span class="checkmark" id="check-email"><i class="fa-solid fa-check"></i></span>
@@ -26,17 +26,16 @@
 
     <label for="secret" class="label-with-tooltip">
         Secret
-        <span class="material-symbols-outlined tooltip-icon" data-tooltip="Must be Base32 (A–Z, 2–7), at least 16 characters, and uppercase.">info</span>
+        <span class="material-symbols-outlined tooltip-icon" data-tooltip="Must be exactly 16 Base32 characters (A–Z, 2–7), uppercase.">info</span>
     </label>
     <div class="input-wrapper">
-        <input type="text" id="secret" name="secret" placeholder="Paste your OTP secret here" required>
+        <input type="text" id="secret" name="secret" placeholder="Paste your OTP secret here" required minlength="16" maxlength="16">
         <span class="checkmark" id="check-secret"><i class="fa-solid fa-check"></i></span>
     </div>
 
     <label for="otp_type">OTP Type</label>
     <select id="otp_type" name="otp_type">
         <option value="totp">TOTP</option>
-        <option value="hotp">HOTP</option>
     </select>
 
     <label for="refresh_time">Refresh Time (sec)</label>
@@ -44,8 +43,10 @@
 
     <label for="company_id">Company</label>
     <select id="company_id" name="company_id">
-        <option value="1">Public</option>
-        <option value="2">Private</option>
+        <option value="0" selected>Select Company</option>
+        {% for company in companies %}
+            <option value="{{ company[0] }}">{{ company[1] }}</option>
+        {% endfor %}
     </select>
 
     <div class="button-row">
@@ -85,13 +86,14 @@ function validateName(name) {
 }
 
 function validateEmail(email) {
+    if (email.trim() === "") return true;
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
 function validateSecret(secret) {
     const cleaned = secret.replace(/\s+/g, '').toUpperCase();
-    const base32Regex = /^[A-Z2-7]+=*$/;
-    return cleaned.length >= 16 && base32Regex.test(cleaned);
+    const base32Regex = /^[A-Z2-7]{16}$/;
+    return base32Regex.test(cleaned);
 }
 
 function updateValidation() {
@@ -100,10 +102,10 @@ function updateValidation() {
     const secretValid = validateSecret(secretInput.value);
 
     checkName.classList.toggle('visible', nameValid);
-    checkEmail.classList.toggle('visible', emailValid);
+    checkEmail.classList.toggle('visible', emailInput.value.trim() !== "" && emailValid);
     checkSecret.classList.toggle('visible', secretValid);
 
-    const allValid = nameValid && emailValid && secretValid;
+    const allValid = nameValid && secretValid && emailValid;
     submitBtn.disabled = !allValid;
     addViewBtn.classList.toggle('disabled', !allValid);
 }
@@ -204,30 +206,55 @@ async function showLiveCard(secretId, meta) {
         const code = data.current_code;
         const codeEl = el.querySelector(".code-text");
 
-        // Click-to-copy
-        codeEl.addEventListener("click", () => {
-            navigator.clipboard.writeText(code).then(() => {
-                alert(`Copied OTP: ${code}`);
+        function doCopy(t) {
+            if (window.isSecureContext && navigator.clipboard && navigator.clipboard.writeText) {
+                return navigator.clipboard.writeText(t);
+            }
+            return new Promise((resolve, reject) => {
+                const ta = document.createElement('textarea');
+                ta.value = t;
+                ta.setAttribute('readonly', '');
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                try {
+                    document.execCommand('copy') ? resolve() : reject();
+                } catch (e) {
+                    reject(e);
+                }
+                document.body.removeChild(ta);
             });
+        }
+
+        codeEl.addEventListener("click", () => {
+            doCopy(code).then(() => { alert(`Copied OTP: ${code}`); }).catch(() => { window.prompt('Copy OTP:', code); });
         });
 
-        // Remove previous copy handler if any, then attach a new one
         document.removeEventListener("copy", window._otpCopyHandler);
-
         window._otpCopyHandler = (e) => {
             const selection = window.getSelection().toString();
             if (!selection) {
                 e.preventDefault();
-                e.clipboardData.setData("text/plain", code);
-                alert(`Copied OTP: ${code}`);
+                doCopy(code).then(() => { alert(`Copied OTP: ${code}`); }).catch(() => { window.prompt('Copy OTP:', code); });
             }
         };
-
         document.addEventListener("copy", window._otpCopyHandler);
 
         cardContainer.innerHTML = "";
+        const buttons = document.createElement("div");
+        buttons.className = "button-row";
+        buttons.style.marginTop = "1.5rem";
+        buttons.innerHTML = `
+            <a href="/" class="secondary-button">Home</a>
+            <a href="/add" class="secondary-button">Add Another</a>
+        `;
+
+        el.appendChild(buttons);
+        cardContainer.innerHTML = "";
         cardContainer.appendChild(el);
         cardContainer.style.display = "block";
+
         setTimeout(() => el.classList.remove("loading"), 300);
     }
     await fetchCode();

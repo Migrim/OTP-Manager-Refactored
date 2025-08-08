@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Live Logs{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='styles/log.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="log-container">
+    <form method="get" class="log-dropdown-form">
+        <div class="select-wrapper log-select">
+            <select name="day" onchange="this.form.submit()">
+                {% for folder in log_folders %}
+                    <option value="{{ folder }}" {% if folder == selected_day %}selected{% endif %}>{{ folder }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </form>
+
+    <pre id="log-output" class="log-output"></pre>
+
+    <div id="last-updated" class="log-updated">Last updated just now</div>
+</div>
+
+<script>
+    const logOutput = document.getElementById("log-output");
+    const lastUpdatedEl = document.getElementById("last-updated");
+    const selectedDay = "{{ selected_day }}";
+    let lastUpdateTime = null;
+
+    function syntaxHighlight(line) {
+        line = line.replace(/\[(INFO|ERROR|WARNING|DEBUG|CRITICAL)\]/g, (match, level) => {
+            return `<span class="log-${level.toLowerCase()}">${match}</span>`;
+        });
+
+        line = line.replace(/\b(?<!:)\b\d+(\.\d+)?\b(?!:)/g, (match) => {
+            if (/^\d+$/.test(match) || /^\d+\.\d+$/.test(match)) {
+                return `<span class="log-number">${match}</span>`;
+            }
+            return match;
+        });
+
+        line = line.replace(/\buser[\w-]*\b/gi, match => {
+            return `<span class="log-user">${match}</span>`;
+        });
+
+        line = line.replace(/\b(username)\s*[:=]\s*(\w+)/gi, (match, key, value) => {
+            return `${key}: <span class="log-user">${value}</span>`;
+        });
+
+        return `<span>${line}</span>`;
+    }
+
+    function highlightLogs(lines) {
+        return lines.map(syntaxHighlight).join("");
+    }
+
+    function updateLastUpdated() {
+        if (!lastUpdateTime) return;
+        const secondsAgo = Math.floor((Date.now() - lastUpdateTime) / 1000);
+        let text = 'just now';
+        if (secondsAgo >= 60) {
+            const minutes = Math.floor(secondsAgo / 60);
+            text = `${minutes} min${minutes !== 1 ? 's' : ''} ago`;
+        } else if (secondsAgo > 0) {
+            text = `${secondsAgo} second${secondsAgo !== 1 ? 's' : ''} ago`;
+        }
+        lastUpdatedEl.textContent = `Last updated ${text}`;
+    }
+
+    async function fetchLogs() {
+        const res = await fetch(`/api/logs?day=${selectedDay}`);
+        if (res.ok) {
+            const data = await res.json();
+            logOutput.innerHTML = highlightLogs(data.logs);
+            logOutput.scrollTop = logOutput.scrollHeight;
+            lastUpdateTime = Date.now();
+            updateLastUpdated();
+        }
+    }
+
+    fetchLogs();
+    setInterval(fetchLogs, 5000);
+    setInterval(updateLastUpdated, 1000);
+</script>
+{% endblock %}

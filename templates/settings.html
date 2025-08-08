@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Settings | OTP-Tool{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='styles/settings.css') }}">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<div class="settings-grid">
+    <div class="settings-card">
+        <form method="post" action="/update-settings" class="settings-form">
+            
+            {# 
+            <label class="settings-switch">
+                <input type="checkbox" id="enable_pagination" name="enable_pagination" {{ 'checked' if user.enable_pagination else '' }}>
+                <span class="slider"></span>
+                <span class="switch-text">Enable Pagination</span>
+            </label>
+            <div class="setting-description">Displays OTP entries across multiple pages instead of one long list.</div>
+            #}
+
+            <label class="settings-switch">
+                <input type="checkbox" id="show_timer" name="show_timer" {{ 'checked' if user.show_timer else '' }}>
+                <span class="slider"></span>
+                <span class="switch-text">Simple Text-Timer</span>
+            </label>
+            <div class="setting-description">Display a simple text timer instead of the circular timer on the OTP Containers on the home screen.</div>
+
+            {# 
+            <label class="settings-switch">
+                <input type="checkbox" id="show_otp_type" name="show_otp_type" {{ 'checked' if user.show_otp_type else '' }}>
+                <span class="slider"></span>
+                <span class="switch-text">Show OTP Type</span>
+            </label>
+            <div class="setting-description">Displays whether the OTP is TOTP or HOTP type.</div>
+            #}
+
+            {# 
+            <label class="settings-switch">
+                <input type="checkbox" id="show_content_titles" name="show_content_titles" {{ 'checked' if user.show_content_titles else '' }}>
+                <span class="slider"></span>
+                <span class="switch-text">Show Content Titles</span>
+            </label>
+            <div class="setting-description">Shows the title labels above each OTP entry for clarity.</div>
+            #}
+
+            <label class="settings-switch">
+                <input type="checkbox" id="show_emails" name="show_emails" {{ 'checked' if user.show_emails else '' }}>
+                <span class="slider"></span>
+                <span class="switch-text">Show Emails</span>
+            </label>
+            <div class="setting-description">Displays the email address associated with the OTP.</div>
+
+            {# 
+            <label class="settings-switch">
+                <input type="checkbox" id="show_company" name="show_company" {{ 'checked' if user.show_company else '' }}>
+                <span class="slider"></span>
+                <span class="switch-text">Show Company</span>
+            </label>
+            <div class="setting-description">Shows the company name linked to the OTP code.</div>
+            #}
+
+            {# 
+            <div class="settings-color">
+                <label for="alert_color">Alert Color</label>
+                <input type="color" id="alert_color" name="alert_color" value="{{ user.alert_color }}">
+            </div>
+            #}
+
+            {# 
+            <div class="settings-color">
+                <label for="text_color">Text Color</label>
+                <input type="color" id="text_color" name="text_color" value="{{ user.text_color }}">
+            </div>
+            #}
+
+            <div class="settings-button-row">
+                <button type="submit">Save Settings</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

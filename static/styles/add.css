@@ -10,6 +10,7 @@
     width: 400px;
     margin: 0 auto 4rem;
     font-size: 14px;
+    animation: Load-fade-in 0.45s ease forwards;
 }
 
 .form-container label {
@@ -256,6 +257,7 @@ button:disabled,
     flex-grow: 1;
     font-size: 14px;
     font-weight: 500;
+    transition: background-color 0.2s ease, opacity 0.2s ease;
 }
 
 .countdown-circle {
@@ -357,4 +359,24 @@ button:disabled,
 }
 .circle-fg.resetting {
     transition: stroke-dashoffset 0.4s ease-out;
+}
+@keyframes Load-fade-in {
+    0% {
+        opacity: 0;
+        transform: scale(1.1);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.code-text:hover {
+    color: #6a1fbf;
+    opacity: 0.85;
+}
+
+.dark-mode .code-text:hover {
+    color: #b07cff;
+    opacity: 0.9;
 }

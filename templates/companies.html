@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}Companies | OTP-Tool{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='styles/users.css') }}">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<div class="user-grid">
+    {% for company_id, name, kundennummer in companies %}
+    {% set delay = range(30, 150)|random %}
+    <div class="user-card" data-company-id="{{ company_id }}" style="animation-delay: {{ delay }}ms;">
+        <div class="user-name">{{ name }}</div>
+        <div class="user-status">
+            Kd.: {{ kundennummer or "Not assigned" }}
+        </div>
+        <div class="user-actions">
+            <button class="action-button edit" title="Edit Company">
+                <span class="material-icons">edit</span>
+            </button>
+            <button class="action-button delete" title="Delete Company">
+                <span class="material-icons">delete</span>
+            </button>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<a href="#" class="fab-add-user" id="openAddCompanyModal" title="Add Company">
+    <span class="material-icons">add</span>
+</a>
+
+<div id="addCompanyModal" class="add-user-modal">
+    <div class="add-user-modal-content">
+        <span class="add-user-close" id="closeAddCompanyModal">&times;</span>
+        <form class="add-user-form" method="post" action="/api/create-company">
+            <label for="company_name">Company Name</label>
+            <div class="add-user-input-wrapper">
+                <input type="text" id="company_name" name="name" placeholder="e.g. My Company GmbH" required>
+            </div>
+
+            <label for="kundennummer">Kundennummer (optional)</label>
+            <div class="add-user-input-wrapper">
+                <input type="number" id="kundennummer" name="kundennummer" placeholder="e.g. 12345678">
+            </div>
+
+            <label for="password">Password (optional)</label>
+            <div class="add-user-input-wrapper" style="position: relative;">
+                <input type="password" id="company_password" name="password" placeholder="Optional password">
+                <span id="toggleCompanyPassword" class="material-symbols-outlined" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; font-size: 20px; color: #777;">
+                    visibility_off
+                </span>
+            </div>
+
+            <div class="add-user-button-row">
+                <button type="submit">Add Company</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="confirmDeleteCompanyModal" class="add-user-modal">
+    <div class="add-user-modal-content">
+        <span class="add-user-close" id="closeDeleteCompanyModal">&times;</span>
+        <form method="post" action="/api/delete-company" id="deleteCompanyForm">
+            <input type="hidden" name="company_id" id="delete-company-id">
+            <p style="margin-bottom: 1rem;">Are you sure you want to delete this company?</p>
+            <div class="delete-user-button-row">
+                <button type="submit" class="confirm-delete-button">Yes, Delete</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="editCompanyModal" class="add-user-modal">
+    <div class="add-user-modal-content">
+        <span class="add-user-close" id="closeEditCompanyModal">&times;</span>
+        <form method="post" action="/api/edit-company" class="add-user-form" id="editCompanyForm">
+            <input type="hidden" name="company_id" id="edit-company-id">
+
+            <label for="edit-company-name">Company Name</label>
+            <div class="add-user-input-wrapper">
+                <input type="text" name="name" id="edit-company-name" placeholder="e.g. My Company GmbH" required>
+            </div>
+
+            <label for="edit-company-kundennummer">Kundennummer (optional)</label>
+            <div class="add-user-input-wrapper">
+                <input type="number" name="kundennummer" id="edit-company-kundennummer" placeholder="e.g. 12345678">
+            </div>
+
+            <label for="edit-company-password">New Password (optional)</label>
+            <div class="add-user-input-wrapper" style="position: relative;">
+                <input type="password" name="password" id="edit-company-password" placeholder="Optional password">
+                <span id="toggleEditCompanyPassword" class="material-symbols-outlined" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; font-size: 20px; color: #777;">
+                    visibility_off
+                </span>
+            </div>
+
+            <div class="add-user-button-row">
+                <button type="submit">Save Changes</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    document.getElementById("openAddCompanyModal").onclick = () => {
+        document.getElementById("addCompanyModal").style.display = "flex";
+    };
+
+    document.getElementById("closeAddCompanyModal").onclick = () => {
+        document.getElementById("addCompanyModal").style.display = "none";
+    };
+
+    window.onclick = (e) => {
+        if (e.target.id === "addCompanyModal") {
+            document.getElementById("addCompanyModal").style.display = "none";
+        }
+    };
+
+    document.querySelectorAll(".action-button.delete").forEach(btn => {
+        btn.onclick = (e) => {
+            const card = e.currentTarget.closest(".user-card");
+            const companyId = card.dataset.companyId;
+            document.getElementById("delete-company-id").value = companyId;
+            document.getElementById("confirmDeleteCompanyModal").style.display = "flex";
+        };
+    });
+
+    document.getElementById("closeDeleteCompanyModal").onclick = () => {
+        document.getElementById("confirmDeleteCompanyModal").style.display = "none";
+    };
+
+    window.addEventListener("click", (e) => {
+        if (e.target.id === "confirmDeleteCompanyModal") {
+            document.getElementById("confirmDeleteCompanyModal").style.display = "none";
+        }
+    });
+
+    document.getElementById("toggleCompanyPassword").addEventListener("click", () => {
+        const input = document.getElementById("company_password");
+        const icon = document.getElementById("toggleCompanyPassword");
+        const isVisible = input.type === "text";
+        input.type = isVisible ? "password" : "text";
+        icon.textContent = isVisible ? "visibility_off" : "visibility";
+    });
+
+    document.querySelectorAll(".action-button.edit").forEach(btn => {
+        btn.onclick = (e) => {
+            const card = e.currentTarget.closest(".user-card");
+            const companyId = card.dataset.companyId;
+            const name = card.querySelector(".user-name").textContent;
+            const kundennummer = card.querySelector(".user-status").textContent.replace("Kundennummer: ", "").trim();
+
+            document.getElementById("edit-company-id").value = companyId;
+            document.getElementById("edit-company-name").value = name;
+            document.getElementById("edit-company-kundennummer").value = kundennummer !== "Not assigned" ? kundennummer : "";
+            document.getElementById("edit-company-password").value = "";
+
+            document.getElementById("editCompanyModal").style.display = "flex";
+        };
+    });
+
+    document.getElementById("closeEditCompanyModal").onclick = () => {
+        document.getElementById("editCompanyModal").style.display = "none";
+    };
+
+    window.addEventListener("click", (e) => {
+        if (e.target.id === "editCompanyModal") {
+            document.getElementById("editCompanyModal").style.display = "none";
+        }
+    });
+
+    document.getElementById("toggleEditCompanyPassword").addEventListener("click", () => {
+        const input = document.getElementById("edit-company-password");
+        const icon = document.getElementById("toggleEditCompanyPassword");
+        const isVisible = input.type === "text";
+        input.type = isVisible ? "password" : "text";
+        icon.textContent = isVisible ? "visibility_off" : "visibility";
+    });
+</script>
+
+{% endblock %}

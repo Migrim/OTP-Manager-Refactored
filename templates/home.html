@@ -3,80 +3,8 @@
 {% block title %}Home | OTP-Tool{% endblock %}
 
 {% block head %}
-<style>
-    #otpContainer {
-        max-width: 1200px;
-        padding: 2rem;
-        margin: 0 auto;
-        text-align: left;
-        width: 100%;
-    }
-    .otp-section {
-        margin-bottom: 3rem;
-        display: flex;
-        flex-direction: column;
-        align-items: flex-start;
-    }
-
-    .company-title {
-        font-size: 1.2rem;
-        font-weight: 600;
-        margin: 1.5rem 0 1rem 0;
-        align-self: flex-start;
-        text-align: left;
-        width: 100%;
-    }
-
-    .otp-grid {
-        display: grid;
-        grid-template-columns: repeat(3, 350px);
-        gap: 1.2rem;
-        justify-content: start;
-    }
-
-    .otp-card {
-        background: #f4f4f4;
-        border: 1px solid #ccc;
-        border-radius: 12px;
-        padding: 1rem;
-        height: 140px;
-        width: 350px;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        text-align: left;
-        transition: box-shadow 0.2s ease;
-    }
-
-    .otp-card:hover {
-        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
-    }
-
-    .otp-name {
-        font-weight: 600;
-        font-size: 1rem;
-        margin-bottom: 0.2rem;
-    }
-
-    .otp-email {
-        font-size: 0.85rem;
-        color: #555;
-        margin-bottom: 0.4rem;
-        word-break: break-word;
-    }
-
-    .otp-type {
-        font-size: 0.8rem;
-        font-weight: 500;
-        color: #333;
-    }
-    .otp-wrapper {
-        text-align: left;
-        max-width: 1200px;
-        margin: 0 auto;
-        width: 100%;
-    }
-</style>
+<link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='styles/home.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -84,16 +12,220 @@
     <div id="otpContainer"></div>
 </div>
 
+<a id="backToTop" href="#" title="Back to top">
+    <i class="fas fa-arrow-up"></i>
+</a>
+
+<div id="confirmDeleteOtpModal" class="add-user-modal">
+    <div class="add-user-modal-content" style="width: 360px;">
+        <span class="add-user-close" id="closeDeleteOtpModal">&times;</span>
+        <form method="post" action="/api/delete-secret" id="deleteOtpForm">
+            <input type="hidden" name="secret_id" id="delete-secret-id">
+            <p style="margin-bottom: 1rem;">Are you sure you want to delete this OTP entry?</p>
+            <div class="delete-user-button-row">
+                <button type="submit" class="confirm-delete-button">Yes, Delete</button>
+                <button type="button" id="cancelDeleteOtp" style="margin-left:8px; padding:0.6rem 1.2rem; border-radius:8px; border:none; cursor:pointer;">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="editOtpModal" class="add-user-modal">
+    <div class="add-user-modal-content" style="max-width: 480px;">
+        <span class="add-user-close" id="closeEditOtpModal">&times;</span>
+        <form id="editOtpForm" class="add-user-form">
+            <input type="hidden" name="secret_id" id="edit-secret-id">
+            <label for="edit-name">Name</label>
+            <div class="add-user-input-wrapper">
+                <input type="text" id="edit-name" name="name" placeholder="Name" required>
+            </div>
+
+            <label for="edit-email">E-Mail</label>
+            <div class="add-user-input-wrapper">
+                <input type="email" id="edit-email" name="email" placeholder="email@example.com">
+            </div>
+
+            <label for="edit-secret">Secret</label>
+            <div class="add-user-input-wrapper">
+                <input type="text" id="edit-secret" name="secret" placeholder="Base32 secret" required>
+            </div>
+
+            <label for="edit-refresh-time">Refresh Time (seconds)</label>
+            <div class="add-user-input-wrapper">
+                <input type="number" id="edit-refresh-time" name="refresh_time" min="10" placeholder="30" required readonly>
+            </div>
+
+            <label for="edit-company">Company</label>
+            <div class="add-user-input-wrapper">
+                <select id="edit-company" name="company_id" required></select>
+            </div>
+
+            <div class="add-user-button-row">
+                <button type="submit">Save Changes</button>
+                <button type="button" id="cancelEditOtp" style="margin-left:8px; padding:0.6rem 1.2rem; border-radius:8px; border:none; cursor:pointer;">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
-async function loadOTPs() {
-    try {
+    const SHOW_EMAIL = {{ 1 if user_settings.show_emails else 0 }};
+    const SHOW_TEXT_TIMER = {{ 1 if user_settings.show_timer else 0 }};
+    const visibleCards = new Set();
+    let companyOptionsCache = null;
+    let lastSlot = null;
+
+    function debounce(func, delay) {
+        let timeout;
+        return (...args) => {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func(...args), delay);
+        };
+    }
+
+    async function fetchCompanyOptions() {
+        if (companyOptionsCache) return companyOptionsCache;
         const res = await fetch('/api/secrets');
-        if (!res.ok) throw new Error("Failed to load OTPs");
+        const secrets = await res.json();
+        const map = {};
+        secrets.forEach(s => {
+            if (s.company_id != null) map[s.company_id] = s.company_name || "Unknown Company";
+        });
+        companyOptionsCache = Object.entries(map)
+            .sort((a, b) => a[1].localeCompare(b[1]))
+            .map(([id, name]) => ({ id, name }));
+        return companyOptionsCache;
+    }
 
-        const data = await res.json();
+    function populateCompanySelect(selectEl, selectedId) {
+        fetchCompanyOptions().then(options => {
+            selectEl.innerHTML = '';
+            options.forEach(opt => {
+                const o = document.createElement('option');
+                o.value = opt.id;
+                o.textContent = opt.name;
+                if (String(opt.id) === String(selectedId)) o.selected = true;
+                selectEl.appendChild(o);
+            });
+        });
+    }
+
+    const searchOtpInput = document.getElementById("search-otp-input");
+    if (searchOtpInput) {
+        const filterFn = (q) => {
+            const sections = document.querySelectorAll(".otp-section");
+            sections.forEach(section => {
+                let visibleCount = 0;
+                const cards = section.querySelectorAll(".otp-card");
+                cards.forEach(card => {
+                    const text = card.dataset.search || "";
+                    const match = text.includes(q);
+                    card.style.display = match ? "block" : "none";
+                    if (match) visibleCount++;
+                });
+                section.style.display = visibleCount > 0 ? "block" : "none";
+            });
+        };
+        searchOtpInput.addEventListener("input", e => filterFn(e.target.value.toLowerCase().trim()));
+        searchOtpInput.addEventListener("input", debounce(e => filterFn(e.target.value.toLowerCase().trim()), 100));
+    }
+
+    function copyText(t) {
+        if (window.isSecureContext && navigator.clipboard && navigator.clipboard.writeText) {
+            return navigator.clipboard.writeText(t);
+        }
+        return new Promise((resolve, reject) => {
+            const el = document.createElement('textarea');
+            el.value = t;
+            el.setAttribute('readonly', '');
+            el.style.position = 'fixed';
+            el.style.opacity = '0';
+            document.body.appendChild(el);
+            el.select();
+            try {
+                document.execCommand('copy') ? resolve() : reject();
+            } catch (e) {
+                reject(e);
+            }
+            document.body.removeChild(el);
+        });
+    }
+
+    function setupCard(card) {
+        const secretEl = card.querySelector('.otp-secret');
+        const pinIcon = card.querySelector(".pin-icon");
+        const codeText = card.querySelector('.otp-code');
+        const copyButton = card.querySelector('.action-button.copy');
+        const timerEl = SHOW_TEXT_TIMER ? card.querySelector('.otp-timer') : null;
+        const circle = SHOW_TEXT_TIMER ? null : card.querySelector('.countdown-circle .circle-fg');
+        card._lastSlot = null;
+
+        copyButton.addEventListener('click', () => {
+            const code = codeText.textContent.trim();
+            if (!code) return;
+            copyText(code)
+                .then(() => { alert(`Copied code: ${code}`); })
+                .catch(() => { window.prompt('Copy code:', code); });
+        });
+
+        pinIcon.addEventListener("click", async () => {
+            const secretId = card.dataset.id;
+            const res = await fetch("/toggle-pin", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ secret_id: secretId })
+            });
+            if (res.ok) {
+                const { pinned } = await res.json();
+                pinIcon.classList.toggle("pinned", pinned);
+                loadOTPs();
+            }
+        });
+
+        card._updateTimer = function (remaining, currentSlot) {
+            if (SHOW_TEXT_TIMER && timerEl) {
+                timerEl.textContent = `${remaining}s`;
+            } else if (circle) {
+                const percent = (remaining / 30) * 100;
+                circle.style.strokeDashoffset = 100 - percent;
+            }
+            card._lastSlot = currentSlot;
+        };
+
+        secretEl.addEventListener('mouseenter', () => {
+            secretEl.textContent = secretEl.dataset.real;
+        });
+        secretEl.addEventListener('mouseleave', () => {
+            secretEl.textContent = '*'.repeat(secretEl.dataset.real.length);
+        });
+
+        const now = Math.floor(Date.now() / 1000);
+        const remaining = 30 - (now % 30);
+        const slot = Math.floor(now / 30);
+        card._updateTimer(remaining, slot);
+    }
+
+    async function refreshVisibleCodes() {
+        const res = await fetch('/api/secrets');
+        const list = await res.json();
+        const map = new Map(list.map(s => [String(s.id), String(s.current_code || "")]));
+        visibleCards.forEach(card => {
+            const id = String(card.dataset.id);
+            const codeEl = card.querySelector('.otp-code');
+            if (map.has(id) && codeEl) {
+                codeEl.textContent = map.get(id);
+            }
+        });
+    }
+
+    async function loadOTPs() {
+        const res = await fetch('/api/secrets');
+        const secrets = await res.json();
+        const pinnedRes = await fetch('/api/user-pinned');
+        const pinnedIds = await pinnedRes.json();
+
         const grouped = {};
-
-        data.forEach(otp => {
+        secrets.forEach(otp => {
             const company = otp.company_name || "Unknown Company";
             if (!grouped[company]) grouped[company] = [];
             grouped[company].push(otp);
@@ -102,7 +234,66 @@ async function loadOTPs() {
         const container = document.getElementById("otpContainer");
         container.innerHTML = "";
 
-        Object.keys(grouped).sort().forEach(company => {
+        const pinned = secrets.filter(s => pinnedIds.includes(String(s.id)));
+        if (pinned.length > 0) {
+            const pinnedSection = document.createElement("div");
+            pinnedSection.className = "otp-section";
+
+            const title = document.createElement("h2");
+            title.className = "company-title";
+            title.textContent = "Your Pinned OTPs";
+
+            const grid = document.createElement("div");
+            grid.className = "otp-grid";
+
+            for (const entry of pinned.sort((a, b) => a.name.localeCompare(b.name))) {
+                const card = document.createElement("div");
+                const delay = Math.floor(Math.random() * 120) + 30;
+                card.className = "otp-card";
+                card.style.animationDelay = `${delay}ms`;
+                card.dataset.id = entry.id;
+                card.dataset.search = `${entry.name} ${entry.email} ${entry.secret}`.toLowerCase();
+
+                card.innerHTML = `
+                    <span class="pin-icon pinned"><span class="material-icons">push_pin</span></span>
+                    <div class="otp-field"><span class="otp-field-label">Name:</span> <span class="otp-field-value">${entry.name}</span></div>
+                    <div class="otp-field"><span class="otp-field-label">Secret:</span> 
+                        <span class="otp-field-value otp-secret" data-real="${entry.secret}">
+                            ${'*'.repeat(entry.secret.length)}
+                        </span>
+                    </div>
+                    <div class="otp-field"><span class="otp-field-label">OTP Code:</span> <span class="otp-field-value code-text otp-code">${entry.current_code || ""}</span></div>
+                    ${SHOW_EMAIL ? `
+                        <div class="otp-field">
+                            <span class="otp-field-label">E-Mail:</span>
+                            <span class="otp-field-value">${entry.email}</span>
+                        </div>
+                    ` : ``}
+                    ${SHOW_TEXT_TIMER ? `
+                        <div class="otp-field"><span class="otp-field-label">Remaining Time:</span> <span class="otp-field-value otp-timer"></span></div>
+                    ` : ``}
+                    <div class="otp-actions">
+                        <button class="action-button copy" title="Copy"><span class="material-icons">content_copy</span></button>
+                        <button class="action-button edit" title="Edit"><span class="material-icons">edit</span></button>
+                        <button class="action-button delete" title="Delete"><span class="material-icons">delete</span></button>
+                        ${SHOW_TEXT_TIMER ? `` : `
+                            <svg class="countdown-circle" width="26" height="26" viewBox="0 0 36 36">
+                                <circle class="circle-bg" cx="18" cy="18" r="16"></circle>
+                                <circle class="circle-fg" cx="18" cy="18" r="16"></circle>
+                            </svg>
+                        `}
+                    </div>
+                `;
+                setupCard(card);
+                grid.appendChild(card);
+            }
+
+            pinnedSection.appendChild(title);
+            pinnedSection.appendChild(grid);
+            container.appendChild(pinnedSection);
+        }
+
+        for (const company of Object.keys(grouped).sort()) {
             const section = document.createElement("div");
             section.className = "otp-section";
 
@@ -113,29 +304,205 @@ async function loadOTPs() {
             const grid = document.createElement("div");
             grid.className = "otp-grid";
 
-            grouped[company]
-                .sort((a, b) => a.name.localeCompare(b.name))
-                .forEach(entry => {
-                    const card = document.createElement("div");
-                    card.className = "otp-card";
-                    card.innerHTML = `
-                        <div class="otp-name">${entry.name}</div>
-                        <div class="otp-email">${entry.email}</div>
-                        <div class="otp-type">${entry.otp_type.toUpperCase()}</div>
-                    `;
-                    grid.appendChild(card);
-                });
+            for (const entry of grouped[company].sort((a, b) => a.name.localeCompare(b.name))) {
+                if (pinnedIds.includes(String(entry.id))) continue;
+
+                const card = document.createElement("div");
+                const delay = Math.floor(Math.random() * 120) + 30;
+                card.className = "otp-card";
+                card.style.animationDelay = `${delay}ms`;
+                card.dataset.id = entry.id;
+                card.dataset.search = `${entry.name} ${entry.email} ${entry.secret} ${company}`.toLowerCase();
+
+                card.innerHTML = `
+                    <span class="pin-icon"><span class="material-icons">push_pin</span></span>
+                    <div class="otp-field"><span class="otp-field-label">Name:</span> <span class="otp-field-value">${entry.name}</span></div>
+                    <div class="otp-field"><span class="otp-field-label">Secret:</span> 
+                        <span class="otp-field-value otp-secret" data-real="${entry.secret}">
+                            ${'*'.repeat(entry.secret.length)}
+                        </span>
+                    </div>
+                    <div class="otp-field"><span class="otp-field-label">OTP Code:</span> <span class="otp-field-value code-text otp-code">${entry.current_code || ""}</span></div>
+                    ${SHOW_EMAIL ? `
+                        <div class="otp-field">
+                            <span class="otp-field-label">E-Mail:</span>
+                            <span class="otp-field-value">${entry.email}</span>
+                        </div>
+                    ` : ``}
+                    ${SHOW_TEXT_TIMER ? `
+                        <div class="otp-field"><span class="otp-field-label">Remaining Time:</span> <span class="otp-field-value otp-timer"></span></div>
+                    ` : ``}
+                    <div class="otp-actions">
+                        <button class="action-button copy" title="Copy"><span class="material-icons">content_copy</span></button>
+                        <button class="action-button edit" title="Edit"><span class="material-icons">edit</span></button>
+                        <button class="action-button delete" title="Delete"><span class="material-icons">delete</span></button>
+                        ${SHOW_TEXT_TIMER ? `` : `
+                            <svg class="countdown-circle" width="26" height="26" viewBox="0 0 36 36">
+                                <circle class="circle-bg" cx="18" cy="18" r="16"></circle>
+                                <circle class="circle-fg" cx="18" cy="18" r="16"></circle>
+                            </svg>
+                        `}
+                    </div>
+                `;
+                setupCard(card);
+                grid.appendChild(card);
+            }
 
             section.appendChild(title);
             section.appendChild(grid);
             container.appendChild(section);
-        });
-    } catch (err) {
-        console.error(err);
-        alert("Failed to load OTPs");
-    }
-}
+        }
 
-loadOTPs();
+        setupObserver();
+        startGlobalUpdater();
+        attachDeleteHandlers();
+        attachEditHandlers();
+    }
+
+    function setupObserver() {
+        const observer = new IntersectionObserver(entries => {
+            for (const entry of entries) {
+                const card = entry.target;
+                if (entry.isIntersecting) {
+                    visibleCards.add(card);
+                } else {
+                    visibleCards.delete(card);
+                }
+            }
+        }, { root: null, threshold: 0.1 });
+
+        document.querySelectorAll('.otp-card').forEach(card => observer.observe(card));
+    }
+
+    function startGlobalUpdater() {
+        setInterval(async () => {
+            const now = Math.floor(Date.now() / 1000);
+            const currentSlot = Math.floor(now / 30);
+            const remaining = 30 - (now % 30);
+
+            visibleCards.forEach(card => {
+                if (card._updateTimer) card._updateTimer(remaining, currentSlot);
+            });
+
+            if (currentSlot !== lastSlot) {
+                lastSlot = currentSlot;
+                await refreshVisibleCodes();
+            }
+        }, 1000);
+    }
+
+    function attachDeleteHandlers() {
+        document.querySelectorAll('.otp-card .action-button.delete').forEach(btn => {
+            btn.onclick = (e) => {
+                const card = e.currentTarget.closest(".otp-card");
+                const secretId = card.dataset.id;
+                document.getElementById("delete-secret-id").value = secretId;
+                document.getElementById("confirmDeleteOtpModal").style.display = "flex";
+            };
+        });
+    }
+
+    function attachEditHandlers() {
+        document.querySelectorAll('.otp-card .action-button.edit').forEach(btn => {
+            btn.onclick = async (e) => {
+                const card = e.currentTarget.closest(".otp-card");
+                const secretId = card.dataset.id;
+
+                const res = await fetch('/api/secrets');
+                const list = await res.json();
+                const entry = list.find(s => String(s.id) === String(secretId)) || {};
+
+                document.getElementById("edit-secret-id").value = secretId;
+                document.getElementById("edit-name").value = entry.name || "";
+                document.getElementById("edit-email").value = entry.email || "";
+                document.getElementById("edit-secret").value = entry.secret || "";
+                document.getElementById("edit-refresh-time").value = entry.refresh_time || 30;
+                populateCompanySelect(document.getElementById("edit-company"), entry.company_id);
+
+                document.getElementById("editOtpModal").style.display = "flex";
+            };
+        });
+    }
+
+    document.getElementById("deleteOtpForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const form = e.currentTarget;
+        const formData = new FormData(form);
+        const res = await fetch(form.action, { method: "POST", body: formData });
+        if (res.ok) {
+            document.getElementById("confirmDeleteOtpModal").style.display = "none";
+            loadOTPs();
+        } else {
+            alert('Failed to delete OTP.');
+        }
+    });
+
+    document.getElementById("closeDeleteOtpModal").onclick = () => {
+        document.getElementById("confirmDeleteOtpModal").style.display = "none";
+    };
+    document.getElementById("cancelDeleteOtp").onclick = () => {
+        document.getElementById("confirmDeleteOtpModal").style.display = "none";
+    };
+    window.addEventListener("click", (e) => {
+        if (e.target.id === "confirmDeleteOtpModal") {
+            document.getElementById("confirmDeleteOtpModal").style.display = "none";
+        }
+    });
+
+    document.getElementById("closeEditOtpModal").onclick = () => {
+        document.getElementById("editOtpModal").style.display = "none";
+    };
+    document.getElementById("cancelEditOtp").onclick = () => {
+        document.getElementById("editOtpModal").style.display = "none";
+    };
+    window.addEventListener("click", (e) => {
+        if (e.target.id === "editOtpModal") {
+            document.getElementById("editOtpModal").style.display = "none";
+        }
+    });
+
+    document.getElementById("editOtpForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const secretId = document.getElementById("edit-secret-id").value;
+        const payload = {
+            name: document.getElementById("edit-name").value,
+            email: document.getElementById("edit-email").value || "none",
+            secret: document.getElementById("edit-secret").value,
+            refresh_time: parseInt(document.getElementById("edit-refresh-time").value) || 30,
+            otp_type: "totp",
+            company_id: parseInt(document.getElementById("edit-company").value) || 1
+        };
+        const res = await fetch(`/api/secrets/${secretId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+            document.getElementById("editOtpModal").style.display = "none";
+            await loadOTPs();
+        } else {
+            const err = await res.json();
+            alert("Failed to update OTP: " + (err.error || "unknown error"));
+        }
+    });
+
+    loadOTPs();
+
+    const backToTop = document.getElementById('backToTop');
+    window.addEventListener('scroll', () => {
+        if (window.scrollY > 200) {
+            backToTop.classList.add('visible');
+        } else {
+            backToTop.classList.remove('visible');
+        }
+    });
+    backToTop.addEventListener('click', (e) => {
+        e.preventDefault();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    document.addEventListener("DOMContentLoaded", () => {
+        document.body.classList.add("home");
+    });
 </script>
 {% endblock %}

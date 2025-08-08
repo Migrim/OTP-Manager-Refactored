@@ -65,7 +65,7 @@ def init_db():
                     last_login_time INTEGER,
                     session_token TEXT,
                     is_admin INTEGER DEFAULT 0,
-                    enable_pagination INTEGER DEFAULT 0,
+                    pinned TEXT DEFAULT '',
                     show_timer INTEGER DEFAULT 0,
                     show_otp_type INTEGER DEFAULT 1,
                     show_content_titles INTEGER DEFAULT 1,
@@ -73,7 +73,6 @@ def init_db():
                     text_color TEXT DEFAULT '#FFFFFF',
                     show_emails INTEGER DEFAULT 0,
                     show_company INTEGER DEFAULT 0,
-                    font TEXT DEFAULT 'Roboto' 
                 )
             """)
             db.commit()

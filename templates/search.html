@@ -1,0 +1,298 @@
+{% extends 'base.html' %}
+
+{% block title %}Search: {{ query }}{% endblock %}
+
+{% block content %}
+
+{% if results %}
+<table class="search-results-table">
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Email</th>
+      <th>Company</th>
+      <th>OTP-Code</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for name, email, company in results %}
+    <tr class="otp-row" data-name="{{ name }}">
+      <td>{{ name }}</td>
+      <td class="email-text">{{ email }}</td>
+      <td>{{ company or "No company" }}</td>
+      <td class="otp-live-cell">
+        <span class="code-text">...</span>
+        <svg class="countdown-circle" width="24" height="24" viewBox="0 0 36 36">
+          <circle class="circle-bg" cx="18" cy="18" r="16" />
+          <circle class="circle-fg" cx="18" cy="18" r="16" stroke-dasharray="100" stroke-dashoffset="0" />
+        </svg>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No results found.</p>
+{% endif %}
+
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      window.location.href = "/";
+    }
+  });
+  const rows = document.querySelectorAll(".otp-row");
+
+  for (const row of rows) {
+    const name = row.dataset.name;
+    const codeEl = row.querySelector(".code-text");
+    const circleEl = row.querySelector(".circle-fg");
+
+    try {
+      const res = await fetch("/api/secrets");
+      const data = await res.json();
+      const match = data.find(entry => entry.name === name);
+
+      if (!match) continue;
+
+      async function fetchAndUpdate() {
+        const res = await fetch(`/api/secrets/${match.id}`);
+        const data = await res.json();
+
+        const digits = [...data.current_code].map((d, i) =>
+          `<span class="digit" style="animation-delay: ${i * 40}ms">${d}</span>`
+        ).join('');
+
+        codeEl.innerHTML = digits;
+        codeEl.dataset.remaining = data.seconds_remaining;
+        codeEl.dataset.timestamp = performance.now();
+
+        codeEl.onclick = () => {
+          const text = data.current_code;
+          copySafe(text)
+            .then(()=>{ alert(`Copied OTP: ${text}`); })
+            .catch(()=>{ window.prompt('Copy OTP:', text); });
+        };
+      }
+
+      function animate() {
+        const remaining = parseFloat(codeEl.dataset.remaining);
+        const since = (performance.now() - codeEl.dataset.timestamp) / 1000;
+        const left = Math.max(remaining - since, 0);
+        const percent = (left / 30) * 100;
+
+        if (circleEl) {
+          circleEl.style.strokeDashoffset = 100 - percent;
+        }
+        requestAnimationFrame(animate);
+      }
+
+      await fetchAndUpdate();
+
+      const now = Date.now();
+      const msToNext = 30000 - (now % 30000);
+
+      setTimeout(() => {
+        fetchAndUpdate();
+        setInterval(fetchAndUpdate, 30000);
+      }, msToNext);
+
+      requestAnimationFrame(animate);
+
+    } catch (e) {
+      console.error("OTP row failed", e);
+    }
+  }
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+  const rows = document.querySelectorAll(".otp-row");
+  const maxBaseDelay = 1200; 
+
+  rows.forEach((row, i) => {
+    const progressiveDelay = Math.pow(i, 0.85) * 90;
+
+    const finalDelay = Math.min(progressiveDelay, maxBaseDelay);
+
+    row.style.animationDelay = `${finalDelay}ms`;
+    row.style.animationTimingFunction = "cubic-bezier(0.4, 0, 0.2, 1)";
+  });
+});
+
+document.querySelectorAll(".email-text").forEach(emailCell => {
+  emailCell.style.cursor = "pointer";
+  emailCell.addEventListener("click", () => {
+    const text = emailCell.textContent.trim();
+    copySafe(text)
+      .then(()=>{ alert('Copied Email'); })
+      .catch(()=>{ window.prompt('Copy Email:', text); });
+  });
+});
+
+function copySafe(t){
+  if (window.isSecureContext && navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(t);
+  }
+  return new Promise((resolve,reject)=>{
+    const el=document.createElement('textarea');
+    el.value=t;
+    el.setAttribute('readonly','');
+    el.style.position='fixed';
+    el.style.opacity='0';
+    document.body.appendChild(el);
+    el.select();
+    try{ document.execCommand('copy') ? resolve() : reject(); } catch(e){ reject(e); }
+    document.body.removeChild(el);
+  });
+}
+</script>
+
+<style>
+.search-results-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 2rem;
+  background-color: #fff;
+}
+.search-results-table thead tr:first-child th:first-child {
+  border-top-left-radius: 12px;
+}
+.search-results-table thead tr:first-child th:last-child {
+  border-top-right-radius: 12px;
+}
+.search-results-table tbody tr:last-child td:first-child {
+  border-bottom-left-radius: 12px;
+}
+.search-results-table tbody tr:last-child td:last-child {
+  border-bottom-right-radius: 12px;
+}
+.search-results-table th, .search-results-table td {
+  padding: 0.6rem 1rem;
+  border: 1px solid #ddd;
+  text-align: left;
+  font-family: 'Roboto', sans-serif;
+}
+
+.search-results-table .mono {
+  font-family: monospace;
+}
+
+.otp-live-cell {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-width: 180px;
+}
+
+.code-text {
+  flex-grow: 1;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: background-color 0.2s ease, opacity 0.2s ease;
+}
+
+.code-text:hover {
+  color: #6a1fbf;
+  opacity: 0.85;
+}
+
+.dark-mode .code-text:hover {
+  color: #b07cff;
+  opacity: 0.9;
+}
+
+.email-text:hover {
+  color: #6a1fbf;
+  text-decoration: underline;
+}
+
+.dark-mode .email-text:hover {
+  color: #b07cff;
+}
+
+.code-text .digit {
+  display: inline-block;
+  animation: otpDigitFlyUp 200ms ease-out;
+}
+
+.countdown-circle {
+  transform: rotate(90deg) scaleX(-1);
+}
+
+.circle-bg {
+  fill: none;
+  stroke: #ccc;
+  stroke-width: 3;
+}
+
+.circle-fg {
+  fill: none;
+  stroke: rgb(246, 81, 81);
+  stroke-width: 3;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 1s linear;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 0;
+}
+
+@keyframes otpDigitFlyUp {
+  0% { opacity: 0; transform: translateY(6px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.dark-mode .search-results-table {
+  background-color: #111;
+}
+
+.dark-mode .search-results-table th,
+.dark-mode .search-results-table td {
+  border-color: #444;
+  background-color: #1c1c1c;
+}
+
+.search-results-table th,
+.search-results-table td {
+  background-color: #f9f9f9;
+  border: 1px solid #e5e5e5;
+}
+
+.dark-mode .circle-bg {
+  stroke: #333;
+}
+
+.dark-mode .circle-fg {
+  stroke: #39f;
+}
+
+@keyframes scaleFadeIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.otp-row {
+  opacity: 0;
+  transform: scale(0.95);
+  animation: scaleFadeIn 0.35s ease-out forwards;
+}
+
+.otp-row:nth-child(1) { animation-delay: 0.05s; }
+.otp-row:nth-child(2) { animation-delay: 0.1s; }
+.otp-row:nth-child(3) { animation-delay: 0.15s; }
+.otp-row:nth-child(4) { animation-delay: 0.2s; }
+.otp-row:nth-child(5) { animation-delay: 0.25s; }
+</style>
+{% endblock %}

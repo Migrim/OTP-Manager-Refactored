@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}Login | OTP-Tool{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='styles/login.css') }}">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+{% endblock %}
+
+{% block content %}
+<div class="login-container">
+    <div class="version-label">
+        <i class="fa-solid fa-rocket"></i> v.2.0.0 indev
+    </div>
+    <h2 class="login-title">Login to OTP-Tool</h2>
+    <form method="POST" class="login-form">
+        <div class="login-field">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username" placeholder="Enter username" required>
+        </div>
+
+        <div class="login-field password-wrapper">
+            <label for="password">Password</label>
+            <div class="password-field">
+                <input type="password" id="password" name="password" placeholder="Enter password" required>
+                <button type="button" id="togglePassword" class="eye-toggle">
+                    <i class="fa-solid fa-eye-slash"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="remember-me">
+            <input type="checkbox" id="keep_logged_in" name="keep_logged_in">
+            <label for="keep_logged_in">Remember me</label>
+        </div>
+
+        <div class="login-actions">
+            <button type="submit" class="login-button">Login</button>
+        </div>
+    </form>
+</div>
+
+<script>
+    const toggleBtn = document.getElementById("togglePassword");
+    const passwordInput = document.getElementById("password");
+    const loginForm = document.querySelector(".login-form");
+    const loginContainer = document.querySelector(".login-container");
+    const usernameInput = document.getElementById("username");
+
+    let focusTriggered = false;
+
+    toggleBtn.addEventListener("click", () => {
+        const isVisible = passwordInput.type === "text";
+        passwordInput.type = isVisible ? "password" : "text";
+        toggleBtn.innerHTML = `<i class="fa-solid fa-${isVisible ? 'eye-slash' : 'eye'}"></i>`;
+    });
+
+    document.addEventListener("keydown", (e) => {
+        if (!focusTriggered && !["Tab", "Shift", "Alt", "Control", "Meta"].includes(e.key)) {
+            focusTriggered = true;
+            usernameInput.focus();
+        }
+    });
+
+    loginForm.addEventListener("submit", function(e) {
+        loginContainer.classList.add("fade-out");
+
+        setTimeout(() => {
+            loginForm.submit();
+        }, 300); 
+        e.preventDefault(); 
+    });
+</script>
+{% endblock %}

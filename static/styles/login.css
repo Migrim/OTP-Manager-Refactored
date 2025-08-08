@@ -1,0 +1,210 @@
+.login-container {
+    position: relative;
+    max-width: 440px;
+    width: 400px;
+    margin: 4rem auto;
+    padding: 2.4rem 2.2rem;
+    border: 1px solid #e5e5e5;
+    border-radius: 20px;
+    background-color: #fafafa;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+    text-align: left;
+}
+
+.login-title {
+    text-align: center;
+    font-size: 24px;
+    font-weight: 600;
+    margin-bottom: 2rem;
+    font-family: 'Bricolage Grotesque', sans-serif;
+}
+.login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.4rem;
+}
+
+.login-field label {
+    display: block;
+    margin-bottom: 0.4rem;
+    font-size: 14px;
+    color: #333;
+}
+
+.login-field input[type="text"],
+.login-field input[type="password"] {
+    width: 100%;
+    padding: 0.55rem 0.8rem;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    font-size: 14px;
+    background: #fff;
+    color: #111;
+    transition: border-color 0.2s;
+}
+
+.login-field input:focus {
+    outline: none;
+    border-color: #888;
+}
+
+.password-wrapper .password-field {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.password-field input {
+    padding-right: 2.5rem;
+}
+
+.eye-toggle {
+    position: absolute;
+    right: 0.6rem;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #888;
+    font-size: 16px;
+}
+
+.eye-toggle:hover {
+    color: #555;
+}
+
+.remember-me {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    gap: 0.4rem;
+    margin-top: -0.2rem;
+}
+
+.remember-me input[type="checkbox"] {
+    accent-color: #555;
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+.login-actions {
+    display: flex;
+    justify-content: center;
+    margin-top: 0.5rem;
+}
+
+.login-button {
+    padding: 0.65rem 1.4rem;
+    border: none;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 14px;
+    background-color: #111;
+    color: #fff;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.login-button:hover {
+    background-color: #222;
+}
+
+.dark-mode .login-container {
+    background-color: #1b1b1b;
+    border-color: #333;
+    color: #eee;
+}
+
+.dark-mode .login-field label {
+    color: #ccc;
+}
+
+.dark-mode .login-field input {
+    background-color: #111;
+    border-color: #444;
+    color: #eee;
+}
+
+.dark-mode .login-field input:focus {
+    border-color: #888;
+}
+
+.dark-mode .eye-toggle {
+    color: #aaa;
+}
+
+.dark-mode .eye-toggle:hover {
+    color: #fff;
+}
+
+.dark-mode .remember-me label {
+    color: #ccc;
+}
+
+.dark-mode .login-button {
+    background-color: #eee;
+    color: #111;
+}
+
+.dark-mode .login-button:hover {
+    background-color: #fff;
+}
+@media (max-width: 500px) {
+    .login-container {
+        width: 90%;
+        padding: 2rem;
+    }
+}
+
+@keyframes loginFadeOut {
+    0% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    100% {
+        opacity: 0;
+        transform: scale(1.1);
+    }
+}
+
+.login-container.fade-out {
+    animation: loginFadeOut 0.35s ease forwards;
+}
+
+.version-label {
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    background-color: #e6d0fd;
+    color: #6a1fbf; 
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid #c49cf8; 
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.version-label i {
+    font-size: 12px;
+}
+
+.version-label:hover {
+    background-color: #dbbafc; 
+    border-color: #b076f5;
+}
+
+.dark-mode .version-label {
+    background-color: #7a5fa3; 
+    color: #f1e7ff;
+    border: 1px solid #9b7dc8;
+}
+
+.dark-mode .version-label:hover {
+    background-color: #8f73b8;
+    border-color: #b191d9;
+}

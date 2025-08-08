@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}404 Not Found{% endblock %}
+
+{% block content %}
+<main style="margin-top: 6rem; text-align: center;">
+    <div style="font-size: 6rem; font-weight: 700; letter-spacing: -3px; color: inherit;">
+        404
+    </div>
+    <div style="font-size: 1.2rem; margin-top: 1rem; color: #666;" class="dark-mode-text">
+        The page you’re looking for doesn’t exist.
+    </div>
+    <a href="{{ url_for('home') }}"
+       style="display: inline-block; margin-top: 2rem; font-size: 14px; text-decoration: none; padding: 0.45rem 1rem; border: 1px solid #ccc; border-radius: 8px; color: #111; background: #fff; transition: all 0.2s ease;"
+       class="dark-mode-btn">
+        ← Back to Home
+    </a>
+</main>
+{% endblock %}
