@@ -4,6 +4,8 @@ OTP-Manager is a secure, easy-to-use tool designed to manage one-time passwords 
 It supports **TOTP** (Time-based One-Time Password) and integrates seamlessly with various authentication systems.  
 The app is completely offline and stores data locally in an SQLite database.
 
+> ℹ️ **Note:** In **version 2.1.0**, a new feature will be introduced to **customize the server port** and other advanced configuration options.
+
 ---
 
 ## ✨ Features
@@ -79,7 +81,7 @@ Default **admin credentials**:
 
 1. Open your browser and go to:
     ```
-    http://localhost:5002
+    http://localhost:7440
     ```
 2. Log in with your credentials.
 3. To **add a company**:
@@ -97,23 +99,7 @@ Default **admin credentials**:
 
 ---
 
-## 🧪 Test Database Example
-
-The included test DB generator (`generate_test_db.py`) will create:
-
-- 20 companies:
-    ```
-    Public, Private, Work Inc, SecureTech, DevOps Ltd, Alpha Corp, ...
-    ```
-- Each with **5–40 OTP secrets**
-- 3 users:
-    - `admin` / `1234` (admin)
-    - `alice` / `test`
-    - `bob` / `test`
-
-This allows you to instantly have hundreds of example entries for testing UI, search, and admin features.
-
----
 
 ## 📜 License
 This project is licensed under the MIT License.
+
