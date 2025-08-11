@@ -96,10 +96,3 @@ Default **admin credentials**:
     - Results appear instantly with matching entries
 6. **Pin** frequently used OTPs for quick access
 7. Admins can view **logs** at `/logs`
-
----
-
-
-## 📜 License
-This project is licensed under the MIT License.
-
