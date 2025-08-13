@@ -1,86 +1,119 @@
 {% extends "base.html" %}
+
 {% block title %}Live Logs{% endblock %}
 
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='styles/log.css') }}">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<script src="{{ url_for('static', filename='java-script/log.js') }}"></script>
+<script src="{{ url_for('static', filename='java-script/export.js') }}"></script>
 {% endblock %}
 
 {% block content %}
-<div class="log-container">
-    <form method="get" class="log-dropdown-form">
-        <div class="select-wrapper log-select">
-            <select name="day" onchange="this.form.submit()">
-                {% for folder in log_folders %}
-                    <option value="{{ folder }}" {% if folder == selected_day %}selected{% endif %}>{{ folder }}</option>
-                {% endfor %}
-            </select>
+<div class="logs-shell">
+    <aside class="filters">
+        <div class="filters-header">Filters</div>
+
+        <div class="filter-group">
+            <button class="filter-section open" type="button" data-toggle="timeline">
+                <span>Timeline</span><i class="fa-solid fa-chevron-down"></i>
+            </button>
+            <div class="filter-body open" id="timeline">
+                <div class="select-like">
+                    <form method="get" id="dayForm">
+                        <input type="hidden" name="day" id="dayHidden">
+                        <button type="button" id="dayPicker">
+                            <i class="fa-regular fa-calendar"></i>
+                            <span id="dayLabel">{{ selected_day }}</span>
+                            <i class="fa-solid fa-chevron-down chevron"></i>
+                        </button>
+                        <div class="dropdown" id="dayDropdown">
+                            {% for folder in log_folders %}
+                                <div class="dropdown-item" data-day="{{ folder }}">{{ folder }}</div>
+                            {% endfor %}
+                        </div>
+                    </form>
+                </div>
+            </div>
         </div>
-    </form>
 
-    <pre id="log-output" class="log-output"></pre>
+        <div class="filter-group">
+          <button class="filter-section open" type="button" data-toggle="levels">
+            <span>Contains Level</span><i class="fa-solid fa-chevron-down"></i>
+          </button>
+          <div class="filter-body open" id="levels">
+            <label class="chk">
+              <input type="checkbox" class="lvl" value="DEBUG">
+              <span class="badge debug">DEBUG</span>
+              <b class="count" id="count-debug">0</b>
+            </label>
+            <label class="chk">
+              <input type="checkbox" class="lvl" value="INFO">
+              <span class="badge info">INFO</span>
+              <b class="count" id="count-info">0</b>
+            </label>
+            <label class="chk">
+              <input type="checkbox" class="lvl" value="WARN">
+              <span class="badge warn">WARN</span>
+              <b class="count" id="count-warn">0</b>
+            </label>
+            <label class="chk">
+              <input type="checkbox" class="lvl" value="ERROR">
+              <span class="badge error">ERROR</span>
+              <b class="count" id="count-error">0</b>
+            </label>
+            <label class="chk">
+              <input type="checkbox" class="lvl" value="CRITICAL">
+              <span class="badge critical">CRITICAL</span>
+              <b class="count" id="count-critical">0</b>
+            </label>
+          </div>
+        </div>
 
-    <div id="last-updated" class="log-updated">Last updated just now</div>
+        <div class="filter-group">
+            <button class="filter-section open" type="button" data-toggle="types">
+                <span>Sources</span><i class="fa-solid fa-chevron-down"></i>
+            </button>
+            <div class="filter-body open" id="types"></div>
+        </div>
+
+        <div class="last-updated" id="lastUpdated">Last updated just now</div>
+    </aside>
+
+    <main class="logs-main">
+        <div class="topbar">
+            <div class="search-wrap">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input id="searchInput" type="text" placeholder="Search…">
+            </div>
+            <div class="topbar-actions">
+              <button id="resetBtn" class="ghost"><i class="fa-regular fa-circle"></i> Reset Filter</button>
+              <button id="refreshBtn" class="icon" title="Refresh"><i class="fa-solid fa-rotate-right"></i> Refresh</button>
+              <button id="liveBtn" class="pill on"><i class="fa-solid fa-play"></i> Live</button>
+              <button id="moreBtn" class="icon" title="More"><i class="fa-solid fa-ellipsis-vertical"></i></button>
+            </div>
+            
+            <div id="moreMenu" class="action-menu" hidden>
+              <div class="menu-title">Actions</div>
+              <button class="menu-item" data-ext="log">Export to .log</button>
+              <button class="menu-item" data-ext="txt">Export to .txt</button>
+            </div>
+        </div>
+
+        <div class="table-wrap" id="tableScroll">
+            <table class="logs-table" id="logsTable">
+                <thead>
+                    <tr>
+                        <th class="ts">Timestamp</th>
+                        <th class="lvl">Level</th>
+                        <th class="msg">Message</th>
+                        <th class="src">Source</th>
+                    </tr>
+                </thead>
+                <tbody id="logsBody"></tbody>
+            </table>
+        </div>
+    </main>
 </div>
 
-<script>
-    const logOutput = document.getElementById("log-output");
-    const lastUpdatedEl = document.getElementById("last-updated");
-    const selectedDay = "{{ selected_day }}";
-    let lastUpdateTime = null;
-
-    function syntaxHighlight(line) {
-        line = line.replace(/\[(INFO|ERROR|WARNING|DEBUG|CRITICAL)\]/g, (match, level) => {
-            return `<span class="log-${level.toLowerCase()}">${match}</span>`;
-        });
-
-        line = line.replace(/\b(?<!:)\b\d+(\.\d+)?\b(?!:)/g, (match) => {
-            if (/^\d+$/.test(match) || /^\d+\.\d+$/.test(match)) {
-                return `<span class="log-number">${match}</span>`;
-            }
-            return match;
-        });
-
-        line = line.replace(/\buser[\w-]*\b/gi, match => {
-            return `<span class="log-user">${match}</span>`;
-        });
-
-        line = line.replace(/\b(username)\s*[:=]\s*(\w+)/gi, (match, key, value) => {
-            return `${key}: <span class="log-user">${value}</span>`;
-        });
-
-        return `<span>${line}</span>`;
-    }
-
-    function highlightLogs(lines) {
-        return lines.map(syntaxHighlight).join("");
-    }
-
-    function updateLastUpdated() {
-        if (!lastUpdateTime) return;
-        const secondsAgo = Math.floor((Date.now() - lastUpdateTime) / 1000);
-        let text = 'just now';
-        if (secondsAgo >= 60) {
-            const minutes = Math.floor(secondsAgo / 60);
-            text = `${minutes} min${minutes !== 1 ? 's' : ''} ago`;
-        } else if (secondsAgo > 0) {
-            text = `${secondsAgo} second${secondsAgo !== 1 ? 's' : ''} ago`;
-        }
-        lastUpdatedEl.textContent = `Last updated ${text}`;
-    }
-
-    async function fetchLogs() {
-        const res = await fetch(`/api/logs?day=${selectedDay}`);
-        if (res.ok) {
-            const data = await res.json();
-            logOutput.innerHTML = highlightLogs(data.logs);
-            logOutput.scrollTop = logOutput.scrollHeight;
-            lastUpdateTime = Date.now();
-            updateLastUpdated();
-        }
-    }
-
-    fetchLogs();
-    setInterval(fetchLogs, 5000);
-    setInterval(updateLastUpdated, 1000);
-</script>
 {% endblock %}
