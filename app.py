@@ -3,16 +3,46 @@ import sqlite3
 import os
 import uuid
 from datetime import datetime
+import time
 from functools import wraps
 from api import api_bp
 from extensions import bcrypt
 from logger import logger
+import threading
+from database import hourly_maintenance, acquire_lock, release_lock
 
 app = Flask(__name__)
 bcrypt.init_app(app)
 app.secret_key = "your-very-secret-key"
 app.register_blueprint(api_bp, url_prefix="/api")
 DB_PATH = os.path.join("instance", "otp.db")
+
+def user_ref(user_id=None, username=None):
+    try:
+        if user_id is not None and username is None:
+            with sqlite3.connect(DB_PATH) as db:
+                c = db.cursor()
+                c.execute("SELECT username FROM users WHERE id = ?", (user_id,))
+                r = c.fetchone()
+                if r:
+                    username = r[0]
+        if username is not None and user_id is None:
+            with sqlite3.connect(DB_PATH) as db:
+                c = db.cursor()
+                c.execute("SELECT id FROM users WHERE username = ?", (username,))
+                r = c.fetchone()
+                if r:
+                    user_id = r[0]
+    except:
+        pass
+    uname = username if username is not None else "unknown"
+    uid = user_id if user_id is not None else "unknown"
+    return f"{uname} with id {uid}"
+
+def u(user_id):
+    if getattr(g, "user_id", None) == user_id and getattr(g, "username", None):
+        return user_ref(user_id=user_id, username=g.username)
+    return user_ref(user_id=user_id)
 
 def login_required(f):
     @wraps(f)
@@ -28,7 +58,7 @@ def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not g.is_admin:
-            logger.warning(f"User {g.user_id} attempted admin-only access.")
+            logger.warning(f"{u(g.user_id)} attempted admin-only access.")
             flash("Admin access required.", "error")
             return redirect(url_for("home"))
         return f(*args, **kwargs)
@@ -58,12 +88,15 @@ def load_user():
     g.is_admin = session.get("is_admin", False)
     g.logged_in = g.user_id is not None
     g.user_settings = {}
+    g.username = None
     if g.logged_in:
         with sqlite3.connect(DB_PATH) as db:
             cursor = db.cursor()
             cursor.execute("SELECT * FROM users WHERE id = ?", (g.user_id,))
             row = cursor.fetchone()
-            g.user_settings = row_to_settings(row)
+            if row:
+                g.username = row[1]
+                g.user_settings = row_to_settings(row)
 
 @app.context_processor
 def inject_user():
@@ -71,15 +104,19 @@ def inject_user():
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    t0 = time.perf_counter()
+
     if g.logged_in:
-        logger.info(f"User ID {g.user_id} attempted to access login while already logged in.")
+        logger.info(f"{u(g.user_id)} attempted to access login while already logged in.")
         flash("You are already logged in.", "info")
         return redirect(url_for("home"))
 
     if request.method == "POST":
-        username = request.form.get("username")
-        password = request.form.get("password")
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
         keep_logged_in = "keep_logged_in" in request.form
+
+        logger.info(f"Login attempt start username='{username}' keep_logged_in={keep_logged_in}")
 
         try:
             with sqlite3.connect(DB_PATH) as db:
@@ -91,8 +128,10 @@ def login():
                 user_id = user[0]
                 stored_password = user[2]
                 is_admin = bool(user[5])
+                logger.debug(f"Login: Found user id={user_id} admin={is_admin}")
 
                 if stored_password == password or stored_password.strip() == "":
+                    logger.warning(f"{user_ref(user_id=user_id, username=username)} using unhashed/empty password — migrating to hash.")
                     hashed = bcrypt.generate_password_hash(stored_password or password).decode("utf-8")
                     with sqlite3.connect(DB_PATH) as db:
                         cursor = db.cursor()
@@ -100,7 +139,6 @@ def login():
                         db.commit()
                     stored_password = hashed
                     flash("Password has been migrated to a secure hash.", "info")
-                    logger.info(f"User {username}'s password was migrated to a hash.")
 
                 if bcrypt.check_password_hash(stored_password, password):
                     session_token = str(uuid.uuid4())
@@ -115,22 +153,25 @@ def login():
                         cursor.execute("UPDATE statistics SET logins_today = logins_today + 1")
                         db.commit()
 
-                    logger.info(f"User {username} (ID: {user_id}) logged in.")
+                    logger.info(f"{user_ref(user_id=user_id, username=username)} login successful. permanent_session={keep_logged_in}")
                     if is_admin and password == "1234":
+                        logger.warning(f"{user_ref(user_id=user_id, username=username)} logged in with default admin password.")
                         flash("You are using the default password. Please change it.", "warning")
 
+                    dt = round((time.perf_counter() - t0) * 1000)
+                    logger.debug(f"Login processing complete for {user_ref(user_id=user_id, username=username)} duration_ms={dt}")
                     return redirect(url_for("home"))
                 else:
-                    logger.warning(f"Login failed for {username}: Invalid password.")
+                    logger.warning(f"{user_ref(username=username)} failed login: invalid password.")
                     flash("Invalid credentials!", "error")
                     return redirect(url_for("login"))
             else:
-                logger.warning(f"Login failed: User {username} not found.")
+                logger.warning(f"Login failed: username='{username}' not found.")
                 flash("User not found.", "error")
                 return redirect(url_for("login"))
 
         except Exception as e:
-            logger.exception(f"Login error: {e}")
+            logger.exception(f"Login error for username='{username}': {e}")
             flash("An error occurred. Please try again.", "error")
             return redirect(url_for("login"))
 
@@ -138,22 +179,21 @@ def login():
 
 @app.route("/logout")
 def logout():
-    user_id = session.get("user_id", "Unknown")
-    logger.info(f"User {user_id} logged out.")
+    user_id = session.get("user_id")
+    logger.info(f"{u(user_id)} logged out.")
     session.clear()
     return redirect(url_for("login"))
 
 @app.route("/")
 @login_required
 def home():
-    logger.info(f"User {g.user_id} accessed home page.")
     return render_template("home.html")
 
 @app.route("/users")
 @login_required
 def users():
     if not g.is_admin:
-        logger.warning(f"User {g.user_id} attempted to access /users without admin rights.")
+        logger.warning(f"{u(g.user_id)} attempted to access /users without admin rights.")
         flash("Access denied.", "error")
         return redirect(url_for("home"))
 
@@ -162,14 +202,13 @@ def users():
         cursor.execute("SELECT id, username, is_admin FROM users ORDER BY username ASC")
         user_list = cursor.fetchall()
 
-    logger.info("Admin accessed user list.")
     return render_template("users.html", users=user_list)
 
 @app.route("/companies")
 @login_required
 def companies():
     if not g.is_admin:
-        logger.warning(f"User {g.user_id} attempted to access /companies without admin rights.")
+        logger.warning(f"{u(g.user_id)} attempted to access /companies without admin rights.")
         flash("Access denied.", "error")
         return redirect(url_for("home"))
 
@@ -178,13 +217,11 @@ def companies():
         cursor.execute("SELECT company_id, name, kundennummer FROM companies ORDER BY name ASC")
         company_list = cursor.fetchall()
 
-    logger.info("Admin accessed company list.")
     return render_template("companies.html", companies=company_list)
 
 @app.route("/companies/json")
 @login_required
 def companies_json():
-    logger.debug(f"User {g.user_id} requested companies JSON.")
     with sqlite3.connect(DB_PATH) as db:
         cursor = db.cursor()
         cursor.execute("SELECT company_id, name FROM companies ORDER BY name ASC")
@@ -194,7 +231,6 @@ def companies_json():
 @app.route("/settings")
 @login_required
 def settings():
-    logger.info(f"User {g.user_id} accessed settings.")
     if g.user_settings:
         return render_template("settings.html", user=g.user_settings)
     with sqlite3.connect(DB_PATH) as db:
@@ -243,10 +279,10 @@ def update_settings():
                 ),
             )
             db.commit()
-        logger.info(f"Updated settings for user {g.user_id}: {payload}")
+        logger.info(f"Updated settings for {u(g.user_id)}: {payload}")
         flash("Settings saved.", "success")
     except Exception as e:
-        logger.exception(f"Error updating settings for user {g.user_id}: {e}")
+        logger.exception(f"Error updating settings for {u(g.user_id)}: {e}")
         flash("Could not save settings.", "error")
     return redirect(url_for("settings"))
 
@@ -272,7 +308,7 @@ def add():
             )
             db.commit()
 
-        logger.info(f"User {g.user_id} added new OTP entry: {name}")
+        logger.info(f"{u(g.user_id)} added new OTP entry: {name}")
         return redirect(url_for("home"))
 
     with sqlite3.connect(DB_PATH) as db:
@@ -305,7 +341,7 @@ def toggle_pin():
         cursor.execute("UPDATE users SET pinned = ? WHERE id = ?", (",".join(pinned), user_id))
         db.commit()
 
-    logger.info(f"User {user_id} {'pinned' if new_state else 'unpinned'} secret ID {secret_id}")
+    logger.info(f"{u(user_id)} {'pinned' if new_state else 'unpinned'} secret ID {secret_id}")
     return jsonify({"pinned": new_state})
 
 @app.route("/api/user-pinned")
@@ -317,7 +353,6 @@ def user_pinned():
         cursor.execute("SELECT pinned FROM users WHERE id = ?", (user_id,))
         row = cursor.fetchone()
         if row and row[0]:
-            logger.debug(f"User {user_id} fetched pinned secrets.")
             return jsonify(row[0].split(","))
         return jsonify([])
 
@@ -338,7 +373,7 @@ def search_page():
         )
         results = cursor.fetchall()
 
-    logger.info(f"User {g.user_id} searched for '{q}' — {len(results)} results.")
+    logger.info(f"{u(g.user_id)} searched for '{q}' — {len(results)} results.")
     return render_template("search.html", query=q, results=results)
 
 @app.route("/logs")
@@ -347,7 +382,7 @@ def search_page():
 def view_logs():
     if not g.is_admin:
         flash("Access denied.", "error")
-        logger.warning(f"User {g.user_id} tried to access /logs without admin rights.")
+        logger.warning(f"{u(g.user_id)} tried to access /logs without admin rights.")
         return redirect(url_for("home"))
 
     selected_day = request.args.get("day") or datetime.now().strftime("%Y-%m-%d")
@@ -367,5 +402,23 @@ def view_logs():
 
     return render_template("logs.html", logs=lines, log_folders=log_folders, selected_day=selected_day)
 
+def maintenance_loop():
+    while True:
+        try:
+            if acquire_lock():
+                try:
+                    hourly_maintenance()
+                finally:
+                    release_lock()
+            else:
+                logger.warning("skip maintenance, lock present")
+        except Exception as e:
+            logger.exception(f"Database maintenance error: {e}")
+        time.sleep(3600)
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=7440, debug=True)
+    start_thread = (os.environ.get("WERKZEUG_RUN_MAIN") == "true") or not app.debug
+    if start_thread:
+        t = threading.Thread(target=maintenance_loop, daemon=True)
+        t.start()
+    app.run(host="0.0.0.0", port=7440, debug=True, use_reloader=True)
