@@ -3,12 +3,21 @@ from binascii import Error as BinasciiError
 import sqlite3
 import os
 import pyotp
+import re
+import base64
 import time
 from extensions import bcrypt
 from logger import logger
 
 api_bp = Blueprint("api", __name__)
 DB_PATH = os.path.join("instance", "otp.db")
+
+def normalize_secret(s):
+    s = (s or "").strip().upper()
+    s = re.sub(r"\s+", "", s)
+    s = re.sub(r"=+$", "", s)
+    s = re.sub(r"[^A-Z2-7]", "", s)
+    return s
 
 def user_ref(user_id=None, username=None):
     try:
@@ -90,7 +99,7 @@ def get_all_secrets():
         code = ""
         remaining = 30 - (now % 30)
         try:
-            code = pyotp.TOTP(row[3]).now()
+            code = pyotp.TOTP(normalize_secret(row[3])).now()
         except Exception:
             code = ""
         out.append({
@@ -133,7 +142,7 @@ def get_single_secret(secret_id):
         logger.warning(f"{u(getattr(g, 'user_id', None))} requested secret id={secret_id} result=not_found")
         return jsonify({"error": "Secret not found"}), 404
 
-    secret = row[3]
+    secret = normalize_secret(row[3])
     try:
         totp = pyotp.TOTP(secret)
         code = totp.now()
@@ -166,6 +175,10 @@ def create_secret():
     payload = sanitize_payload(data)
     company_id = int(data.get("company_id", 1))
     company_name = get_company_name(company_id)
+    raw_secret = data.get("secret", "")
+    secret = normalize_secret(raw_secret)
+    if len(secret) < 16 or len(secret) > 128:
+        return jsonify({"error": "Secret length invalid"}), 400
     logger.info(f"{u(getattr(g, 'user_id', None))} create_secret start payload={payload} company={company_name} [{company_id}]")
     with sqlite3.connect(DB_PATH) as db:
         cursor = db.cursor()
@@ -175,7 +188,7 @@ def create_secret():
         """, (
             data.get("name"),
             data.get("email", "none"),
-            data.get("secret"),
+            secret,
             data.get("otp_type", "totp"),
             int(data.get("refresh_time", 30)),
             company_id
@@ -193,6 +206,10 @@ def update_secret(secret_id):
     payload = sanitize_payload(data)
     company_id = int(data.get("company_id", 1))
     company_name = get_company_name(company_id)
+    raw_secret = data.get("secret", "")
+    secret = normalize_secret(raw_secret)
+    if len(secret) < 16 or len(secret) > 128:
+        return jsonify({"error": "Secret length invalid"}), 400
     logger.info(f"{u(getattr(g, 'user_id', None))} update_secret start id={secret_id} payload={payload} company={company_name} [{company_id}]")
     with sqlite3.connect(DB_PATH) as db:
         cursor = db.cursor()
@@ -208,7 +225,7 @@ def update_secret(secret_id):
         """, (
             data.get("name"),
             data.get("email", "none"),
-            data.get("secret"),
+            secret,
             data.get("otp_type", "totp"),
             int(data.get("refresh_time", 30)),
             company_id,

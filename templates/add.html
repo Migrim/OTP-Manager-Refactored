@@ -26,12 +26,12 @@
 
     <label for="secret" class="label-with-tooltip">
         Secret
-        <span class="material-symbols-outlined tooltip-icon" data-tooltip="Must be exactly 16 Base32 characters (A–Z, 2–7), uppercase.">info</span>
-    </label>
-    <div class="input-wrapper">
-        <input type="text" id="secret" name="secret" placeholder="Paste your OTP secret here" required minlength="16" maxlength="16">
+        <span class="material-symbols-outlined tooltip-icon" data-tooltip="Base32 A–Z, 2–7. Padding '=' allowed. 16+ chars.">info</span>
+      </label>
+      <div class="input-wrapper">
+        <input type="text" id="secret" name="secret" placeholder="Paste your OTP secret here" required minlength="16" maxlength="128">
         <span class="checkmark" id="check-secret"><i class="fa-solid fa-check"></i></span>
-    </div>
+      </div>
 
     <label for="otp_type">OTP Type</label>
     <select id="otp_type" name="otp_type">
@@ -91,9 +91,10 @@ function validateEmail(email) {
 }
 
 function validateSecret(secret) {
-    const cleaned = secret.replace(/\s+/g, '').toUpperCase();
-    const base32Regex = /^[A-Z2-7]{16}$/;
-    return base32Regex.test(cleaned);
+  const cleaned = secret.replace(/\s+/g, '').toUpperCase();
+  if (!/^[A-Z2-7=]+$/.test(cleaned)) return false;
+  const noPad = cleaned.replace(/=+$/, '');
+  return noPad.length >= 16 && noPad.length <= 128;
 }
 
 function updateValidation() {
@@ -113,40 +114,41 @@ function updateValidation() {
 nameInput.addEventListener('input', updateValidation);
 emailInput.addEventListener('input', updateValidation);
 secretInput.addEventListener('input', () => {
-    const cursorPos = secretInput.selectionStart;
-    secretInput.value = secretInput.value.toUpperCase();
-    secretInput.setSelectionRange(cursorPos, cursorPos);
-    updateValidation();
+  const p = secretInput.selectionStart;
+  secretInput.value = secretInput.value.toUpperCase();
+  secretInput.setSelectionRange(p, p);
+  updateValidation();
 });
 updateValidation();
 
 form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const formData = new FormData(form);
-    const data = Object.fromEntries(formData.entries());
-    data.refresh_time = parseInt(data.refresh_time);
-    data.company_id = parseInt(data.company_id);
+  e.preventDefault();
+  const formData = new FormData(form);
+  const data = Object.fromEntries(formData.entries());
+  data.refresh_time = parseInt(data.refresh_time);
+  data.company_id = parseInt(data.company_id);
+  data.secret = data.secret.replace(/\s+/g, '').toUpperCase().replace(/=+$/, '');
 
-    const res = await fetch("/api/secrets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data)
-    });
+  const res = await fetch("/api/secrets", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
 
-    if (!res.ok) {
-        alert("An error occurred while adding the entry.");
-        return;
-    }
+  if (!res.ok) {
+    alert("An error occurred while adding the entry.");
+    return;
+  }
 
-    if (mode === "redirect") {
-        window.location.href = "/";
-    } else {
-        form.style.display = "none";
-        const response = await fetch("/api/secrets");
-        const secrets = await response.json();
-        const latest = secrets[secrets.length - 1];
-        showLiveCard(latest.id, latest);
-    }
+  if (mode === "redirect") {
+    window.location.href = "/";
+  } else {
+    form.style.display = "none";
+    const response = await fetch("/api/secrets");
+    const secrets = await response.json();
+    const latest = secrets[secrets.length - 1];
+    showLiveCard(latest.id, latest);
+  }
 });
 
 async function showLiveCard(secretId, meta) {
