@@ -97,6 +97,18 @@
         return companyOptionsCache;
     }
 
+    function animateCodeChange(el, next) {
+        const n = String(next || '');
+        el.innerHTML = '';
+        for (let i = 0; i < n.length; i++) {
+            const s = document.createElement('span');
+            s.className = 'digit';
+            s.style.animationDelay = (i * 25) + 'ms';
+            s.textContent = n[i];
+            el.appendChild(s);
+        }
+    }
+
     function populateCompanySelect(selectEl, selectedId) {
         fetchCompanyOptions().then(options => {
             selectEl.innerHTML = '';
@@ -160,31 +172,31 @@
         const circle = SHOW_TEXT_TIMER ? null : card.querySelector('.countdown-circle .circle-fg');
         card._lastSlot = null;
 
+        animateCodeChange(codeText, codeText.textContent.trim());
+
         copyButton.addEventListener('click', () => {
             const code = codeText.textContent.trim();
             if (!code) return;
-            copyText(code)
-                .then(() => { alert(`Copied code: ${code}`); })
-                .catch(() => { window.prompt('Copy code:', code); });
+            copyText(code).then(() => { alert(`Copied code: ${code}`); }).catch(() => { window.prompt('Copy code:', code); });
         });
 
         pinIcon.addEventListener("click", async () => {
             const secretId = card.dataset.id;
             const res = await fetch("/toggle-pin", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ secret_id: secretId })
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ secret_id: secretId })
             });
             if (res.ok) {
-                const { pinned } = await res.json();
-                pinIcon.classList.toggle("pinned", pinned);
-                loadOTPs();
+            const { pinned } = await res.json();
+            pinIcon.classList.toggle("pinned", pinned);
+            loadOTPs();
             }
         });
 
         card._updateTimer = function (remaining, currentSlot) {
             if (SHOW_TEXT_TIMER && timerEl) {
-                timerEl.textContent = `${remaining}s`;
+                timerEl.textContent = String(remaining);
             } else if (circle) {
                 const percent = (remaining / 30) * 100;
                 circle.style.strokeDashoffset = 100 - percent;
@@ -192,12 +204,8 @@
             card._lastSlot = currentSlot;
         };
 
-        secretEl.addEventListener('mouseenter', () => {
-            secretEl.textContent = secretEl.dataset.real;
-        });
-        secretEl.addEventListener('mouseleave', () => {
-            secretEl.textContent = '*'.repeat(secretEl.dataset.real.length);
-        });
+        secretEl.addEventListener('mouseenter', () => { secretEl.textContent = secretEl.dataset.real; });
+        secretEl.addEventListener('mouseleave', () => { secretEl.textContent = '*'.repeat(secretEl.dataset.real.length); });
 
         const now = Math.floor(Date.now() / 1000);
         const remaining = 30 - (now % 30);
@@ -212,9 +220,10 @@
         visibleCards.forEach(card => {
             const id = String(card.dataset.id);
             const codeEl = card.querySelector('.otp-code');
-            if (map.has(id) && codeEl) {
-                codeEl.textContent = map.get(id);
-            }
+            if (!codeEl || !map.has(id)) return;
+            const next = map.get(id);
+            const current = codeEl.textContent.trim();
+            if (current !== next) animateCodeChange(codeEl, next);
         });
     }
 
