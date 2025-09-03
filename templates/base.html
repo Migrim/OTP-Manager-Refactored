@@ -85,6 +85,9 @@
         <div class="footer-left">
             <span>&copy; 2025 One-Auth.net</span>
             <a href="https://one-auth.net/privacy-policy">Privacy</a>
+            {% if is_logged_in and is_admin and show_index_button %}
+            <a href="http://192.168.1.14:7441" class="docs-link" target="_blank" rel="noopener">Manage Pegasoft OTP-Webzugriff</a>
+            {% endif %}
         </div>
         <div class="footer-right">
             <a href="/logs"><i class="fa-regular fa-lemon"></i></a>

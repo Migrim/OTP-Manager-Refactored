@@ -100,7 +100,12 @@ def load_user():
 
 @app.context_processor
 def inject_user():
-    return dict(is_logged_in=g.logged_in, is_admin=g.is_admin, user_settings=g.user_settings)
+    return dict(
+        is_logged_in=g.logged_in,
+        is_admin=g.is_admin,
+        user_settings=g.user_settings,
+        show_index_button=INDEX_TEMPLATE_PRESENT
+    )
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -417,6 +422,7 @@ def maintenance_loop():
         time.sleep(3600)
 
 if __name__ == "__main__":
+    INDEX_TEMPLATE_PRESENT = os.path.isfile(os.path.join(app.template_folder or 'templates', 'index.html'))
     start_thread = (os.environ.get("WERKZEUG_RUN_MAIN") == "true") or not app.debug
     if start_thread:
         t = threading.Thread(target=maintenance_loop, daemon=True)
