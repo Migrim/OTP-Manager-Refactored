@@ -88,6 +88,18 @@
         };
     }
 
+    async function refreshCardCode(card){
+        try{
+            const id = String(card.dataset.id);
+            const res = await fetch(`/api/secrets/${id}`);
+            if(!res.ok) return;
+            const data = await res.json();
+            const codeEl = card.querySelector('.otp-code');
+            const next = String(data.current_code || "");
+            if(codeEl && codeEl.textContent.trim() !== next) animateCodeChange(codeEl, next);
+        }catch(e){}
+    }
+
     async function fetchCompanyOptions() {
         if (companyOptionsCache) return companyOptionsCache;
         const res = await fetch('/api/secrets');
@@ -379,15 +391,15 @@
     function setupObserver() {
         const observer = new IntersectionObserver(entries => {
             for (const entry of entries) {
-                const card = entry.target;
-                if (entry.isIntersecting) {
-                    visibleCards.add(card);
-                } else {
-                    visibleCards.delete(card);
-                }
+            const card = entry.target;
+            if (entry.isIntersecting) {
+                visibleCards.add(card);
+                refreshCardCode(card);
+            } else {
+                visibleCards.delete(card);
+            }
             }
         }, { root: null, threshold: 0.1 });
-
         document.querySelectorAll('.otp-card').forEach(card => observer.observe(card));
     }
 
