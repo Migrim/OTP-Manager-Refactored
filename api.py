@@ -454,7 +454,6 @@ def export_search():
     q = (request.args.get("q") or "").strip()
     like = f"%{q}%"
 
-    # Query – adjust to mirror your search logic
     with sqlite3.connect(DB_PATH) as db:
         c = db.cursor()
         c.execute("""
@@ -469,9 +468,7 @@ def export_search():
         """, (q, like, like, like))
         rows = c.fetchall()
 
-    # Early out if nothing found
     if not rows:
-        # tiny empty pdf with message
         buf = io.BytesIO()
         p = canvas.Canvas(buf, pagesize=A4)
         p.setFont("Helvetica-Bold", 14)
@@ -483,12 +480,10 @@ def export_search():
                          as_attachment=True,
                          download_name=f"otp_export_{dt}.pdf")
 
-    # PDF setup
     buf = io.BytesIO()
     page_w, page_h = A4
     p = canvas.Canvas(buf, pagesize=A4)
 
-    # Header
     margin = 18 * mm
     y = page_h - margin
     p.setFillColor(colors.black)
@@ -500,7 +495,6 @@ def export_search():
     p.drawRightString(page_w - margin, y - 12, datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))
     y -= 22 * mm
 
-    # Card metrics
     card_h = 34 * mm
     gap = 6 * mm
     qr_size = 28 * mm
@@ -523,17 +517,14 @@ def export_search():
         secret = normalize_secret(raw_secret or "")
         issuer = company_name or "OTP-Tool"
 
-        # Ensure room
         if y - card_h < margin:
             new_page()
 
-        # Card background
         x = margin
-        p.setFillColorRGB(0.98, 0.98, 0.98)   # light card
+        p.setFillColorRGB(0.98, 0.98, 0.98)   
         p.setStrokeColorRGB(0.90, 0.90, 0.90)
         p.roundRect(x, y - card_h, page_w - 2*margin, card_h, radius, fill=1, stroke=1)
 
-        # Text block
         left_pad = x + 8*mm
         top = y - 7*mm
 
@@ -547,7 +538,6 @@ def export_search():
 
         p.setFillColor(colors.black)
         p.setFont("Courier", 10)
-        # Group secret in blocks for readability
         pretty_secret = " ".join(re.findall(".{1,4}", secret)) if secret else "(no secret)"
         p.drawString(left_pad, top - 12*mm, f"Secret: {pretty_secret}")
 
@@ -555,7 +545,6 @@ def export_search():
         p.setFillColor(colors.darkgray)
         p.drawString(left_pad, top - 18*mm, f"Issuer: {issuer}")
 
-        # QR code (otpauth://)
         uri = build_otpauth_uri(account_name=(email or name or "account"), issuer=issuer, secret=secret)
         qr_img = qrcode.make(uri)
         qr_bytes = io.BytesIO()
@@ -563,7 +552,7 @@ def export_search():
         qr_bytes.seek(0)
         img = ImageReader(qr_bytes)
 
-        img_x = page_w - margin - qr_size - 8  # little inset
+        img_x = page_w - margin - qr_size - 8  
         img_y = y - card_h + (card_h - qr_size)/2
         p.drawImage(img, img_x, img_y, qr_size, qr_size, mask='auto')
 

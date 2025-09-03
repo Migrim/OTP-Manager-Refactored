@@ -5,6 +5,13 @@
 {% block content %}
 
 {% if results %}
+<div id="pdfLoader" class="pdf-loader" aria-live="polite" aria-busy="false" hidden>
+  <div class="pdf-loader-card">
+    <div class="spinner" aria-hidden="true"></div>
+    <div class="pdf-loader-text">Generating PDF…</div>
+  </div>
+</div>
+
 <table class="search-results-table">
   <thead>
     <tr>
@@ -44,117 +51,177 @@
 {% endif %}
 
 <script>
-document.addEventListener("DOMContentLoaded", async () => {
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      window.location.href = "/";
-    }
-  });
-  const rows = document.querySelectorAll(".otp-row");
-
-  for (const row of rows) {
-    const name = row.dataset.name;
-    const codeEl = row.querySelector(".code-text");
-    const circleEl = row.querySelector(".circle-fg");
-
-    try {
-      const res = await fetch("/api/secrets");
-      const data = await res.json();
-      const match = data.find(entry => entry.name === name);
-
-      if (!match) continue;
-
-      async function fetchAndUpdate() {
-        const res = await fetch(`/api/secrets/${match.id}`);
-        const data = await res.json();
-
-        const digits = [...data.current_code].map((d, i) =>
-          `<span class="digit" style="animation-delay: ${i * 40}ms">${d}</span>`
-        ).join('');
-
-        codeEl.innerHTML = digits;
-        codeEl.dataset.remaining = data.seconds_remaining;
-        codeEl.dataset.timestamp = performance.now();
-
-        codeEl.onclick = () => {
-          const text = data.current_code;
-          copySafe(text)
-            .then(()=>{ alert(`Copied OTP: ${text}`); })
-            .catch(()=>{ window.prompt('Copy OTP:', text); });
-        };
+  document.addEventListener("DOMContentLoaded", () => {
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        window.location.href = "/";
       }
-
-      function animate() {
-        const remaining = parseFloat(codeEl.dataset.remaining);
-        const since = (performance.now() - codeEl.dataset.timestamp) / 1000;
-        const left = Math.max(remaining - since, 0);
-        const percent = (left / 30) * 100;
-
-        if (circleEl) {
-          circleEl.style.strokeDashoffset = 100 - percent;
+    });
+  
+    const rows = document.querySelectorAll(".otp-row");
+    const maxBaseDelay = 1200;
+    rows.forEach((row, i) => {
+      const progressiveDelay = Math.pow(i, 0.85) * 90;
+      const finalDelay = Math.min(progressiveDelay, maxBaseDelay);
+      row.style.animationDelay = `${finalDelay}ms`;
+      row.style.animationTimingFunction = "cubic-bezier(0.4, 0, 0.2, 1)";
+    });
+  
+    (async function initOtpRows() {
+      try {
+        const res = await fetch("/api/secrets");
+        const all = await res.json();
+        const byName = new Map(all.map(e => [e.name, e])); 
+  
+        rows.forEach((row) => {
+          const name = row.dataset.name;
+          const match = byName.get(name);
+          if (!match) return;
+  
+          const codeEl = row.querySelector(".code-text");
+          const circleEl = row.querySelector(".circle-fg");
+  
+          async function fetchAndUpdate() {
+            try {
+              const r = await fetch(`/api/secrets/${match.id}`);
+              const data = await r.json();
+              if (data.error) return;
+  
+              const digits = [...data.current_code].map((d, i) =>
+                `<span class="digit" style="animation-delay: ${i * 40}ms">${d}</span>`
+              ).join('');
+  
+              codeEl.innerHTML = digits;
+              codeEl.dataset.remaining = data.seconds_remaining;
+              codeEl.dataset.timestamp = performance.now();
+  
+              codeEl.onclick = () => {
+                const text = data.current_code;
+                copySafe(text)
+                  .then(() => { alert(`Copied OTP: ${text}`); })
+                  .catch(() => { window.prompt('Copy OTP:', text); });
+              };
+            } catch (err) {
+              console.error("fetchAndUpdate failed", err);
+            }
+          }
+  
+          function animate() {
+            const remaining = parseFloat(codeEl.dataset.remaining || "0");
+            const ts = parseFloat(codeEl.dataset.timestamp || "0");
+            const since = ts ? (performance.now() - ts) / 1000 : 0;
+            const left = Math.max(remaining - since, 0);
+            const percent = (left / 30) * 100;
+  
+            if (circleEl) {
+              circleEl.style.strokeDashoffset = 100 - percent;
+            }
+            requestAnimationFrame(animate);
+          }
+  
+          fetchAndUpdate();
+          const now = Date.now();
+          const msToNext = 30000 - (now % 30000);
+          setTimeout(() => {
+            fetchAndUpdate();
+            setInterval(fetchAndUpdate, 30000);
+          }, msToNext);
+  
+          requestAnimationFrame(animate);
+        });
+      } catch (e) {
+        console.error("OTP init failed", e);
+      }
+    })();
+  
+    document.querySelectorAll(".email-text").forEach((emailCell) => {
+      emailCell.style.cursor = "pointer";
+      emailCell.addEventListener("click", () => {
+        const text = emailCell.textContent.trim();
+        copySafe(text)
+          .then(() => { alert("Copied Email"); })
+          .catch(() => { window.prompt("Copy Email:", text); });
+      });
+    });
+  
+    const exportBtn = document.querySelector(".fab-export");
+    const loader = document.getElementById("pdfLoader");
+  
+    if (exportBtn && loader) {
+      const showLoader = () => {
+        loader.hidden = false;
+        loader.setAttribute("aria-busy", "true");
+      };
+      const hideLoader = () => {
+        loader.hidden = true;
+        loader.setAttribute("aria-busy", "false");
+      };
+      const filenameFromDisposition = (resp) => {
+        const cd = resp.headers.get("Content-Disposition") || "";
+        let m = cd.match(/filename\*=(?:UTF-8''|)([^;]+)/i);
+        if (m && m[1]) {
+          try { return decodeURIComponent(m[1].replace(/^"(.*)"$/, "$1")); } catch(e){}
+          return m[1].replace(/^"(.*)"$/, "$1");
         }
-        requestAnimationFrame(animate);
-      }
-
-      await fetchAndUpdate();
-
-      const now = Date.now();
-      const msToNext = 30000 - (now % 30000);
-
-      setTimeout(() => {
-        fetchAndUpdate();
-        setInterval(fetchAndUpdate, 30000);
-      }, msToNext);
-
-      requestAnimationFrame(animate);
-
-    } catch (e) {
-      console.error("OTP row failed", e);
+        m = cd.match(/filename="?([^"]+)"?/i);
+        if (m && m[1]) return m[1];
+        const ts = new Date().toISOString().replace(/[:T\-\.]/g, "").slice(0, 15);
+        return `otp_export_${ts}.pdf`;
+      };
+  
+      exportBtn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        const href = exportBtn.getAttribute("href");
+        if (!href) return;
+  
+        exportBtn.style.pointerEvents = "none";
+        exportBtn.setAttribute("aria-disabled", "true");
+  
+        let loaderTimer = setTimeout(showLoader, 250);
+  
+        try {
+          const res = await fetch(href, { credentials: "same-origin" });
+          if (!res.ok) throw new Error(`Export failed (${res.status})`);
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+  
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = filenameFromDisposition(res);
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+        } catch (err) {
+          console.error(err);
+          alert("PDF export failed. Please try again.");
+        } finally {
+          clearTimeout(loaderTimer);
+          hideLoader();
+          exportBtn.style.pointerEvents = "";
+          exportBtn.removeAttribute("aria-disabled");
+        }
+      }, { passive: false });
     }
+  });
+  
+  function copySafe(t) {
+    if (window.isSecureContext && navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(t);
+    }
+    return new Promise((resolve, reject) => {
+      const el = document.createElement("textarea");
+      el.value = t;
+      el.setAttribute("readonly", "");
+      el.style.position = "fixed";
+      el.style.opacity = "0";
+      document.body.appendChild(el);
+      el.select();
+      try { document.execCommand("copy") ? resolve() : reject(); } catch (e) { reject(e); }
+      document.body.removeChild(el);
+    });
   }
-});
-
-document.addEventListener("DOMContentLoaded", () => {
-  const rows = document.querySelectorAll(".otp-row");
-  const maxBaseDelay = 1200; 
-
-  rows.forEach((row, i) => {
-    const progressiveDelay = Math.pow(i, 0.85) * 90;
-
-    const finalDelay = Math.min(progressiveDelay, maxBaseDelay);
-
-    row.style.animationDelay = `${finalDelay}ms`;
-    row.style.animationTimingFunction = "cubic-bezier(0.4, 0, 0.2, 1)";
-  });
-});
-
-document.querySelectorAll(".email-text").forEach(emailCell => {
-  emailCell.style.cursor = "pointer";
-  emailCell.addEventListener("click", () => {
-    const text = emailCell.textContent.trim();
-    copySafe(text)
-      .then(()=>{ alert('Copied Email'); })
-      .catch(()=>{ window.prompt('Copy Email:', text); });
-  });
-});
-
-function copySafe(t){
-  if (window.isSecureContext && navigator.clipboard && navigator.clipboard.writeText) {
-    return navigator.clipboard.writeText(t);
-  }
-  return new Promise((resolve,reject)=>{
-    const el=document.createElement('textarea');
-    el.value=t;
-    el.setAttribute('readonly','');
-    el.style.position='fixed';
-    el.style.opacity='0';
-    document.body.appendChild(el);
-    el.select();
-    try{ document.execCommand('copy') ? resolve() : reject(); } catch(e){ reject(e); }
-    document.body.removeChild(el);
-  });
-}
 </script>
 
 <style>
@@ -355,5 +422,70 @@ function copySafe(t){
 .otp-row:nth-child(3) { animation-delay: 0.15s; }
 .otp-row:nth-child(4) { animation-delay: 0.2s; }
 .otp-row:nth-child(5) { animation-delay: 0.25s; }
+
+/* Fullscreen dimmed backdrop */
+.pdf-loader {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(4px);
+  z-index: 10000;
+}
+
+/* Card */
+.pdf-loader-card {
+  background: #f9f9f9;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  min-width: 220px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 6px 18px rgba(0,0,0,.15);
+  animation: scaleIn 180ms ease-out;
+}
+
+.pdf-loader-text {
+  font-family: 'Roboto', sans-serif;
+  font-size: 14px;
+  color: #222;
+}
+
+/* Spinner */
+.spinner {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 3px solid #e6d0fd;
+  border-top-color: #6a1fbf;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* Dark mode */
+.dark-mode .pdf-loader {
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(6px);
+}
+.dark-mode .pdf-loader-card {
+  background: #1c1c1c;
+  border-color: #333;
+  box-shadow: 0 6px 18px rgba(0,0,0,.55);
+}
+.dark-mode .pdf-loader-text {
+  color: #eee;
+}
+.pdf-loader[hidden] { display: none !important; }
 </style>
 {% endblock %}
