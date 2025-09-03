@@ -31,6 +31,14 @@
     {% endfor %}
   </tbody>
 </table>
+
+{% if results %}
+<a href="{{ url_for('api.export_search') }}?q={{ query | urlencode }}" 
+   class="fab-export" title="Export as PDF" aria-label="Export results as PDF">
+  <span class="material-icons">picture_as_pdf</span>
+</a>
+{% endif %}
+
 {% else %}
 <p>No results found.</p>
 {% endif %}
@@ -289,6 +297,59 @@ function copySafe(t){
   animation: scaleFadeIn 0.35s ease-out forwards;
 }
 
+.fab-export {
+    position: fixed;
+    bottom: 80px;
+    right: 30px;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background-color: #e6d0fd;
+    color: #6a1fbf;
+    font-size: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    z-index: 9999;
+    border: 1px solid #c49cf8;
+    transition: background-color 0.2s, border-color 0.2s;
+    opacity: 0;
+    transform: translateY(20px);
+    animation: fabFlyIn 500ms ease-out forwards;
+    animation-delay: 200ms;
+}
+
+.fab-export:hover {
+    background-color: #dbbafc;
+    border-color: #b076f5;
+    color: #6a1fbf;
+}
+
+.dark-mode .fab-export {
+    background-color: #7a5fa3;
+    color: #f1e7ff;
+    border: 1px solid #9b7dc8;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+}
+
+.dark-mode .fab-export:hover {
+    background-color: #8f73b8;
+    border-color: #b191d9;
+    color: #f1e7ff;
+}
+
+@keyframes fabFlyIn {
+    0% {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
 .otp-row:nth-child(1) { animation-delay: 0.05s; }
 .otp-row:nth-child(2) { animation-delay: 0.1s; }
 .otp-row:nth-child(3) { animation-delay: 0.15s; }

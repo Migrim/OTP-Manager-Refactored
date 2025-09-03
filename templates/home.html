@@ -75,6 +75,11 @@
     let companyOptionsCache = null;
     let lastSlot = null;
 
+    function maskSecret(s) {
+        const n = typeof s === 'string' ? s.length : 0;
+        return '*'.repeat(Math.min(n, 16));
+    }
+
     function debounce(func, delay) {
         let timeout;
         return (...args) => {
@@ -165,6 +170,7 @@
 
     function setupCard(card) {
         const secretEl = card.querySelector('.otp-secret');
+        if (!secretEl) return;
         const pinIcon = card.querySelector(".pin-icon");
         const codeText = card.querySelector('.otp-code');
         const copyButton = card.querySelector('.action-button.copy');
@@ -204,8 +210,8 @@
             card._lastSlot = currentSlot;
         };
 
-        secretEl.addEventListener('mouseenter', () => { secretEl.textContent = secretEl.dataset.real; });
-        secretEl.addEventListener('mouseleave', () => { secretEl.textContent = '*'.repeat(secretEl.dataset.real.length); });
+        secretEl.addEventListener('mouseenter', () => { secretEl.classList.add('reveal') });
+        secretEl.addEventListener('mouseleave', () => { secretEl.classList.remove('reveal') });
 
         const now = Math.floor(Date.now() / 1000);
         const remaining = 30 - (now % 30);
@@ -267,9 +273,10 @@
                     <span class="pin-icon pinned"><span class="material-icons">push_pin</span></span>
                     <div class="otp-field"><span class="otp-field-label">Name:</span> <span class="otp-field-value">${entry.name}</span></div>
                     <div class="otp-field"><span class="otp-field-label">Secret:</span> 
-                        <span class="otp-field-value otp-secret" data-real="${entry.secret}">
-                            ${'*'.repeat(entry.secret.length)}
-                        </span>
+                        ${(() => {
+                            const m = maskSecret(entry.secret);
+                            return `<span class="otp-field-value otp-secret" data-real="${entry.secret}" data-hidden="${m}">${m}</span>`;
+                        })()}
                     </div>
                     <div class="otp-field"><span class="otp-field-label">OTP Code:</span> <span class="otp-field-value code-text otp-code">${entry.current_code || ""}</span></div>
                     ${SHOW_EMAIL ? `
@@ -327,9 +334,10 @@
                     <span class="pin-icon"><span class="material-icons">push_pin</span></span>
                     <div class="otp-field"><span class="otp-field-label">Name:</span> <span class="otp-field-value">${entry.name}</span></div>
                     <div class="otp-field"><span class="otp-field-label">Secret:</span> 
-                        <span class="otp-field-value otp-secret" data-real="${entry.secret}">
-                            ${'*'.repeat(entry.secret.length)}
-                        </span>
+                        ${(() => {
+                            const m = maskSecret(entry.secret);
+                            return `<span class="otp-field-value otp-secret" data-real="${entry.secret}" data-hidden="${m}">${m}</span>`;
+                        })()}
                     </div>
                     <div class="otp-field"><span class="otp-field-label">OTP Code:</span> <span class="otp-field-value code-text otp-code">${entry.current_code || ""}</span></div>
                     ${SHOW_EMAIL ? `

@@ -1,5 +1,6 @@
-from flask import Blueprint, request, jsonify, redirect, flash, url_for, g
+from flask import Blueprint, request, jsonify, redirect, flash, url_for, g, send_file, request
 from binascii import Error as BinasciiError
+import io, datetime, re
 import sqlite3
 import os
 import pyotp
@@ -8,6 +9,12 @@ import base64
 import time
 from extensions import bcrypt
 from logger import logger
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import mm
+from reportlab.lib import colors
+from reportlab.lib.utils import ImageReader
+import qrcode
 
 api_bp = Blueprint("api", __name__)
 DB_PATH = os.path.join("instance", "otp.db")
@@ -18,6 +25,11 @@ def normalize_secret(s):
     s = re.sub(r"=+$", "", s)
     s = re.sub(r"[^A-Z2-7]", "", s)
     return s
+
+def build_otpauth_uri(account_name, issuer, secret):
+    label = f"{issuer}:{account_name}" if issuer else account_name
+    params = f"secret={secret}&issuer={issuer or 'OTP-Tool'}&algorithm=SHA1&digits=6&period=30"
+    return f"otpauth://totp/{label}?{params}"
 
 def user_ref(user_id=None, username=None):
     try:
@@ -432,3 +444,136 @@ def live_logs():
         lines = []
         logger.warning(f"{u(getattr(g, 'user_id', None))} live_logs day={day} result=file_not_found")
     return jsonify(logs=lines)
+
+@api_bp.route("/export-search", methods=["GET"])
+def export_search():
+    """
+    Returns a PDF with search results: Name, Email, Secret and a QR code
+    for each entry (otpauth:// URI).
+    """
+    q = (request.args.get("q") or "").strip()
+    like = f"%{q}%"
+
+    # Query – adjust to mirror your search logic
+    with sqlite3.connect(DB_PATH) as db:
+        c = db.cursor()
+        c.execute("""
+            SELECT s.name, s.email, s.secret,
+                   COALESCE(c.name, '') AS company_name
+            FROM otp_secrets s
+            LEFT JOIN companies c ON c.company_id = s.company_id
+            WHERE (? = '')
+               OR s.name    LIKE ?
+               OR s.email   LIKE ?
+               OR c.name    LIKE ?
+        """, (q, like, like, like))
+        rows = c.fetchall()
+
+    # Early out if nothing found
+    if not rows:
+        # tiny empty pdf with message
+        buf = io.BytesIO()
+        p = canvas.Canvas(buf, pagesize=A4)
+        p.setFont("Helvetica-Bold", 14)
+        p.drawString(30*mm, 270*mm, f"No results for: {q}")
+        p.showPage(); p.save()
+        buf.seek(0)
+        dt = datetime.datetime.now().strftime("%Y-%m-%d_%H%M")
+        return send_file(buf, mimetype="application/pdf",
+                         as_attachment=True,
+                         download_name=f"otp_export_{dt}.pdf")
+
+    # PDF setup
+    buf = io.BytesIO()
+    page_w, page_h = A4
+    p = canvas.Canvas(buf, pagesize=A4)
+
+    # Header
+    margin = 18 * mm
+    y = page_h - margin
+    p.setFillColor(colors.black)
+    p.setFont("Helvetica-Bold", 16)
+    p.drawString(margin, y, "OTP Export")
+    p.setFont("Helvetica", 10)
+    p.setFillColor(colors.grey)
+    p.drawString(margin, y - 12, f"Search: {q}")
+    p.drawRightString(page_w - margin, y - 12, datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))
+    y -= 22 * mm
+
+    # Card metrics
+    card_h = 34 * mm
+    gap = 6 * mm
+    qr_size = 28 * mm
+    radius = 4 * mm
+
+    def new_page():
+        nonlocal y
+        p.showPage()
+        y = page_h - margin
+        p.setFillColor(colors.black)
+        p.setFont("Helvetica-Bold", 16)
+        p.drawString(margin, y, "OTP Export")
+        p.setFont("Helvetica", 10)
+        p.setFillColor(colors.grey)
+        p.drawString(margin, y - 12, f"Search: {q}")
+        p.drawRightString(page_w - margin, y - 12, datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))
+        y -= 22 * mm
+
+    for (name, email, raw_secret, company_name) in rows:
+        secret = normalize_secret(raw_secret or "")
+        issuer = company_name or "OTP-Tool"
+
+        # Ensure room
+        if y - card_h < margin:
+            new_page()
+
+        # Card background
+        x = margin
+        p.setFillColorRGB(0.98, 0.98, 0.98)   # light card
+        p.setStrokeColorRGB(0.90, 0.90, 0.90)
+        p.roundRect(x, y - card_h, page_w - 2*margin, card_h, radius, fill=1, stroke=1)
+
+        # Text block
+        left_pad = x + 8*mm
+        top = y - 7*mm
+
+        p.setFillColor(colors.black)
+        p.setFont("Helvetica-Bold", 12)
+        p.drawString(left_pad, top, name or "(no name)")
+
+        p.setFont("Helvetica", 9)
+        p.setFillColor(colors.darkgray)
+        p.drawString(left_pad, top - 6*mm, (email or "no-email"))
+
+        p.setFillColor(colors.black)
+        p.setFont("Courier", 10)
+        # Group secret in blocks for readability
+        pretty_secret = " ".join(re.findall(".{1,4}", secret)) if secret else "(no secret)"
+        p.drawString(left_pad, top - 12*mm, f"Secret: {pretty_secret}")
+
+        p.setFont("Helvetica", 9)
+        p.setFillColor(colors.darkgray)
+        p.drawString(left_pad, top - 18*mm, f"Issuer: {issuer}")
+
+        # QR code (otpauth://)
+        uri = build_otpauth_uri(account_name=(email or name or "account"), issuer=issuer, secret=secret)
+        qr_img = qrcode.make(uri)
+        qr_bytes = io.BytesIO()
+        qr_img.save(qr_bytes, format="PNG")
+        qr_bytes.seek(0)
+        img = ImageReader(qr_bytes)
+
+        img_x = page_w - margin - qr_size - 8  # little inset
+        img_y = y - card_h + (card_h - qr_size)/2
+        p.drawImage(img, img_x, img_y, qr_size, qr_size, mask='auto')
+
+        y -= (card_h + gap)
+
+    p.showPage()
+    p.save()
+    buf.seek(0)
+
+    dt = datetime.datetime.now().strftime("%Y-%m-%d_%H%M")
+    return send_file(buf, mimetype="application/pdf",
+                     as_attachment=True,
+                     download_name=f"otp_export_{dt}.pdf")
