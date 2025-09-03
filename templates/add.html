@@ -26,10 +26,10 @@
 
     <label for="secret" class="label-with-tooltip">
         Secret
-        <span class="material-symbols-outlined tooltip-icon" data-tooltip="Base32 A–Z, 2–7. Padding '=' allowed. 16+ chars.">info</span>
+        <span class="material-symbols-outlined tooltip-icon" data-tooltip="Base32 A–Z, 2–7. Padding '=' allowed. 16-32 chars.">info</span>
       </label>
       <div class="input-wrapper">
-        <input type="text" id="secret" name="secret" placeholder="Paste your OTP secret here" required minlength="16" maxlength="128">
+        <input type="text" id="secret" name="secret" placeholder="Paste your OTP secret here" required minlength="16" maxlength="32">
         <span class="checkmark" id="check-secret"><i class="fa-solid fa-check"></i></span>
       </div>
 
@@ -76,9 +76,10 @@ submitBtn.addEventListener("click", () => {
 });
 
 addViewBtn.addEventListener("click", (e) => {
-    e.preventDefault();
-    mode = "view";
-    form.requestSubmit();
+  if (addViewBtn.classList.contains('disabled')) return;
+  e.preventDefault();
+  mode = "view";
+  form.requestSubmit();
 });
 
 function validateName(name) {
@@ -92,9 +93,9 @@ function validateEmail(email) {
 
 function validateSecret(secret) {
   const cleaned = secret.replace(/\s+/g, '').toUpperCase();
-  if (!/^[A-Z2-7=]+$/.test(cleaned)) return false;
+  if (!/^[A-Z2-7=]*$/.test(cleaned)) return false;
   const noPad = cleaned.replace(/=+$/, '');
-  return noPad.length >= 16 && noPad.length <= 128;
+  return noPad.length >= 16 && noPad.length <= 32;
 }
 
 function updateValidation() {
@@ -125,15 +126,34 @@ form.addEventListener('submit', async (e) => {
   e.preventDefault();
   const formData = new FormData(form);
   const data = Object.fromEntries(formData.entries());
+
+  if (!data.email || data.email.trim() === "") data.email = "none";
   data.refresh_time = parseInt(data.refresh_time);
   data.company_id = parseInt(data.company_id);
   data.secret = data.secret.replace(/\s+/g, '').toUpperCase().replace(/=+$/, '');
 
-  const res = await fetch("/api/secrets", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data)
-  });
+  let res;
+  try {
+    res = await fetch("/api/secrets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    });
+  } catch {
+    alert("Network error while adding the entry.");
+    return;
+  }
+
+  if (res.status === 400) {
+    alert("Invalid secret. Please enter a valid Base32 secret (A–Z, 2–7) with sufficient length.");
+    if (cardContainer.style.display === "block") {
+      cardContainer.style.display = "none";
+      cardContainer.innerHTML = "";
+      form.style.display = "";
+    }
+    window.location.href = "/add";
+    return;
+  }
 
   if (!res.ok) {
     alert("An error occurred while adding the entry.");
@@ -151,29 +171,48 @@ form.addEventListener('submit', async (e) => {
   }
 });
 
-async function showLiveCard(secretId, meta) {
-    let secondsLeft = 0;
-    let lastTimestamp = performance.now();
+function safeCode(c) {
+	return (typeof c === "string" && c.length) ? c : "------"; 
+}
 
-    async function fetchCode() {
-        const res = await fetch(`/api/secrets/${secretId}`);
-        const data = await res.json();
-        const codeEl = document.getElementById("code");
-        if (codeEl) {
-            const oldCode = codeEl.dataset.code || "";
-            if (oldCode !== data.current_code) {
-                codeEl.dataset.code = data.current_code;
-                codeEl.innerHTML = [...data.current_code]
-                    .map((d, i) => `<span class="digit" style="animation-delay: ${i * 40}ms">${d}</span>`)
-                    .join('');
-            }
-        } else {
-            updateCard(data);
-        }
-        secondsLeft = data.seconds_remaining;
-        lastTimestamp = performance.now();
-        return secondsLeft;
-    }
+function safeSeconds(s) {
+	return Number.isFinite(s) ? s : 30;
+}
+
+async function showLiveCard(secretId) {
+	let secondsLeft = 0;
+	let lastTimestamp = performance.now();
+
+	async function fetchCode() {
+		let data;
+		try {
+			const res = await fetch(`/api/secrets/${secretId}`);
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			data = await res.json();
+		} catch (err) {
+			alert("Failed to refresh/update the OTP code. Please check your connection or try again.");
+			return; 
+		}
+
+		const codeEl = document.getElementById("code");
+		const newCode = safeCode(data.current_code);
+
+		if (codeEl) {
+			const oldCode = codeEl.dataset.code || "";
+			if (oldCode !== newCode) {
+				codeEl.dataset.code = newCode;
+				codeEl.innerHTML = newCode.split("")
+					.map((d, i) => `<span class="digit" style="animation-delay:${i * 40}ms">${d}</span>`)
+					.join("");
+			}
+		} else {
+			updateCard(data);
+		}
+
+		secondsLeft = safeSeconds(data.seconds_remaining);
+		lastTimestamp = performance.now();
+		return secondsLeft;
+	}
 
     function updateCard(data) {
         const el = document.createElement("div");
