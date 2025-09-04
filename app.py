@@ -418,7 +418,7 @@ def maintenance_loop():
             else:
                 logger.warning("skip maintenance, lock present")
         except Exception as e:
-            logger.exception(f"Database maintenance error: {e}")
+            logger.critical(f"Database maintenance error: {e}")
         time.sleep(3600)
 
 if __name__ == "__main__":
