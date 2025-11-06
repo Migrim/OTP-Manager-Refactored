@@ -415,6 +415,7 @@ body:not(.dark-mode) .add-user-modal {
     opacity: 0.85;
     animation: companiesEmptyFadeIn 0.45s cubic-bezier(0.25, 1, 0.3, 1) forwards;
     will-change: transform, opacity;
+    user-select: none;
 }
 
 .companies-empty-icon {

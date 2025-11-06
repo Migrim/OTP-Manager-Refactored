@@ -699,6 +699,7 @@ body:not(.dark-mode) #editOtpModal {
     opacity: 0.85;
     animation: otpEmptyFadeIn 0.45s cubic-bezier(0.25, 1, 0.3, 1) forwards;
     will-change: transform, opacity;
+    user-select: none;
 }
 
 .otp-empty-icon {
