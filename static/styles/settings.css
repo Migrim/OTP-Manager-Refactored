@@ -166,3 +166,15 @@
 .dark-mode .setting-description {
     color: rgba(255, 255, 255, 0.5);
 }
+
+.blur-warning-icon {
+    color: #ff9800;
+    margin-right: 2px;
+    margin-bottom: 4px;
+    vertical-align: middle;
+    transform: scale(0.8);
+}
+
+.dark-mode .blur-warning-icon {
+    color: #ffa726;
+}

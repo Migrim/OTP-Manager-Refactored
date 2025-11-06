@@ -117,9 +117,17 @@ def init_db():
                 alert_color TEXT DEFAULT '#333333',
                 text_color TEXT DEFAULT '#FFFFFF',
                 show_emails INTEGER DEFAULT 0,
-                show_company INTEGER DEFAULT 0
+                show_company INTEGER DEFAULT 0,
+                blur_on_inactive INTEGER DEFAULT 1,
+                show_including_admin_on_top INTEGER DEFAULT 0
             )
         """)
+        c.execute("PRAGMA table_info(users)")
+        cols = [row[1] for row in c.fetchall()]
+        if "blur_on_inactive" not in cols:
+            c.execute("ALTER TABLE users ADD COLUMN blur_on_inactive INTEGER DEFAULT 0")
+        if "show_including_admin_on_top" not in cols:
+            c.execute("ALTER TABLE users ADD COLUMN show_including_admin_on_top INTEGER DEFAULT 0")
         db.commit()
         if created:
             c.execute("INSERT OR IGNORE INTO companies (name) VALUES ('Public'), ('Private')")

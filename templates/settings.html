@@ -62,6 +62,23 @@
             <div class="setting-description">Shows the company name linked to the OTP code.</div>
             #}
 
+            <label class="settings-switch">
+                <input type="checkbox" id="blur_on_inactive" name="blur_on_inactive" {{ 'checked' if user.blur_on_inactive else '' }}>
+                <span class="slider"></span>
+                <span class="switch-text">
+                    <span class="material-symbols-outlined blur-warning-icon">privacy_tip</span>
+                    Blur Secret-Cards when inactive
+                </span>
+            </label>
+            <div class="setting-description">Blur OTP containers when you are inactive for longer than a minute to protect your data from prying eyes.</div>
+
+            <label class="settings-switch">
+                <input type="checkbox" id="show_including_admin_on_top" name="show_including_admin_on_top" {{ 'checked' if user.show_including_admin_on_top else '' }}>
+                <span class="slider"></span>
+                <span class="switch-text">Show Admin entries on top</span>
+            </label>
+            <div class="setting-description">Show entries including the word "admin" on top inside the stored company.</div>
+
             {# 
             <div class="settings-color">
                 <label for="alert_color">Alert Color</label>

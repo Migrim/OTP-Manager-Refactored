@@ -119,6 +119,7 @@ def repair_database():
     print(f"✓ Repaired {repaired} OTP secrets")
     print("→ Done.\n")
 
+
 def upgrade_database():
     print("\n[Upgrading database schema...]")
     conn = get_connection()
@@ -133,56 +134,83 @@ def upgrade_database():
     else:
         print("✓ Backup already exists for today.")
 
-    print("→ Checking if 'pinned' column exists...")
+    print("→ Checking current 'users' schema...")
     cur.execute("PRAGMA table_info(users)")
     columns = [col[1] for col in cur.fetchall()]
-    if "pinned" in columns:
-        print("✓ Already upgraded. 'pinned' column exists.")
+
+    if "pinned" not in columns:
+        print("→ Old schema detected, performing full users table migration...")
+        print("→ Renaming old 'users' table to 'users_old'...")
+        cur.execute("ALTER TABLE users RENAME TO users_old")
+
+        print("→ Creating new 'users' table with latest schema...")
+        cur.execute("""
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY,
+                username TEXT NOT NULL UNIQUE,
+                password TEXT NOT NULL,
+                last_login_time INTEGER,
+                session_token TEXT,
+                is_admin INTEGER DEFAULT 0,
+                pinned TEXT DEFAULT '',
+                show_timer INTEGER DEFAULT 0,
+                show_otp_type INTEGER DEFAULT 1,
+                show_content_titles INTEGER DEFAULT 1,
+                alert_color TEXT DEFAULT '#333333',
+                text_color TEXT DEFAULT '#FFFFFF',
+                show_emails INTEGER DEFAULT 0,
+                show_company INTEGER DEFAULT 0,
+                blur_on_inactive INTEGER DEFAULT 1,
+                show_including_admin_on_top INTEGER DEFAULT 0
+            )
+        """)
+
+        print("→ Copying data from 'users_old' into new 'users' table...")
+        cur.execute("""
+            INSERT INTO users (
+                id, username, password, last_login_time, session_token, is_admin,
+                pinned, show_timer, show_otp_type, show_content_titles,
+                alert_color, text_color, show_emails, show_company,
+                blur_on_inactive, show_including_admin_on_top
+            )
+            SELECT
+                id, username, password, last_login_time, session_token, is_admin,
+                '', show_timer, show_otp_type, show_content_titles,
+                alert_color, text_color, show_emails, show_company,
+                0, 0
+            FROM users_old
+        """)
+
+        print("→ Dropping old 'users_old' table...")
+        cur.execute("DROP TABLE users_old")
+        conn.commit()
         conn.close()
+        print("✓ Upgrade complete. Schema now includes 'pinned', 'blur_on_inactive', and 'show_including_admin_on_top'.")
+        print("→ Done.\n")
         return
 
-    print("→ Renaming old 'users' table to 'users_old'...")
-    cur.execute("ALTER TABLE users RENAME TO users_old")
+    print("→ 'pinned' column already exists. Checking for new columns...")
+    changed = False
 
-    print("→ Creating new 'users' table with new schema...")
-    cur.execute("""
-        CREATE TABLE users (
-            id INTEGER PRIMARY KEY,
-            username TEXT NOT NULL UNIQUE,
-            password TEXT NOT NULL,
-            last_login_time INTEGER,
-            session_token TEXT,
-            is_admin INTEGER DEFAULT 0,
-            pinned TEXT DEFAULT '',
-            show_timer INTEGER DEFAULT 0,
-            show_otp_type INTEGER DEFAULT 1,
-            show_content_titles INTEGER DEFAULT 1,
-            alert_color TEXT DEFAULT '#333333',
-            text_color TEXT DEFAULT '#FFFFFF',
-            show_emails INTEGER DEFAULT 0,
-            show_company INTEGER DEFAULT 0
-        )
-    """)
+    if "blur_on_inactive" not in columns:
+        print("→ Adding 'blur_on_inactive' column to users...")
+        cur.execute("ALTER TABLE users ADD COLUMN blur_on_inactive INTEGER DEFAULT 0")
+        changed = True
+    else:
+        print("✓ 'blur_on_inactive' column already exists.")
 
-    print("→ Copying data from 'users_old' into new 'users' table...")
-    cur.execute("""
-        INSERT INTO users (
-            id, username, password, last_login_time, session_token, is_admin,
-            pinned, show_timer, show_otp_type, show_content_titles,
-            alert_color, text_color, show_emails, show_company
-        )
-        SELECT
-            id, username, password, last_login_time, session_token, is_admin,
-            '', show_timer, show_otp_type, show_content_titles,
-            alert_color, text_color, show_emails, show_company
-        FROM users_old
-    """)
+    if "show_including_admin_on_top" not in columns:
+        print("→ Adding 'show_including_admin_on_top' column to users...")
+        cur.execute("ALTER TABLE users ADD COLUMN show_including_admin_on_top INTEGER DEFAULT 0")
+        changed = True
+    else:
+        print("✓ 'show_including_admin_on_top' column already exists.")
 
-    print("→ Dropping old 'users_old' table...")
-    cur.execute("DROP TABLE users_old")
+    if not changed:
+        print("✓ Database schema is already up to date.")
+
     conn.commit()
     conn.close()
-    print("✓ Upgrade complete. 'enable_pagination' replaced with 'pinned'")
     print("→ Done.\n")
 
 

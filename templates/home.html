@@ -5,6 +5,15 @@
 {% block head %}
 <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='styles/home.css') }}">
+<style>
+    .otp-card-inner {
+        transition: filter 0.3s ease, opacity 0.3s ease;
+    }
+    .otp-card.inactive-blur .otp-card-inner {
+        filter: blur(6px);
+        opacity: 0.5;
+    }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -71,9 +80,13 @@
 <script>
     const SHOW_EMAIL = {{ 1 if user_settings.show_emails else 0 }};
     const SHOW_TEXT_TIMER = {{ 1 if user_settings.show_timer else 0 }};
+    const blur_on_inactive = {{ 1 if user_settings.blur_on_inactive else 0 }};
+    const SHOW_INCLUDE_ADMIN_ON_TOP = {{ 1 if user_settings.show_including_admin_on_top else 0 }};
     const visibleCards = new Set();
     let companyOptionsCache = null;
     let lastSlot = null;
+    let lastActivity = Date.now();
+    let blurApplied = false;
 
     function maskSecret(s) {
         const n = typeof s === 'string' ? s.length : 0;
@@ -86,6 +99,43 @@
             clearTimeout(timeout);
             timeout = setTimeout(() => func(...args), delay);
         };
+    }
+
+    function sortSecretsForDisplay(list) {
+        if (!Array.isArray(list)) return [];
+        if (!SHOW_INCLUDE_ADMIN_ON_TOP) {
+            return list.sort((a, b) => {
+                const aName = typeof a.name === "string" ? a.name : "";
+                const bName = typeof b.name === "string" ? b.name : "";
+                return aName.localeCompare(bName);
+            });
+        }
+        return list.sort((a, b) => {
+            const aName = typeof a.name === "string" ? a.name : "";
+            const bName = typeof b.name === "string" ? b.name : "";
+            const aAdmin = aName.toLowerCase().includes("admin");
+            const bAdmin = bName.toLowerCase().includes("admin");
+            if (aAdmin && !bAdmin) return -1;
+            if (!aAdmin && bAdmin) return 1;
+            return aName.localeCompare(bName);
+        });
+    }
+
+    function markActivity() {
+        lastActivity = Date.now();
+        if (blurApplied) {
+            blurApplied = false;
+            document.querySelectorAll('.otp-card').forEach(card => {
+                card.classList.remove('inactive-blur');
+            });
+        }
+    }
+
+    function applyBlurIfNeeded() {
+        if (!blur_on_inactive || !blurApplied) return;
+        document.querySelectorAll('.otp-card').forEach(card => {
+            card.classList.add('inactive-blur');
+        });
     }
 
     async function refreshCardCode(card){
@@ -273,7 +323,7 @@
             const grid = document.createElement("div");
             grid.className = "otp-grid";
 
-            for (const entry of pinned.sort((a, b) => a.name.localeCompare(b.name))) {
+            for (const entry of sortSecretsForDisplay(pinned)) {
                 const card = document.createElement("div");
                 const delay = Math.floor(Math.random() * 120) + 30;
                 card.className = "otp-card";
@@ -282,34 +332,36 @@
                 card.dataset.search = `${entry.name} ${entry.email} ${entry.secret}`.toLowerCase();
 
                 card.innerHTML = `
-                    <span class="pin-icon pinned"><span class="material-icons">push_pin</span></span>
-                    <div class="otp-field"><span class="otp-field-label">Name:</span> <span class="otp-field-value">${entry.name}</span></div>
-                    <div class="otp-field"><span class="otp-field-label">Secret:</span> 
-                        ${(() => {
-                            const m = maskSecret(entry.secret);
-                            return `<span class="otp-field-value otp-secret" data-real="${entry.secret}" data-hidden="${m}">${m}</span>`;
-                        })()}
-                    </div>
-                    <div class="otp-field"><span class="otp-field-label">OTP Code:</span> <span class="otp-field-value code-text otp-code">${entry.current_code || ""}</span></div>
-                    ${SHOW_EMAIL ? `
-                        <div class="otp-field">
-                            <span class="otp-field-label">E-Mail:</span>
-                            <span class="otp-field-value">${entry.email}</span>
+                    <div class="otp-card-inner">
+                        <span class="pin-icon pinned"><span class="material-icons">push_pin</span></span>
+                        <div class="otp-field"><span class="otp-field-label">Name:</span> <span class="otp-field-value">${entry.name}</span></div>
+                        <div class="otp-field"><span class="otp-field-label">Secret:</span> 
+                            ${(() => {
+                                const m = maskSecret(entry.secret);
+                                return `<span class="otp-field-value otp-secret" data-real="${entry.secret}" data-hidden="${m}">${m}</span>`;
+                            })()}
                         </div>
-                    ` : ``}
-                    ${SHOW_TEXT_TIMER ? `
-                        <div class="otp-field"><span class="otp-field-label">Remaining Time:</span> <span class="otp-field-value otp-timer"></span></div>
-                    ` : ``}
-                    <div class="otp-actions">
-                        <button class="action-button copy" title="Copy"><span class="material-icons">content_copy</span></button>
-                        <button class="action-button edit" title="Edit"><span class="material-icons">edit</span></button>
-                        <button class="action-button delete" title="Delete"><span class="material-icons">delete</span></button>
-                        ${SHOW_TEXT_TIMER ? `` : `
-                            <svg class="countdown-circle" width="26" height="26" viewBox="0 0 36 36">
-                                <circle class="circle-bg" cx="18" cy="18" r="16"></circle>
-                                <circle class="circle-fg" cx="18" cy="18" r="16"></circle>
-                            </svg>
-                        `}
+                        <div class="otp-field"><span class="otp-field-label">OTP Code:</span> <span class="otp-field-value code-text otp-code">${entry.current_code || ""}</span></div>
+                        ${SHOW_EMAIL ? `
+                            <div class="otp-field">
+                                <span class="otp-field-label">E-Mail:</span>
+                                <span class="otp-field-value">${entry.email}</span>
+                            </div>
+                        ` : ``}
+                        ${SHOW_TEXT_TIMER ? `
+                            <div class="otp-field"><span class="otp-field-label">Remaining Time:</span> <span class="otp-field-value otp-timer"></span></div>
+                        ` : ``}
+                        <div class="otp-actions">
+                            <button class="action-button copy" title="Copy"><span class="material-icons">content_copy</span></button>
+                            <button class="action-button edit" title="Edit"><span class="material-icons">edit</span></button>
+                            <button class="action-button delete" title="Delete"><span class="material-icons">delete</span></button>
+                            ${SHOW_TEXT_TIMER ? `` : `
+                                <svg class="countdown-circle" width="26" height="26" viewBox="0 0 36 36">
+                                    <circle class="circle-bg" cx="18" cy="18" r="16"></circle>
+                                    <circle class="circle-fg" cx="18" cy="18" r="16"></circle>
+                                </svg>
+                            `}
+                        </div>
                     </div>
                 `;
                 setupCard(card);
@@ -332,7 +384,7 @@
             const grid = document.createElement("div");
             grid.className = "otp-grid";
 
-            for (const entry of grouped[company].sort((a, b) => a.name.localeCompare(b.name))) {
+            for (const entry of sortSecretsForDisplay(grouped[company])) {
                 if (pinnedIds.includes(String(entry.id))) continue;
 
                 const card = document.createElement("div");
@@ -343,34 +395,36 @@
                 card.dataset.search = `${entry.name} ${entry.email} ${entry.secret} ${company}`.toLowerCase();
 
                 card.innerHTML = `
-                    <span class="pin-icon"><span class="material-icons">push_pin</span></span>
-                    <div class="otp-field"><span class="otp-field-label">Name:</span> <span class="otp-field-value">${entry.name}</span></div>
-                    <div class="otp-field"><span class="otp-field-label">Secret:</span> 
-                        ${(() => {
-                            const m = maskSecret(entry.secret);
-                            return `<span class="otp-field-value otp-secret" data-real="${entry.secret}" data-hidden="${m}">${m}</span>`;
-                        })()}
-                    </div>
-                    <div class="otp-field"><span class="otp-field-label">OTP Code:</span> <span class="otp-field-value code-text otp-code">${entry.current_code || ""}</span></div>
-                    ${SHOW_EMAIL ? `
-                        <div class="otp-field">
-                            <span class="otp-field-label">E-Mail:</span>
-                            <span class="otp-field-value">${entry.email}</span>
+                    <div class="otp-card-inner">
+                        <span class="pin-icon"><span class="material-icons">push_pin</span></span>
+                        <div class="otp-field"><span class="otp-field-label">Name:</span> <span class="otp-field-value">${entry.name}</span></div>
+                        <div class="otp-field"><span class="otp-field-label">Secret:</span> 
+                            ${(() => {
+                                const m = maskSecret(entry.secret);
+                                return `<span class="otp-field-value otp-secret" data-real="${entry.secret}" data-hidden="${m}">${m}</span>`;
+                            })()}
                         </div>
-                    ` : ``}
-                    ${SHOW_TEXT_TIMER ? `
-                        <div class="otp-field"><span class="otp-field-label">Remaining Time:</span> <span class="otp-field-value otp-timer"></span></div>
-                    ` : ``}
-                    <div class="otp-actions">
-                        <button class="action-button copy" title="Copy"><span class="material-icons">content_copy</span></button>
-                        <button class="action-button edit" title="Edit"><span class="material-icons">edit</span></button>
-                        <button class="action-button delete" title="Delete"><span class="material-icons">delete</span></button>
-                        ${SHOW_TEXT_TIMER ? `` : `
-                            <svg class="countdown-circle" width="26" height="26" viewBox="0 0 36 36">
-                                <circle class="circle-bg" cx="18" cy="18" r="16"></circle>
-                                <circle class="circle-fg" cx="18" cy="18" r="16"></circle>
-                            </svg>
-                        `}
+                        <div class="otp-field"><span class="otp-field-label">OTP Code:</span> <span class="otp-field-value code-text otp-code">${entry.current_code || ""}</span></div>
+                        ${SHOW_EMAIL ? `
+                            <div class="otp-field">
+                                <span class="otp-field-label">E-Mail:</span>
+                                <span class="otp-field-value">${entry.email}</span>
+                            </div>
+                        ` : ``}
+                        ${SHOW_TEXT_TIMER ? `
+                            <div class="otp-field"><span class="otp-field-label">Remaining Time:</span> <span class="otp-field-value otp-timer"></span></div>
+                        ` : ``}
+                        <div class="otp-actions">
+                            <button class="action-button copy" title="Copy"><span class="material-icons">content_copy</span></button>
+                            <button class="action-button edit" title="Edit"><span class="material-icons">edit</span></button>
+                            <button class="action-button delete" title="Delete"><span class="material-icons">delete</span></button>
+                            ${SHOW_TEXT_TIMER ? `` : `
+                                <svg class="countdown-circle" width="26" height="26" viewBox="0 0 36 36">
+                                    <circle class="circle-bg" cx="18" cy="18" r="16"></circle>
+                                    <circle class="circle-fg" cx="18" cy="18" r="16"></circle>
+                                </svg>
+                            `}
+                        </div>
                     </div>
                 `;
                 setupCard(card);
@@ -396,6 +450,7 @@
         startGlobalUpdater();
         attachDeleteHandlers();
         attachEditHandlers();
+        applyBlurIfNeeded();
     }
 
     function setupObserver() {
@@ -539,6 +594,21 @@
         e.preventDefault();
         window.scrollTo({ top: 0, behavior: 'smooth' });
     });
+
+    if (blur_on_inactive) {
+        ['mousemove', 'keydown', 'scroll', 'touchstart'].forEach(evt => {
+            window.addEventListener(evt, markActivity, { passive: true });
+        });
+        setInterval(() => {
+            if (!blur_on_inactive) return;
+            const now = Date.now();
+            if (!blurApplied && now - lastActivity >= 60000) {
+                blurApplied = true;
+                applyBlurIfNeeded();
+                alert("You were inactive for a while, your OTPs are temporarily blurred.");
+            }
+        }, 1000);
+    }
 
     document.addEventListener("DOMContentLoaded", () => {
         document.body.classList.add("home");

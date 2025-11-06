@@ -75,6 +75,8 @@ def row_to_settings(row):
         "text_color": row[11] or "#FFFFFF",
         "show_emails": int(row[12] or 0),
         "show_company": int(row[13] or 0),
+        "blur_on_inactive": int(row[14] or 0),
+        "show_including_admin_on_top": int(row[15] or 0),
     }
 
 @app.errorhandler(404)
@@ -254,6 +256,8 @@ def update_settings():
         "show_content_titles": 1 if request.form.get("show_content_titles") in ("on", "true", "1") else 0,
         "show_emails": 1 if request.form.get("show_emails") in ("on", "true", "1") else 0,
         "show_company": 1 if request.form.get("show_company") in ("on", "true", "1") else 0,
+        "blur_on_inactive": 1 if request.form.get("blur_on_inactive") in ("on", "true", "1") else 0,
+        "show_including_admin_on_top": 1 if request.form.get("show_including_admin_on_top") in ("on", "true", "1") else 0,
     }
     alert_color = request.form.get("alert_color")
     text_color = request.form.get("text_color")
@@ -268,6 +272,8 @@ def update_settings():
                     show_content_titles = ?,
                     show_emails = ?,
                     show_company = ?,
+                    blur_on_inactive = ?,
+                    show_including_admin_on_top = ?,
                     alert_color = COALESCE(?, alert_color),
                     text_color = COALESCE(?, text_color)
                 WHERE id = ?
@@ -278,6 +284,8 @@ def update_settings():
                     payload["show_content_titles"],
                     payload["show_emails"],
                     payload["show_company"],
+                    payload["blur_on_inactive"],
+                    payload["show_including_admin_on_top"],
                     alert_color,
                     text_color,
                     g.user_id,
