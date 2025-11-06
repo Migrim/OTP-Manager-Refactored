@@ -99,13 +99,46 @@ function validateSecret(secret) {
 }
 
 function updateValidation() {
-    const nameValid = validateName(nameInput.value);
-    const emailValid = validateEmail(emailInput.value);
-    const secretValid = validateSecret(secretInput.value);
+    const nameValue = nameInput.value.trim();
+    const emailValue = emailInput.value.trim();
+    const secretValue = secretInput.value.trim();
 
-    checkName.classList.toggle('visible', nameValid);
-    checkEmail.classList.toggle('visible', emailInput.value.trim() !== "" && emailValid);
-    checkSecret.classList.toggle('visible', secretValid);
+    const nameValid = validateName(nameValue);
+    const emailValid = validateEmail(emailValue);
+    const secretValid = validateSecret(secretValue);
+
+    if (nameValue !== "") {
+        checkName.classList.add("visible");
+        checkName.innerHTML = nameValid
+            ? '<i class="fa-solid fa-check"></i>'
+            : '<i class="fa-solid fa-xmark"></i>';
+        checkName.classList.remove("valid", "invalid");
+        checkName.classList.add(nameValid ? "valid" : "invalid");
+    } else {
+        checkName.classList.remove("visible", "valid", "invalid");
+    }
+
+    if (emailValue !== "") {
+        checkEmail.classList.add("visible");
+        checkEmail.innerHTML = emailValid
+            ? '<i class="fa-solid fa-check"></i>'
+            : '<i class="fa-solid fa-xmark"></i>';
+        checkEmail.classList.remove("valid", "invalid");
+        checkEmail.classList.add(emailValid ? "valid" : "invalid");
+    } else {
+        checkEmail.classList.remove("visible", "valid", "invalid");
+    }
+
+    if (secretValue !== "") {
+        checkSecret.classList.add("visible");
+        checkSecret.innerHTML = secretValid
+            ? '<i class="fa-solid fa-check"></i>'
+            : '<i class="fa-solid fa-xmark"></i>';
+        checkSecret.classList.remove("valid", "invalid");
+        checkSecret.classList.add(secretValid ? "valid" : "invalid");
+    } else {
+        checkSecret.classList.remove("visible", "valid", "invalid");
+    }
 
     const allValid = nameValid && secretValid && emailValid;
     submitBtn.disabled = !allValid;
