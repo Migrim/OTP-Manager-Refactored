@@ -54,6 +54,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     async function handleSearch(value) {
         list.innerHTML = '';
+        list.classList.remove('hidden');
         selectedIndex = -1;
         activeSuggestions = [];
     
@@ -103,7 +104,6 @@ document.addEventListener("DOMContentLoaded", () => {
             list.appendChild(li);
         }
     
-        // Then show individual entries (limit to 8)
         const individualEntries = matches.filter(e => e.name || e.email).slice(0, 8);
     
         for (const item of individualEntries) {
@@ -158,7 +158,19 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     
         if (list.children.length === 0) {
-            list.classList.add('hidden');
+            const li = document.createElement('li');
+            li.classList.add('no-results');
+            li.dataset.query = value;
+            li.innerHTML = `
+                <div class="suggestion-content no-results-content">
+                    <span class="material-symbols-outlined no-results-icon">search_off</span>
+                    <div class="suggestion-info">
+                        <div class="suggestion-main">No results</div>
+                    </div>
+                </div>
+            `;
+            list.appendChild(li);
+            list.classList.remove('hidden');
         } else {
             list.classList.remove('hidden');
         }

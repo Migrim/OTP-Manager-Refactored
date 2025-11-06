@@ -10,29 +10,36 @@
 {% block content %}
 
 <div class="user-grid">
-    {% for id, username, is_admin in users %}
-    {% set delay = range(30, 150)|random %}
-    <div class="user-card" data-user-id="{{ id }}" style="animation-delay: {{ delay }}ms;">
-        <div class="user-name">{{ username }}</div>
-        <div class="user-status">
-            {{ "is Administrator" if is_admin else "is not Administrator" }}
+    {% if users|length == 0 %}
+        <div class="users-empty-state">
+            <span class="material-symbols-outlined users-empty-icon">group_off</span>
+            <div class="users-empty-text">No users stored</div>
         </div>
-        <div class="user-actions">
-            <button class="action-button copy" title="Reset Password">
-                <span class="material-icons">lock_reset</span>
-            </button>
-            <form method="post" action="/api/toggle-admin">
-                <input type="hidden" name="user_id" value="{{ id }}">
-                <button class="action-button edit" title="Toggle Admin">
-                    <span class="material-icons">{{ "admin_panel_settings" if is_admin else "person_add" }}</span>
+    {% else %}
+        {% for id, username, is_admin in users %}
+        {% set delay = range(30, 150)|random %}
+        <div class="user-card" data-user-id="{{ id }}" style="animation-delay: {{ delay }}ms;">
+            <div class="user-name">{{ username }}</div>
+            <div class="user-status">
+                {{ "is Administrator" if is_admin else "is not Administrator" }}
+            </div>
+            <div class="user-actions">
+                <button class="action-button copy" title="Reset Password">
+                    <span class="material-icons">lock_reset</span>
                 </button>
-            </form>
-            <button class="action-button delete" title="Delete User">
-                <span class="material-icons">delete</span>
-            </button>
+                <form method="post" action="/api/toggle-admin">
+                    <input type="hidden" name="user_id" value="{{ id }}">
+                    <button class="action-button edit" title="Toggle Admin">
+                        <span class="material-icons">{{ "admin_panel_settings" if is_admin else "person_add" }}</span>
+                    </button>
+                </form>
+                <button class="action-button delete" title="Delete User">
+                    <span class="material-icons">delete</span>
+                </button>
+            </div>
         </div>
-    </div>
-    {% endfor %}
+        {% endfor %}
+    {% endif %}
 </div>
 
 <a href="#" class="fab-add-user" id="openAddUserModal" title="Add User">

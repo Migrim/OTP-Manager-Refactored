@@ -727,3 +727,19 @@ body.home #search-otp-fake {
 .dark-mode #search-otp-fake {
     color: #999;
 }
+#search-suggestions li.no-results {
+    cursor: default;
+    pointer-events: none;
+    opacity: 0.8;
+}
+
+.no-results-content {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.no-results-icon {
+    font-size: 18px;
+    opacity: 0.8;
+}

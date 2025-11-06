@@ -382,6 +382,16 @@
             container.appendChild(section);
         }
 
+        if (!container.querySelector('.otp-card')) {
+            const empty = document.createElement('div');
+            empty.className = 'otp-empty-state';
+            empty.innerHTML = `
+                <span class="material-symbols-outlined otp-empty-icon">key_off</span>
+                <div class="otp-empty-text">No OTPs stored</div>
+            `;
+            container.appendChild(empty);
+        }
+
         setupObserver();
         startGlobalUpdater();
         attachDeleteHandlers();

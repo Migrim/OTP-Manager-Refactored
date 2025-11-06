@@ -9,23 +9,30 @@
 
 {% block content %}
 <div class="user-grid">
-    {% for company_id, name, kundennummer in companies %}
-    {% set delay = range(30, 150)|random %}
-    <div class="user-card" data-company-id="{{ company_id }}" style="animation-delay: {{ delay }}ms;">
-        <div class="user-name">{{ name }}</div>
-        <div class="user-status">
-            Kd.: {{ kundennummer or "Not assigned" }}
+    {% if companies|length == 0 %}
+        <div class="companies-empty-state">
+            <span class="material-symbols-outlined companies-empty-icon">domain_disabled</span>
+            <div class="companies-empty-text">No companies stored</div>
         </div>
-        <div class="user-actions">
-            <button class="action-button edit" title="Edit Company">
-                <span class="material-icons">edit</span>
-            </button>
-            <button class="action-button delete" title="Delete Company">
-                <span class="material-icons">delete</span>
-            </button>
+    {% else %}
+        {% for company_id, name, kundennummer in companies %}
+        {% set delay = range(30, 150)|random %}
+        <div class="user-card" data-company-id="{{ company_id }}" style="animation-delay: {{ delay }}ms;">
+            <div class="user-name">{{ name }}</div>
+            <div class="user-status">
+                Kd.: {{ kundennummer or "Not assigned" }}
+            </div>
+            <div class="user-actions">
+                <button class="action-button edit" title="Edit Company">
+                    <span class="material-icons">edit</span>
+                </button>
+                <button class="action-button delete" title="Delete Company">
+                    <span class="material-icons">delete</span>
+                </button>
+            </div>
         </div>
-    </div>
-    {% endfor %}
+        {% endfor %}
+    {% endif %}
 </div>
 
 <a href="#" class="fab-add-user" id="openAddCompanyModal" title="Add Company">
