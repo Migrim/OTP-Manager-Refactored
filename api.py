@@ -382,20 +382,33 @@ def edit_company():
     name = request.form.get("name")
     kundennummer = request.form.get("kundennummer")
     password = request.form.get("password")
+
     if not company_id or not name:
         logger.warning(f"{u(getattr(g, 'user_id', None))} edit_company result=missing_fields")
         return jsonify({"error": "Missing fields"}), 400
+
+    if kundennummer == "":
+        kundennummer = None
+
+    password = (password or "").strip()
+    hashed_password = None
+    if password:
+        hashed_password = bcrypt.generate_password_hash(password).decode("utf-8")
+
     with sqlite3.connect(DB_PATH) as db:
         cursor = db.cursor()
-        if kundennummer == "":
-            kundennummer = None
-        if password:
-            cursor.execute("UPDATE companies SET name = ?, kundennummer = ?, password = ? WHERE company_id = ?",
-                           (name, kundennummer, password, company_id))
+        if hashed_password:
+            cursor.execute(
+                "UPDATE companies SET name = ?, kundennummer = ?, password = ? WHERE company_id = ?",
+                (name, kundennummer, hashed_password, company_id),
+            )
         else:
-            cursor.execute("UPDATE companies SET name = ?, kundennummer = ? WHERE company_id = ?",
-                           (name, kundennummer, company_id))
+            cursor.execute(
+                "UPDATE companies SET name = ?, kundennummer = ? WHERE company_id = ?",
+                (name, kundennummer, company_id),
+            )
         db.commit()
+
     dt = round((time.perf_counter() - t0) * 1000)
     logger.info(f"{u(getattr(g, 'user_id', None))} updated company {get_company_name(company_id)} [{company_id}] duration_ms={dt}")
     return redirect("/companies")
