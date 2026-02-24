@@ -81,6 +81,10 @@
     right: 10px;
     cursor: pointer;
     user-select: none;
+    z-index: 6;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .pin-icon .material-icons {
@@ -523,9 +527,6 @@ body:not(.dark-mode) .add-user-modal {
     appearance: auto;
 }
 
-#editOtpModal .add-user-input-wrapper select::-ms-expand {
-    display: none;
-}
 
 #editOtpModal #edit-refresh-time[readonly] {
     background-color: #f0f0f0;
@@ -710,4 +711,235 @@ body:not(.dark-mode) #editOtpModal {
 
 .otp-empty-text {
     font-size: 16px;
+}
+
+.otp-warning-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    text-align: center;
+    padding-top: 22px;
+    padding-bottom: 1px;
+    padding-right: 34px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    z-index: 4;
+    background: #f4f4f4;
+    border-radius: 12px;
+
+}
+
+.otp-warning-overlay .material-icons {
+    font-size: 44px;
+    color: #ffb020;
+    opacity: 1;
+}
+
+.otp-card.otp-code-missing .otp-warning-overlay {
+    opacity: 1;
+}
+
+.otp-card.otp-code-missing .action-button.copy {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
+    filter: grayscale(0.15);
+}
+
+.otp-card.otp-code-missing .otp-code {
+    min-height: 1.2em;
+}
+
+.dark-mode .otp-warning-overlay {
+    background: #1A1A1A;
+}
+
+.dark-mode .otp-warning-overlay .material-icons {
+    color: #ffc247;
+}
+.otp-warning-overlay {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    text-align: center;
+    padding-bottom: 8px;
+}
+
+.otp-warning-overlay .material-icons {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
+.otp-warning-text {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1.1;
+    font-weight: 400;
+    opacity: 0.78;
+}
+
+.dark-mode .otp-warning-text {
+    opacity: 0.88;
+}
+
+.otp-problems-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 22px;
+    transform: translateX(-50%) translateY(18px);
+    width: fit-content;
+    max-width: calc(100vw - 24px);
+    min-width: min(560px, calc(100vw - 24px));
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid #e3e3e3;
+    border-radius: 14px;
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.12);
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    z-index: 10010;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.22s ease, transform 0.22s ease;
+    backdrop-filter: blur(8px);
+}
+
+.otp-problems-toast.show {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(-50%) translateY(0);
+}
+
+.otp-problems-toast-text {
+    font-size: 14px;
+    color: #222;
+    line-height: 1.35;
+    flex: 1;
+}
+
+.otp-problems-toast-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.otp-problems-btn {
+    border: 1px solid #d3d3d3;
+    background: #fff;
+    color: #222;
+    border-radius: 10px;
+    padding: 6px 10px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background-color 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
+}
+
+.otp-problems-btn:hover {
+    background: #f4f4f4;
+    border-color: #bdbdbd;
+}
+
+.otp-problems-btn.primary {
+    background: #fff4da;
+    border-color: #ffd27d;
+    color: #8b5a00;
+}
+
+.otp-problems-btn.primary:hover {
+    background: #ffefcc;
+    border-color: #ffc75c;
+}
+
+.otp-problems-btn.icon {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    font-size: 16px;
+}
+
+.dark-mode .otp-problems-toast {
+    background: rgba(26, 26, 26, 0.95);
+    border-color: #343434;
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.35);
+}
+
+.dark-mode .otp-problems-toast-text {
+    color: #f2f2f2;
+}
+
+.dark-mode .otp-problems-btn {
+    background: #242424;
+    border-color: #3d3d3d;
+    color: #f2f2f2;
+}
+
+.dark-mode .otp-problems-btn:hover {
+    background: #2e2e2e;
+    border-color: #515151;
+}
+
+.dark-mode .otp-problems-btn.primary {
+    background: rgba(255, 194, 71, 0.12);
+    border-color: rgba(255, 194, 71, 0.4);
+    color: #ffd27c;
+}
+
+.dark-mode .otp-problems-btn.primary:hover {
+    background: rgba(255, 194, 71, 0.18);
+    border-color: rgba(255, 194, 71, 0.55);
+}
+
+@media (max-width: 720px) {
+    .otp-problems-toast {
+        left: 12px;
+        right: 12px;
+        width: auto;
+        transform: translateY(18px);
+        bottom: 14px;
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .otp-problems-toast.show {
+        transform: translateY(0);
+    }
+
+    .otp-problems-toast-actions {
+        width: 100%;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+    }
+}
+@keyframes otpProblemPulse {
+    0% { box-shadow: 0 0 0 0 rgba(255, 176, 32, 0.45); }
+    100% { box-shadow: 0 0 0 10px rgba(255, 176, 32, 0); }
+}
+
+.otp-card.otp-problem-highlight {
+    border-color: #ffb020;
+    opacity: 1;
+    transform: translateY(0);
+    animation: otpProblemPulse 1.6s ease-out infinite;
+}
+
+.dark-mode .otp-card.otp-problem-highlight {
+    border-color: #ffc247;
 }

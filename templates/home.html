@@ -46,12 +46,12 @@
             <input type="hidden" name="secret_id" id="edit-secret-id">
             <label for="edit-name">Name</label>
             <div class="add-user-input-wrapper">
-                <input type="text" id="edit-name" name="name" placeholder="Name" required>
+                <input type="text" id="edit-name" name="name" placeholder="Name" required minlength="3" pattern="[A-Za-z0-9 _\-]{3,}" title="At least 3 characters. Letters, numbers, spaces, - and _ allowed.">
             </div>
 
             <label for="edit-email">E-Mail</label>
             <div class="add-user-input-wrapper">
-                <input type="text" id="edit-email" name="email" placeholder="email@example.com or none" pattern="^([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}|none)$" title="Enter a valid e-mail address or none">
+                <input type="text" id="edit-email" name="email" placeholder="email@example.com or none" pattern="^([A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}|none)$" title="Enter a valid e-mail address or none">
             </div>
 
             <label for="edit-secret">Secret</label>
@@ -77,6 +77,17 @@
     </div>
 </div>
 
+<div id="otpProblemsToast" class="otp-problems-toast" aria-live="polite">
+    <div class="otp-problems-toast-text" id="otpProblemsToastText">
+        There are problems regarding your stored secrets. Please resolve them.
+    </div>
+    <div class="otp-problems-toast-actions">
+        <button type="button" id="otpProblemsShowBtn" class="otp-problems-btn primary">Show problems</button>
+        <button type="button" id="otpProblemsIgnoreBtn" class="otp-problems-btn">Ignore 24h</button>
+        <button type="button" id="otpProblemsCloseBtn" class="otp-problems-btn icon" aria-label="Close">×</button>
+    </div>
+</div>
+
 <script>
     const SHOW_EMAIL = {{ 1 if user_settings.show_emails else 0 }};
     const SHOW_TEXT_TIMER = {{ 1 if user_settings.show_timer else 0 }};
@@ -87,6 +98,128 @@
     let lastSlot = null;
     let lastActivity = Date.now();
     let blurApplied = false;
+    const OTP_PROBLEMS_IGNORE_KEY = "otpProblemsIgnoreUntil";
+    let problemCardIds = [];
+    let problemCardCycleIndex = 0;
+
+    function validateNameInput(input) {
+        const value = (input.value || '').trim();
+        const valid = /^[A-Za-z0-9 _-]{3,}$/.test(value);
+        if (!valid) {
+            input.setCustomValidity('At least 3 characters. Letters, numbers, spaces, - and _ allowed.');
+        } else {
+            input.setCustomValidity('');
+        }
+    }
+
+
+    const editNameInputEl = document.getElementById("edit-name");
+    if (editNameInputEl) {
+        editNameInputEl.addEventListener("input", () => validateNameInput(editNameInputEl));
+        editNameInputEl.addEventListener("blur", () => validateNameInput(editNameInputEl));
+        editNameInputEl.addEventListener("invalid", () => validateNameInput(editNameInputEl));
+    }
+
+    function getProblemCards() {
+        return Array.from(document.querySelectorAll(".otp-card.otp-code-missing"));
+    }
+
+    function updateProblemCardList() {
+        problemCardIds = getProblemCards().map(card => String(card.dataset.id));
+        if (problemCardCycleIndex >= problemCardIds.length) {
+            problemCardCycleIndex = 0;
+        }
+    }
+
+    function isProblemsToastIgnored() {
+        const until = parseInt(localStorage.getItem(OTP_PROBLEMS_IGNORE_KEY) || "0", 10);
+        return Number.isFinite(until) && until > Date.now();
+    }
+
+    function ignoreProblemsToastFor24h() {
+        localStorage.setItem(OTP_PROBLEMS_IGNORE_KEY, String(Date.now() + (24 * 60 * 60 * 1000)));
+    }
+
+    function clearProblemsToastIgnore() {
+        localStorage.removeItem(OTP_PROBLEMS_IGNORE_KEY);
+    }
+
+    function getNextProblemCard() {
+        const cards = getProblemCards();
+        if (!cards.length) return null;
+
+        updateProblemCardList();
+
+        if (!problemCardIds.length) return cards[0];
+
+        const nextId = problemCardIds[problemCardCycleIndex % problemCardIds.length];
+        problemCardCycleIndex = (problemCardCycleIndex + 1) % problemCardIds.length;
+
+        return document.querySelector(`.otp-card[data-id="${CSS.escape(nextId)}"]`) || cards[0];
+    }
+
+    function scrollToNextProblemCard() {
+        const card = getNextProblemCard();
+        if (!card) return;
+
+        card.scrollIntoView({ behavior: "smooth", block: "center" });
+        card.classList.remove("otp-problem-highlight");
+        void card.offsetWidth;
+        card.classList.add("otp-problem-highlight");
+        setTimeout(() => card.classList.remove("otp-problem-highlight"), 20000);
+    }
+
+    function updateProblemsToast() {
+        const toast = document.getElementById("otpProblemsToast");
+        const text = document.getElementById("otpProblemsToastText");
+        if (!toast || !text) return;
+
+        const count = getProblemCards().length;
+
+        if (count <= 0) {
+            toast.classList.remove("show");
+            clearProblemsToastIgnore();
+            return;
+        }
+
+        if (count === 1) {
+            text.textContent = "There is a problem regarding your stored secrets. Please resolve it.";
+        } else {
+            text.textContent = "There are multiple problems regarding your stored secrets. Please resolve them.";
+        }
+
+        updateProblemCardList();
+
+        if (isProblemsToastIgnored()) {
+            toast.classList.remove("show");
+            return;
+        }
+
+        toast.classList.add("show");
+    }
+
+    function setupProblemsToastHandlers() {
+        const showBtn = document.getElementById("otpProblemsShowBtn");
+        const ignoreBtn = document.getElementById("otpProblemsIgnoreBtn");
+        const closeBtn = document.getElementById("otpProblemsCloseBtn");
+        const toast = document.getElementById("otpProblemsToast");
+
+        if (!showBtn || !ignoreBtn || !closeBtn || !toast) return;
+
+        showBtn.addEventListener("click", () => {
+            scrollToNextProblemCard();
+        });
+
+        ignoreBtn.addEventListener("click", () => {
+            ignoreProblemsToastFor24h();
+            toast.classList.remove("show");
+        });
+
+        closeBtn.addEventListener("click", () => {
+            ignoreProblemsToastFor24h();
+            toast.classList.remove("show");
+        });
+    }
 
     function maskSecret(s) {
         const n = typeof s === 'string' ? s.length : 0;
@@ -147,6 +280,7 @@
             const codeEl = card.querySelector('.otp-code');
             const next = String(data.current_code || "");
             if(codeEl && codeEl.textContent.trim() !== next) animateCodeChange(codeEl, next);
+            updateOtpCardWarningState(card);
         }catch(e){}
     }
 
@@ -174,6 +308,21 @@
             s.textContent = n[i];
             el.appendChild(s);
         }
+    }
+
+    function updateOtpCardWarningState(card) {
+        const codeEl = card.querySelector('.otp-code');
+        const copyButton = card.querySelector('.action-button.copy');
+        if (!codeEl || !copyButton) return;
+
+        const isEmpty = !codeEl.textContent.trim();
+        card.classList.toggle('otp-code-missing', isEmpty);
+
+        copyButton.disabled = isEmpty;
+        copyButton.setAttribute('aria-disabled', isEmpty ? 'true' : 'false');
+        copyButton.title = isEmpty ? 'OTP code unavailable' : 'Copy';
+
+        updateProblemsToast();
     }
 
     function populateCompanySelect(selectEl, selectedId) {
@@ -241,8 +390,10 @@
         card._lastSlot = null;
 
         animateCodeChange(codeText, codeText.textContent.trim());
+        updateOtpCardWarningState(card);
 
         copyButton.addEventListener('click', () => {
+            if (copyButton.disabled) return;
             const code = codeText.textContent.trim();
             if (!code) return;
             copyText(code).then(() => { alert(`Copied code: ${code}`); }).catch(() => { window.prompt('Copy code:', code); });
@@ -292,6 +443,7 @@
             const next = map.get(id);
             const current = codeEl.textContent.trim();
             if (current !== next) animateCodeChange(codeEl, next);
+            updateOtpCardWarningState(card);
         });
     }
 
@@ -333,7 +485,11 @@
 
                 card.innerHTML = `
                     <div class="otp-card-inner">
-                        <span class="pin-icon pinned"><span class="material-icons">push_pin</span></span>
+                        <span class="pin-icon"><span class="material-icons">push_pin</span></span>
+                        <div class="otp-warning-overlay" aria-hidden="true">
+                            <span class="material-icons">report_problem</span>
+                            <span class="otp-warning-text">cant generate otp code #ERR-004</span>
+                        </div>
                         <div class="otp-field"><span class="otp-field-label">Name:</span> <span class="otp-field-value">${entry.name}</span></div>
                         <div class="otp-field"><span class="otp-field-label">Secret:</span> 
                             ${(() => {
@@ -397,6 +553,10 @@
                 card.innerHTML = `
                     <div class="otp-card-inner">
                         <span class="pin-icon"><span class="material-icons">push_pin</span></span>
+                        <div class="otp-warning-overlay" aria-hidden="true">
+                            <span class="material-icons">report_problem</span>
+                            <span class="otp-warning-text">cant generate otp code #ERR-004</span>
+                        </div>
                         <div class="otp-field"><span class="otp-field-label">Name:</span> <span class="otp-field-value">${entry.name}</span></div>
                         <div class="otp-field"><span class="otp-field-label">Secret:</span> 
                             ${(() => {
@@ -557,6 +717,12 @@
 
     document.getElementById("editOtpForm").addEventListener("submit", async (e) => {
         e.preventDefault();
+        const editNameInput = document.getElementById("edit-name");
+        validateNameInput(editNameInput);
+        if (!editNameInput.checkValidity()) {
+            editNameInput.reportValidity();
+            return;
+        }
         const secretId = document.getElementById("edit-secret-id").value;
         const payload = {
             name: document.getElementById("edit-name").value,
@@ -581,6 +747,7 @@
     });
 
     loadOTPs();
+    setupProblemsToastHandlers();
 
     const backToTop = document.getElementById('backToTop');
     window.addEventListener('scroll', () => {
