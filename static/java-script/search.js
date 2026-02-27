@@ -85,6 +85,7 @@ document.addEventListener("DOMContentLoaded", () => {
         for (const [company, entry] of companyMap.entries()) {
             const li = document.createElement('li');
             li.dataset.query = company;
+            li.dataset.type = 'company';
     
             li.innerHTML = `
                 <div class="suggestion-content">
@@ -98,7 +99,7 @@ document.addEventListener("DOMContentLoaded", () => {
             `;
     
             li.addEventListener('click', () => {
-                window.location.href = `/search.html?q=${encodeURIComponent(company)}`;
+                window.location.href = `/search.html?company=${encodeURIComponent(company)}`;
             });
     
             list.appendChild(li);
@@ -109,6 +110,7 @@ document.addEventListener("DOMContentLoaded", () => {
         for (const item of individualEntries) {
             const li = document.createElement('li');
             li.dataset.query = item.name || item.company_name;
+            li.dataset.type = 'search';
     
             const res = await fetch(`/api/secrets/${item.id}`);
             const data = await res.json();
@@ -136,7 +138,7 @@ document.addEventListener("DOMContentLoaded", () => {
             `;
     
             li.addEventListener('click', () => {
-                window.location.href = `/search.html?q=${encodeURIComponent(item.name)}`;
+                window.location.href = `/search.html?search=${encodeURIComponent(item.name)}`;
             });
     
             li.addEventListener('mouseover', () => {
@@ -253,8 +255,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 const proceed = confirm(`This search has ${matches.length} results.\nStaying on the results page may cause high system usage.\n\nContinue?`);
                 if (!proceed) return;
             }
-    
-            window.location.href = `/search.html?q=${encodeURIComponent(query)}`;
+
+            const selectedType = selected ? (selected.dataset.type || '') : '';
+            if (selectedType === 'company') {
+                window.location.href = `/search.html?company=${encodeURIComponent(query)}`;
+            } else {
+                window.location.href = `/search.html?search=${encodeURIComponent(query)}`;
+            }
         }
     
         list.querySelectorAll('li').forEach(el => el.classList.remove('active'));

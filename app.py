@@ -372,22 +372,59 @@ def user_pinned():
 @app.route("/search.html")
 @login_required
 def search_page():
-    q = request.args.get("q", "").lower()
+    search_raw = request.args.get("search")
+    if search_raw is None:
+        search_raw = request.args.get("q", "")
+    q_raw = search_raw
+    q = q_raw.strip().lower()
+
+    company_raw = request.args.get("company", "")
+    company_q = company_raw.strip().lower()
+
     with sqlite3.connect(DB_PATH) as db:
         cursor = db.cursor()
+
+        if company_q:
+            cursor.execute("SELECT company_id, name FROM companies WHERE LOWER(name) = ?", (company_q,))
+            company = cursor.fetchone()
+            if company:
+                company_id, company_name = company
+                cursor.execute(
+                    """
+                    SELECT s.name, s.email, c.name
+                    FROM otp_secrets s
+                    LEFT JOIN companies c ON s.company_id = c.company_id
+                    WHERE s.company_id = ?
+                    ORDER BY s.name ASC
+                    """,
+                    (company_id,),
+                )
+                results = cursor.fetchall()
+                logger.info(f"{u(g.user_id)} company-search '{company_name}' — {len(results)} results.")
+                return render_template("search.html", query=company_name, results=results)
+
+            logger.info(f"{u(g.user_id)} company-search '{company_raw}' — 0 results (company not found).")
+            return render_template("search.html", query=company_raw, results=[])
+
+        cursor.execute("SELECT company_id, name FROM companies WHERE LOWER(name) = ?", (q,))
+        company = cursor.fetchone()
+        if company and q:
+            return redirect(url_for("search_page", company=search_raw.strip() if isinstance(search_raw, str) else q_raw.strip()))
+
         cursor.execute(
             """
             SELECT s.name, s.email, c.name
             FROM otp_secrets s
             LEFT JOIN companies c ON s.company_id = c.company_id
             WHERE LOWER(s.name) LIKE ? OR LOWER(s.email) LIKE ? OR LOWER(c.name) LIKE ?
+            ORDER BY c.name ASC, s.name ASC
             """,
             (f"%{q}%", f"%{q}%", f"%{q}%"),
         )
         results = cursor.fetchall()
 
-    logger.info(f"{u(g.user_id)} searched for '{q}' — {len(results)} results.")
-    return render_template("search.html", query=q, results=results)
+    logger.info(f"{u(g.user_id)} searched for '{search_raw if isinstance(search_raw, str) else q_raw}' — {len(results)} results.")
+    return render_template("search.html", query=search_raw if isinstance(search_raw, str) else q_raw, results=results)
 
 @app.route("/logs")
 @login_required
