@@ -35,8 +35,11 @@
     font-size: 1.1rem;
     font-weight: 600;
     margin-bottom: 0.4rem;
-    word-break: break-word;
     color: #222;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .user-actions {
@@ -56,6 +59,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: 6px;
     transition: background-color 0.2s, border-color 0.2s;
 }
 
@@ -427,4 +431,118 @@ body:not(.dark-mode) .add-user-modal {
 
 .companies-empty-text {
     font-size: 16px;
+}
+
+.action-button.search {
+    background: #eee6ff;
+    border: 1px solid #cdb7ff;
+    color: #6f42c1;
+    border-radius: 12px;
+    padding: 4px 12px 4px 10px;
+    min-width: 58px;
+    gap: 6px;
+    font-weight: 600;
+}
+
+.action-button.search:hover {
+    background: #e4d8ff;
+    border-color: #b899ff;
+    color: #5d34ab;
+}
+
+.action-button.search .material-symbols-outlined {
+    font-size: 18px;
+    line-height: 1;
+    color: inherit;
+    pointer-events: none;
+}
+
+.action-button.search .search-count {
+    font-size: 0.82rem;
+    font-weight: 700;
+    line-height: 1;
+    color: inherit;
+    pointer-events: none;
+}
+
+.dark-mode .action-button.search {
+    background: #6e56a3;
+    border-color: #9177c9;
+    color: #f3eeff;
+}
+
+.dark-mode .action-button.search:hover {
+    background: #7d63b8;
+    border-color: #a58bdd;
+    color: #ffffff;
+}
+
+.search-box-otp {
+    display: flex;
+    align-items: center;
+    background-color: #f3f3f3;
+    border: 1px solid #e3e3e3;
+    border-radius: 8px;
+    padding: 0 0.5rem;
+    height: 28px;
+    margin-right: 10px;
+}
+
+.search-box-otp input {
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 13px;
+    width: 100px;
+    padding: 0 4px;
+}
+
+.dark-mode .search-box-otp {
+    background-color: #222;
+    border-color: #444;
+}
+
+.otp-search-placeholder-text {
+    color: #999;
+}
+
+#search-otp-input {
+    display: none;
+}
+
+body.home #search-otp-input,
+body.companies #search-otp-input {
+    display: inline-block;
+}
+
+body.home #search-otp-fake,
+body.companies #search-otp-fake {
+    display: none;
+}
+
+body.home .search-box-otp .shortcut,
+body.companies .search-box-otp .shortcut {
+    display: none;
+}
+
+#search-otp-fake {
+    display: inline-block;
+    font-size: 13px;
+    color: #999;
+    font-family: 'Roboto', sans-serif;
+    cursor: pointer;
+    user-select: none;
+}
+
+.dark-mode #search-otp-fake {
+    color: #999;
+}
+body.home #search-otp-input,
+body.companies #search-otp-input {
+    display: inline-block;
+}
+
+body.home #search-otp-fake,
+body.companies #search-otp-fake {
+    display: none;
 }

@@ -64,7 +64,7 @@
                 
                 <div class="search-box-otp" id="search-otp-container">
                     <div id="search-otp-fake" class="otp-search-placeholder-text">Search</div>
-                    <input type="text" id="search-otp-input" class="otp-search-input" placeholder="Search..." autocomplete="off" />
+                    <input type="text" id="search-otp-input" class="otp-search-input" placeholder="Search here..." autocomplete="off" />
                     <div class="shortcut">⌘ K</div>
                 </div>
             {% endif %}
@@ -102,30 +102,30 @@
         if (document.documentElement.classList.contains("dark-mode")) {
             icon.classList.remove("fa-moon");
             icon.classList.add("fa-sun");
-            body.classList.add("dark-mode"); 
+            body.classList.add("dark-mode");
         }
     
         document.querySelector(".theme-toggle").addEventListener("click", () => {
             const isDark = document.documentElement.classList.toggle("dark-mode");
             document.body.classList.toggle("dark-mode", isDark);
-
+    
             localStorage.setItem("theme", isDark ? "dark" : "light");
             document.cookie = `theme=${isDark ? 'dark' : 'light'}; path=/; max-age=31536000`;
-
+    
             icon.classList.toggle("fa-moon", !isDark);
             icon.classList.toggle("fa-sun", isDark);
         });
-
+    
         window.addEventListener('load', () => {
             document.documentElement.classList.remove('preload');
             document.documentElement.classList.remove('dark-mode-preload');
         });
-
+    
         function showToast(message, type = "info") {
             const container = document.getElementById("toast-container");
             const toast = document.createElement("div");
             toast.className = `toast-message ${type}`;
-
+    
             const icon = document.createElement("span");
             icon.className = "material-symbols-outlined toast-icon";
             switch (type) {
@@ -134,11 +134,11 @@
                 case "warning": icon.textContent = "warning"; break;
                 default: icon.textContent = "info";
             }
-
+    
             const text = document.createElement("span");
             text.className = "toast-text";
             text.textContent = message;
-
+    
             const close = document.createElement("button");
             close.className = "toast-close";
             close.innerHTML = "&times;";
@@ -148,15 +148,14 @@
                 toast.style.marginBottom = "-50px";
                 setTimeout(() => toast.remove(), 450);
             };
-
+    
             toast.appendChild(icon);
             toast.appendChild(text);
             toast.appendChild(close);
             container.appendChild(toast);
-
+    
             setTimeout(() => toast.classList.add("visible"), 10);
-
-
+    
             setTimeout(() => {
                 if (toast.parentNode) {
                     toast.classList.remove("visible");
@@ -166,59 +165,90 @@
                 }
             }, 5000);
         }
-
+    
         window.alert = function(msg) {
             showToast(msg, "info");
         };
-
+    
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% for category, message in messages %}
                 showToast({{ message|tojson }}, "{{ category }}");
             {% endfor %}
         {% endwith %}
-
+    
         const searchModal = document.getElementById('search-modal');
         const searchInput = document.getElementById('search-field');
-
+    
         function openSearchModal() {
             searchModal.classList.add('active');
             setTimeout(() => searchInput.focus(), 50);
         }
-
+    
         function closeSearchModal() {
             searchModal.classList.remove('active');
         }
-
+    
         document.addEventListener('keydown', (e) => {
             const activeElement = document.activeElement;
-
+            const isInlineSearchPage =
+                document.body.classList.contains("home") ||
+                document.body.classList.contains("companies");
+    
             if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k' && activeElement.id !== 'companySearchInput') {
                 e.preventDefault();
-                openSearchModal();
+                if (isInlineSearchPage) {
+                    const inlineInput = document.getElementById("search-otp-input");
+                    if (inlineInput) inlineInput.focus();
+                } else {
+                    openSearchModal();
+                }
             }
-
+    
             if (searchModal.classList.contains('active') && e.key === 'Escape') {
                 e.preventDefault();
                 closeSearchModal();
             }
         });
-
+    
         document.addEventListener("DOMContentLoaded", () => {
             const fakeSearch = document.getElementById("search-otp-fake");
+            const searchOtpInput = document.getElementById("search-otp-input");
+            const searchOtpContainer = document.getElementById("search-otp-container");
+            const shortcut = searchOtpContainer ? searchOtpContainer.querySelector(".shortcut") : null;
+    
+            const isInlineSearchPage =
+                document.body.classList.contains("home") ||
+                document.body.classList.contains("companies");
+    
+            if (isInlineSearchPage) {
+                if (fakeSearch) fakeSearch.style.display = "none";
+                if (shortcut) shortcut.style.display = "none";
+                if (searchOtpInput) {
+                    searchOtpInput.style.pointerEvents = "auto";
+                    searchOtpInput.removeAttribute("readonly");
+                }
+            }
+    
             if (fakeSearch) {
                 fakeSearch.addEventListener("click", () => {
-                    if (!document.body.classList.contains("home")) {
+                    if (isInlineSearchPage) {
+                        if (searchOtpInput) searchOtpInput.focus();
+                    } else {
                         openSearchModal();
                     }
                 });
             }
         });
-
+    
         document.addEventListener("DOMContentLoaded", () => {
             const searchOtpInput = document.getElementById("search-otp-input");
             if (searchOtpInput) {
                 searchOtpInput.addEventListener("keydown", (e) => {
-                    if (e.key === "Enter" && searchOtpInput.value.trim() !== "") {
+                    const isInlineSearchPage =
+                        document.body.classList.contains("home") ||
+                        document.body.classList.contains("companies");
+    
+                    if (!isInlineSearchPage && e.key === "Enter" && searchOtpInput.value.trim() !== "") {
                         e.preventDefault();
                         const term = encodeURIComponent(searchOtpInput.value.trim());
                         window.location.href = `/search.html?q=${term}`;
@@ -226,7 +256,6 @@
                 });
             }
         });
-
     </script>
 </body>
 </html>

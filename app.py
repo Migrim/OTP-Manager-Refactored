@@ -221,7 +221,18 @@ def companies():
 
     with sqlite3.connect(DB_PATH) as db:
         cursor = db.cursor()
-        cursor.execute("SELECT company_id, name, kundennummer FROM companies ORDER BY name ASC")
+        cursor.execute(
+            """
+            SELECT c.company_id,
+                   c.name,
+                   c.kundennummer,
+                   COUNT(s.id) AS secret_count
+            FROM companies c
+            LEFT JOIN otp_secrets s ON s.company_id = c.company_id
+            GROUP BY c.company_id, c.name, c.kundennummer
+            ORDER BY c.name ASC
+            """
+        )
         company_list = cursor.fetchall()
 
     return render_template("companies.html", companies=company_list)

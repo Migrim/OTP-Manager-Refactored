@@ -4,25 +4,37 @@
 
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='styles/users.css') }}">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet">
 {% endblock %}
 
 {% block content %}
-<div class="user-grid">
+<div class="user-grid" id="companiesGrid">
     {% if companies|length == 0 %}
         <div class="companies-empty-state">
             <span class="material-symbols-outlined companies-empty-icon">domain_disabled</span>
             <div class="companies-empty-text">No companies stored</div>
         </div>
     {% else %}
-        {% for company_id, name, kundennummer in companies %}
+        {% for company_id, name, kundennummer, secret_count in companies %}
         {% set delay = range(30, 150)|random %}
-        <div class="user-card" data-company-id="{{ company_id }}" style="animation-delay: {{ delay }}ms;">
+        <div
+            class="user-card"
+            data-company-id="{{ company_id }}"
+            data-company-name="{{ name }}"
+            data-kundennummer="{{ kundennummer or '' }}"
+            data-search="{{ (name ~ ' ' ~ (kundennummer or '') ~ ' ' ~ secret_count)|lower }}"
+            style="animation-delay: {{ delay }}ms;"
+        >
             <div class="user-name">{{ name }}</div>
             <div class="user-status">
-                Kd.: {{ kundennummer or "Not assigned" }}
+                <div>Kd.: {{ kundennummer or "Not assigned" }}</div>
             </div>
             <div class="user-actions">
+                <button class="action-button search" title="Search Company">
+                    <span class="material-symbols-outlined">search</span>
+                    <span class="search-count">{{ secret_count }}</span>
+                </button>
                 <button class="action-button edit" title="Edit Company">
                     <span class="material-icons">edit</span>
                 </button>
@@ -56,9 +68,7 @@
             <label for="password">Password (optional)</label>
             <div class="add-user-input-wrapper" style="position: relative;">
                 <input type="password" id="company_password" name="password" placeholder="Optional password">
-                <span id="toggleCompanyPassword" class="material-symbols-outlined" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; font-size: 20px; color: #777;">
-                    visibility_off
-                </span>
+                <span id="toggleCompanyPassword" class="material-symbols-outlined" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; font-size: 20px; color: #777;">visibility_off</span>
             </div>
 
             <div class="add-user-button-row">
@@ -100,9 +110,7 @@
             <label for="edit-company-password">New Password (optional)</label>
             <div class="add-user-input-wrapper" style="position: relative;">
                 <input type="password" name="password" id="edit-company-password" placeholder="Optional password">
-                <span id="toggleEditCompanyPassword" class="material-symbols-outlined" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; font-size: 20px; color: #777;">
-                    visibility_off
-                </span>
+                <span id="toggleEditCompanyPassword" class="material-symbols-outlined" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; font-size: 20px; color: #777;">visibility_off</span>
             </div>
 
             <div class="add-user-button-row">
@@ -113,6 +121,14 @@
 </div>
 
 <script>
+    function debounce(func, delay) {
+        let timeout;
+        return (...args) => {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func(...args), delay);
+        };
+    }
+
     document.getElementById("openAddCompanyModal").onclick = () => {
         document.getElementById("addCompanyModal").style.display = "flex";
     };
@@ -133,6 +149,14 @@
             const companyId = card.dataset.companyId;
             document.getElementById("delete-company-id").value = companyId;
             document.getElementById("confirmDeleteCompanyModal").style.display = "flex";
+        };
+    });
+
+    document.querySelectorAll(".action-button.search").forEach(btn => {
+        btn.onclick = (e) => {
+            const card = e.currentTarget.closest(".user-card");
+            const name = card.dataset.companyName || "";
+            window.location.href = `/search.html?company=${encodeURIComponent(name)}`;
         };
     });
 
@@ -158,12 +182,12 @@
         btn.onclick = (e) => {
             const card = e.currentTarget.closest(".user-card");
             const companyId = card.dataset.companyId;
-            const name = card.querySelector(".user-name").textContent;
-            const kundennummer = card.querySelector(".user-status").textContent.replace("Kundennummer: ", "").trim();
+            const name = card.dataset.companyName || "";
+            const kundennummer = (card.dataset.kundennummer || "").trim();
 
             document.getElementById("edit-company-id").value = companyId;
             document.getElementById("edit-company-name").value = name;
-            document.getElementById("edit-company-kundennummer").value = kundennummer !== "Not assigned" ? kundennummer : "";
+            document.getElementById("edit-company-kundennummer").value = kundennummer;
             document.getElementById("edit-company-password").value = "";
 
             document.getElementById("editCompanyModal").style.display = "flex";
@@ -187,6 +211,37 @@
         input.type = isVisible ? "password" : "text";
         icon.textContent = isVisible ? "visibility_off" : "visibility";
     });
-</script>
 
+    const searchCompanyInput =
+        document.getElementById("search-company-input") ||
+        document.getElementById("search-otp-input") ||
+        document.getElementById("search-input");
+
+    if (searchCompanyInput) {
+        const filterCompanies = (query) => {
+            const cards = document.querySelectorAll(".user-card");
+            let visibleCount = 0;
+
+            cards.forEach(card => {
+                const text = (card.dataset.search || "").toLowerCase();
+                const match = text.includes(query);
+                card.style.display = match ? "flex" : "none";
+                if (match) visibleCount++;
+            });
+
+            const emptyState = document.querySelector(".companies-empty-state");
+            if (emptyState && document.querySelectorAll(".user-card").length > 0) {
+                emptyState.style.display = visibleCount === 0 ? "flex" : "none";
+            }
+        };
+
+        const runFilter = (value) => filterCompanies((value || "").toLowerCase().trim());
+
+        searchCompanyInput.addEventListener("input", (e) => runFilter(e.target.value));
+        searchCompanyInput.addEventListener("input", debounce((e) => runFilter(e.target.value), 100));
+    }
+    document.addEventListener("DOMContentLoaded", () => {
+        document.body.classList.add("companies");
+    });
+</script>
 {% endblock %}
