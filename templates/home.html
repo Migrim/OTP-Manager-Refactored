@@ -469,7 +469,7 @@
 
             const title = document.createElement("h2");
             title.className = "company-title";
-            title.textContent = "Your Pinned OTPs";
+            title.innerHTML = `<span class="material-icons" style="font-size:1.05rem; vertical-align:-2px; margin-right:0.45rem;">push_pin</span>Your Pinned OTPs`;
 
             const grid = document.createElement("div");
             grid.className = "otp-grid";
@@ -490,6 +490,7 @@
                             <span class="otp-warning-text">cant generate otp code #ERR-004</span>
                         </div>
                         <div class="otp-field"><span class="otp-field-label">Name:</span> <span class="otp-field-value">${entry.name}</span></div>
+                        <div class="otp-field"><span class="otp-field-label">Company:</span> <span class="otp-field-value">${entry.company_name || "Unknown Company"}</span></div>
                         <div class="otp-field"><span class="otp-field-label">Secret:</span> 
                             ${(() => {
                                 const m = maskSecret(entry.secret);
@@ -529,6 +530,8 @@
         }
 
         for (const company of Object.keys(grouped).sort()) {
+            const unpinnedEntries = grouped[company].filter(entry => !pinnedIds.includes(String(entry.id)));
+            if (unpinnedEntries.length === 0) continue;
             const section = document.createElement("div");
             section.className = "otp-section";
 
@@ -539,8 +542,7 @@
             const grid = document.createElement("div");
             grid.className = "otp-grid";
 
-            for (const entry of sortSecretsForDisplay(grouped[company])) {
-                if (pinnedIds.includes(String(entry.id))) continue;
+            for (const entry of sortSecretsForDisplay(unpinnedEntries)) {
 
                 const card = document.createElement("div");
                 const delay = Math.floor(Math.random() * 120) + 30;
