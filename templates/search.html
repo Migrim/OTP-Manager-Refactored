@@ -3,6 +3,7 @@
 {% block title %}Search: {{ query }}{% endblock %}
 
 {% block content %}
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400,0,0" />
 
 {% if results %}
 <div id="pdfLoader" class="pdf-loader" aria-live="polite" aria-busy="false" hidden>
@@ -15,24 +16,54 @@
 <table class="search-results-table">
   <thead>
     <tr>
+      <th class="select-col">
+        <label class="check-wrap" aria-label="Select all entries">
+          <input type="checkbox" id="selectAllRows">
+          <span class="check-ui"></span>
+        </label>
+      </th>
       <th>Name</th>
       <th>Email</th>
       <th>Company</th>
       <th>OTP-Code</th>
+      <th class="actions-col">Actions</th>
     </tr>
   </thead>
   <tbody>
     {% for name, email, company in results %}
-    <tr class="otp-row" data-name="{{ name }}">
+    <tr class="otp-row" data-secret-id="{{ secret_id }}" data-name="{{ name }}" data-email="{{ email }}" data-company="{{ company or '' }}">
+      <td class="select-cell">
+        <label class="check-wrap" aria-label="Select {{ name }}">
+          <input type="checkbox" class="row-checkbox" data-company="{{ company or '' }}">
+          <span class="check-ui"></span>
+        </label>
+      </td>
       <td>{{ name }}</td>
       <td class="email-text">{{ email }}</td>
       <td>{{ company or "No company" }}</td>
-      <td class="otp-live-cell">
-        <span class="code-text">...</span>
-        <svg class="countdown-circle" width="24" height="24" viewBox="0 0 36 36">
-          <circle class="circle-bg" cx="18" cy="18" r="16" />
-          <circle class="circle-fg" cx="18" cy="18" r="16" stroke-dasharray="100" stroke-dashoffset="0" />
-        </svg>
+      <td class="otp-cell">
+        <div class="otp-live-cell">
+          <span class="code-text">...</span>
+          <svg class="countdown-circle" width="24" height="24" viewBox="0 0 36 36">
+            <circle class="circle-bg" cx="18" cy="18" r="16" />
+            <circle class="circle-fg" cx="18" cy="18" r="16" stroke-dasharray="100" stroke-dashoffset="0" />
+          </svg>
+        </div>
+      </td>
+      <td class="actions-cell">
+        <div class="row-actions">
+        <button type="button" class="action-btn copy-btn" title="Copy OTP" aria-label="Copy OTP">
+          <span class="material-symbols-outlined" aria-hidden="true">content_copy</span>
+        </button>
+        <button type="button" class="action-btn edit-btn" title="Edit entry" aria-label="Edit entry">
+          <span class="material-symbols-outlined" aria-hidden="true">edit</span>
+        </button>
+        {% if session.get('is_admin') %}
+        <button type="button" class="action-btn delete-btn" title="Delete entry" aria-label="Delete entry">
+          <span class="material-symbols-outlined" aria-hidden="true">delete</span>
+        </button>
+        {% endif %}
+        </div>
       </td>
     </tr>
     {% endfor %}
@@ -40,10 +71,73 @@
 </table>
 
 {% if results %}
-<a href="{{ url_for('api.export_search') }}?q={{ query | urlencode }}" 
-   class="fab-export" title="Export as PDF" aria-label="Export results as PDF">
-  <span class="material-icons">picture_as_pdf</span>
-</a>
+
+<div class="bulk-bar" id="bulkBar" hidden>
+  <div class="bulk-bar-inner">
+    <div class="bulk-count" id="bulkCount">0 selected</div>
+    {% if session.get('is_admin') %}
+    <button type="button" class="bulk-btn bulk-delete" id="bulkDeleteBtn" title="Bulk Delete" aria-label="Bulk Delete">
+      <span class="material-symbols-outlined" aria-hidden="true">delete</span>
+    </button>
+    {% endif %}
+    <button type="button" class="bulk-btn bulk-pdf" id="bulkPdfBtn" title="PDF Export" aria-label="PDF Export">
+      <span class="material-symbols-outlined" aria-hidden="true">picture_as_pdf</span>
+    </button>
+  </div>
+</div>
+
+<div class="confirm-delete-modal" id="confirmDeleteModal" hidden>
+  <div class="confirm-delete-backdrop"></div>
+  <div class="confirm-delete-card" role="dialog" aria-modal="true" aria-labelledby="confirmDeleteTitle">
+    <h3 id="confirmDeleteTitle">Confirm deletion</h3>
+    <p class="confirm-delete-text" id="confirmDeleteText">Type <strong>confirm</strong> to continue.</p>
+    <input type="text" id="confirmDeleteInput" class="confirm-delete-input" autocomplete="off" spellcheck="false" placeholder="confirm">
+    <div class="confirm-delete-actions">
+      <button type="button" class="confirm-delete-cancel" id="confirmDeleteCancel">Cancel</button>
+      <button type="button" class="confirm-delete-submit" id="confirmDeleteSubmit" disabled>Delete</button>
+    </div>
+  </div>
+</div>
+<div class="edit-otp-modal" id="editOtpModal" hidden>
+  <div class="edit-otp-backdrop"></div>
+  <div class="edit-otp-card" role="dialog" aria-modal="true" aria-labelledby="editOtpTitle">
+    <button type="button" class="edit-otp-close" id="closeEditOtpModal" aria-label="Close">×</button>
+    <h3 id="editOtpTitle">Edit OTP entry</h3>
+    <form id="editOtpForm" class="edit-otp-form">
+      <input type="hidden" name="secret_id" id="edit-secret-id">
+
+      <label for="edit-name">Name</label>
+      <div class="edit-otp-input-wrap">
+        <input type="text" id="edit-name" name="name" placeholder="Name" required minlength="3" title="Please enter at least 3 characters.">
+      </div>
+
+      <label for="edit-email">E-Mail</label>
+      <div class="edit-otp-input-wrap">
+        <input type="text" id="edit-email" name="email" placeholder="email@example.com or none" pattern="^([A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}|none)$" title="Enter a valid e-mail address or none">
+      </div>
+
+      <label for="edit-secret">Secret</label>
+      <div class="edit-otp-input-wrap">
+        <input type="text" id="edit-secret" name="secret" placeholder="Base32 secret" required>
+      </div>
+
+      <label for="edit-refresh-time">Refresh Time (seconds)</label>
+      <div class="edit-otp-input-wrap">
+        <input type="number" id="edit-refresh-time" name="refresh_time" min="10" placeholder="30" required readonly>
+      </div>
+
+      <label for="edit-company">Company</label>
+      <div class="edit-otp-input-wrap">
+        <select id="edit-company" name="company_id" required></select>
+      </div>
+
+      <div class="edit-otp-actions">
+        <button type="submit" class="edit-otp-save">Save Changes</button>
+        <button type="button" class="edit-otp-cancel" id="cancelEditOtp">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
 {% endif %}
 
 {% else %}
@@ -54,10 +148,389 @@
   document.addEventListener("DOMContentLoaded", () => {
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
+        if (editOtpModal && !editOtpModal.hidden) {
+          e.preventDefault();
+          closeEditModal();
+          return;
+        }
+        if (confirmDeleteModal && !confirmDeleteModal.hidden) {
+          return;
+        }
         e.preventDefault();
         window.location.href = "/";
       }
     });
+
+    const selectAllRows = document.getElementById("selectAllRows");
+    const rowCheckboxes = Array.from(document.querySelectorAll(".row-checkbox"));
+    const bulkBar = document.getElementById("bulkBar");
+    const bulkCount = document.getElementById("bulkCount");
+    const bulkDeleteBtn = document.getElementById("bulkDeleteBtn");
+    const bulkPdfBtn = document.getElementById("bulkPdfBtn");
+    const confirmDeleteModal = document.getElementById("confirmDeleteModal");
+    const confirmDeleteText = document.getElementById("confirmDeleteText");
+    const confirmDeleteInput = document.getElementById("confirmDeleteInput");
+    const confirmDeleteCancel = document.getElementById("confirmDeleteCancel");
+    const confirmDeleteSubmit = document.getElementById("confirmDeleteSubmit");
+    const editOtpModal = document.getElementById("editOtpModal");
+    const editOtpForm = document.getElementById("editOtpForm");
+    const editSecretId = document.getElementById("edit-secret-id");
+    const editNameInput = document.getElementById("edit-name");
+    const editEmailInput = document.getElementById("edit-email");
+    const editSecretInput = document.getElementById("edit-secret");
+    const editRefreshTimeInput = document.getElementById("edit-refresh-time");
+    const editCompanySelect = document.getElementById("edit-company");
+    const closeEditOtpModal = document.getElementById("closeEditOtpModal");
+    const cancelEditOtp = document.getElementById("cancelEditOtp");
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function openDeleteConfirm(message) {
+      return new Promise((resolve) => {
+        if (!confirmDeleteModal || !confirmDeleteInput || !confirmDeleteSubmit || !confirmDeleteText) {
+          resolve(false);
+          return;
+        }
+
+        confirmDeleteText.innerHTML = message;
+        confirmDeleteInput.value = "";
+        confirmDeleteSubmit.disabled = true;
+        confirmDeleteModal.hidden = false;
+
+        requestAnimationFrame(() => {
+          confirmDeleteModal.classList.add("show");
+          confirmDeleteInput.focus();
+        });
+
+        const close = (result) => {
+          confirmDeleteModal.classList.remove("show");
+          setTimeout(() => {
+            confirmDeleteModal.hidden = true;
+            resolve(result);
+          }, 180);
+          confirmDeleteInput.removeEventListener("input", onInput);
+          confirmDeleteCancel.removeEventListener("click", onCancel);
+          confirmDeleteSubmit.removeEventListener("click", onSubmit);
+          document.removeEventListener("keydown", onKeydown);
+        };
+
+        const onInput = () => {
+          confirmDeleteSubmit.disabled = confirmDeleteInput.value.trim().toLowerCase() !== "confirm";
+        };
+
+        const onCancel = () => close(false);
+        const onSubmit = () => {
+          if (confirmDeleteInput.value.trim().toLowerCase() !== "confirm") return;
+          close(true);
+        };
+
+        const onKeydown = (e) => {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            close(false);
+          }
+          if (e.key === "Enter" && confirmDeleteInput.value.trim().toLowerCase() === "confirm") {
+            e.preventDefault();
+            close(true);
+          }
+        };
+
+        confirmDeleteInput.addEventListener("input", onInput);
+        confirmDeleteCancel.addEventListener("click", onCancel);
+        confirmDeleteSubmit.addEventListener("click", onSubmit);
+        document.addEventListener("keydown", onKeydown);
+      });
+    }
+
+    async function deleteSecretById(secretId) {
+      const form = new URLSearchParams();
+      form.set("secret_id", secretId);
+
+      const res = await fetch("/api/delete-secret", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+          "X-Requested-With": "XMLHttpRequest",
+          "Accept": "application/json"
+        },
+        body: form.toString(),
+        credentials: "same-origin"
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.error || `Delete failed (${res.status})`);
+      }
+
+      return data;
+    }
+
+    function validateNameInput(input) {
+      const value = (input.value || "").trim();
+      if (value.length < 3) {
+        input.setCustomValidity("Please enter at least 3 characters.");
+      } else {
+        input.setCustomValidity("");
+      }
+    }
+
+    async function fetchCompanyOptions() {
+      const res = await fetch("/api/secrets");
+      const secrets = await res.json();
+      const map = {};
+      secrets.forEach((s) => {
+        if (s.company_id != null) map[s.company_id] = s.company_name || "Unknown Company";
+      });
+      return Object.entries(map)
+        .sort((a, b) => a[1].localeCompare(b[1]))
+        .map(([id, name]) => ({ id, name }));
+    }
+
+    async function populateCompanySelect(selectEl, selectedId) {
+      const options = await fetchCompanyOptions();
+      selectEl.innerHTML = "";
+      options.forEach((opt) => {
+        const o = document.createElement("option");
+        o.value = opt.id;
+        o.textContent = opt.name;
+        if (String(opt.id) === String(selectedId)) o.selected = true;
+        selectEl.appendChild(o);
+      });
+    }
+
+    function openEditModal() {
+      if (!editOtpModal) return;
+      editOtpModal.hidden = false;
+      requestAnimationFrame(() => {
+        editOtpModal.classList.add("show");
+        if (editNameInput) editNameInput.focus();
+      });
+    }
+
+    function closeEditModal() {
+      if (!editOtpModal) return;
+      editOtpModal.classList.remove("show");
+      setTimeout(() => {
+        editOtpModal.hidden = true;
+      }, 180);
+    }
+
+    async function openEditModalForSecret(secretId) {
+      const res = await fetch(`/api/secrets/${secretId}`);
+      const entry = await res.json();
+      if (!res.ok || entry.error) {
+        throw new Error(entry.error || "Failed to load OTP entry");
+      }
+
+      editSecretId.value = secretId;
+      editNameInput.value = entry.name || "";
+      editEmailInput.value = entry.email || "";
+      editSecretInput.value = entry.secret || "";
+      editRefreshTimeInput.value = entry.refresh_time || 30;
+      await populateCompanySelect(editCompanySelect, entry.company_id);
+      validateNameInput(editNameInput);
+      openEditModal();
+    }
+
+    function getSelectedRows() {
+      return rowCheckboxes
+        .filter((cb) => cb.checked)
+        .map((cb) => cb.closest(".otp-row"))
+        .filter(Boolean);
+    }
+
+    function updateBulkBar() {
+      if (!bulkBar || !bulkCount) return;
+      const selectedRows = getSelectedRows();
+      const count = selectedRows.length;
+      bulkCount.textContent = `${count} selected`;
+
+      if (count > 0) {
+        bulkBar.hidden = false;
+        requestAnimationFrame(() => {
+          bulkBar.classList.add("show");
+        });
+        return;
+      }
+
+      bulkBar.classList.remove("show");
+      clearTimeout(bulkBar._hideTimer);
+      bulkBar._hideTimer = setTimeout(() => {
+        if (!bulkBar.classList.contains("show")) {
+          bulkBar.hidden = true;
+        }
+      }, 260);
+    }
+
+    function syncHeaderCheckbox() {
+      if (!selectAllRows) return;
+      const checkedCount = rowCheckboxes.filter((cb) => cb.checked).length;
+      selectAllRows.checked = rowCheckboxes.length > 0 && checkedCount === rowCheckboxes.length;
+      selectAllRows.indeterminate = checkedCount > 0 && checkedCount < rowCheckboxes.length;
+      updateBulkBar();
+    }
+
+    if (selectAllRows) {
+      selectAllRows.addEventListener("change", () => {
+        rowCheckboxes.forEach((cb) => {
+          cb.checked = selectAllRows.checked;
+        });
+        syncHeaderCheckbox();
+      });
+    }
+
+    rowCheckboxes.forEach((cb) => {
+      cb.addEventListener("change", syncHeaderCheckbox);
+    });
+
+    if (editNameInput) {
+      editNameInput.addEventListener("input", () => validateNameInput(editNameInput));
+      editNameInput.addEventListener("blur", () => validateNameInput(editNameInput));
+      editNameInput.addEventListener("invalid", () => validateNameInput(editNameInput));
+    }
+
+    if (closeEditOtpModal) {
+      closeEditOtpModal.addEventListener("click", closeEditModal);
+    }
+
+    if (cancelEditOtp) {
+      cancelEditOtp.addEventListener("click", closeEditModal);
+    }
+
+    if (editOtpModal) {
+      editOtpModal.addEventListener("click", (e) => {
+        if (e.target === editOtpModal || e.target.classList.contains("edit-otp-backdrop")) {
+          closeEditModal();
+        }
+      });
+    }
+
+    if (editOtpForm) {
+      editOtpForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        validateNameInput(editNameInput);
+        if (!editNameInput.checkValidity()) {
+          editNameInput.reportValidity();
+          return;
+        }
+
+        const secretId = editSecretId.value;
+        const payload = {
+          name: editNameInput.value,
+          email: editEmailInput.value || "none",
+          secret: editSecretInput.value,
+          refresh_time: parseInt(editRefreshTimeInput.value, 10) || 30,
+          otp_type: "totp",
+          company_id: parseInt(editCompanySelect.value, 10) || 1
+        };
+
+        const res = await fetch(`/api/secrets/${secretId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          credentials: "same-origin"
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          alert("Failed to update OTP: " + (data.error || "unknown error"));
+          return;
+        }
+
+        closeEditModal();
+        window.location.reload();
+      });
+    }
+
+    if (bulkDeleteBtn) {
+      bulkDeleteBtn.addEventListener("click", async () => {
+        const selectedRows = getSelectedRows();
+        if (!selectedRows.length) return;
+
+        const ok = await openDeleteConfirm(
+          `Type <strong>confirm</strong> to delete <strong>${selectedRows.length}</strong> selected entr${selectedRows.length === 1 ? "y" : "ies"}.`
+        );
+        if (!ok) return;
+
+        bulkDeleteBtn.disabled = true;
+
+        try {
+          for (const row of selectedRows) {
+            const secretId = row.dataset.secretId;
+            if (!secretId) continue;
+            await deleteSecretById(secretId);
+            row.remove();
+          }
+
+          rowCheckboxes.length = 0;
+          document.querySelectorAll(".row-checkbox").forEach((cb) => rowCheckboxes.push(cb));
+          syncHeaderCheckbox();
+        } catch (err) {
+          console.error(err);
+          alert(err.message || "Bulk delete failed.");
+        } finally {
+          bulkDeleteBtn.disabled = false;
+        }
+      });
+    }
+
+    if (bulkPdfBtn) {
+      bulkPdfBtn.addEventListener("click", async () => {
+        const selectedRows = getSelectedRows();
+        if (!selectedRows.length) return;
+
+        const params = new URLSearchParams();
+        selectedRows.forEach((row) => {
+          const secretId = row.dataset.secretId;
+          if (secretId) params.append("secret_id", secretId);
+        });
+
+        if (![...params.keys()].length) {
+          alert("No valid entries selected for export.");
+          return;
+        }
+
+        const href = `/api/export-search?${params.toString()}`;
+
+        bulkPdfBtn.style.pointerEvents = "none";
+        bulkPdfBtn.setAttribute("aria-disabled", "true");
+
+        let loaderTimer = setTimeout(showLoader, 250);
+
+        try {
+          const res = await fetch(href, { credentials: "same-origin" });
+          if (!res.ok) throw new Error(`Export failed (${res.status})`);
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = filenameFromDisposition(res);
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        } catch (err) {
+          console.error(err);
+          alert("PDF export failed. Please try again.");
+        } finally {
+          clearTimeout(loaderTimer);
+          hideLoader();
+          bulkPdfBtn.style.pointerEvents = "";
+          bulkPdfBtn.removeAttribute("aria-disabled");
+        }
+      });
+    }
+
+    syncHeaderCheckbox();
   
     const rows = document.querySelectorAll(".otp-row");
     const maxBaseDelay = 1200;
@@ -72,54 +545,62 @@
       try {
         const res = await fetch("/api/secrets");
         const all = await res.json();
-        const byName = new Map(all.map(e => [e.name, e])); 
+        const byName = new Map(all.map(e => [e.name, e]));
+        window.secretMap = byName;
   
         rows.forEach((row) => {
           const name = row.dataset.name;
           const match = byName.get(name);
           if (!match) return;
-  
+          row.dataset.secretId = String(match.id);
+
           const codeEl = row.querySelector(".code-text");
           const circleEl = row.querySelector(".circle-fg");
-  
+          const copyBtn = row.querySelector(".copy-btn");
+          const editBtn = row.querySelector(".edit-btn");
+          const deleteBtn = row.querySelector(".delete-btn");
+
           async function fetchAndUpdate() {
             try {
               const r = await fetch(`/api/secrets/${match.id}`);
               const data = await r.json();
               if (data.error) return;
-  
+
               const digits = [...data.current_code].map((d, i) =>
                 `<span class="digit" style="animation-delay: ${i * 40}ms">${d}</span>`
               ).join('');
-  
+
               codeEl.innerHTML = digits;
               codeEl.dataset.remaining = data.seconds_remaining;
               codeEl.dataset.timestamp = performance.now();
-  
-              codeEl.onclick = () => {
+
+              const copyOtp = () => {
                 const text = data.current_code;
                 copySafe(text)
                   .then(() => { alert(`Copied OTP: ${text}`); })
                   .catch(() => { window.prompt('Copy OTP:', text); });
               };
+
+              codeEl.onclick = copyOtp;
+              if (copyBtn) copyBtn.onclick = copyOtp;
             } catch (err) {
               console.error("fetchAndUpdate failed", err);
             }
           }
-  
+
           function animate() {
             const remaining = parseFloat(codeEl.dataset.remaining || "0");
             const ts = parseFloat(codeEl.dataset.timestamp || "0");
             const since = ts ? (performance.now() - ts) / 1000 : 0;
             const left = Math.max(remaining - since, 0);
             const percent = (left / 30) * 100;
-  
+
             if (circleEl) {
               circleEl.style.strokeDashoffset = 100 - percent;
             }
             requestAnimationFrame(animate);
           }
-  
+
           fetchAndUpdate();
           const now = Date.now();
           const msToNext = 30000 - (now % 30000);
@@ -127,8 +608,48 @@
             fetchAndUpdate();
             setInterval(fetchAndUpdate, 30000);
           }, msToNext);
-  
+
           requestAnimationFrame(animate);
+
+          const secretId = row.dataset.secretId;
+
+          if (editBtn && secretId) {
+            editBtn.onclick = async () => {
+              try {
+                await openEditModalForSecret(secretId);
+              } catch (err) {
+                console.error(err);
+                alert(err.message || "Failed to load OTP entry.");
+              }
+            };
+          }
+
+          if (deleteBtn && secretId) {
+            deleteBtn.onclick = async () => {
+              const ok = await openDeleteConfirm(
+                `Type <strong>confirm</strong> to delete <strong>${escapeHtml(match.name)}</strong>.`
+              );
+              if (!ok) return;
+
+              deleteBtn.disabled = true;
+
+              try {
+                await deleteSecretById(secretId);
+                row.remove();
+                const checkbox = row.querySelector(".row-checkbox");
+                if (checkbox) {
+                  const idx = rowCheckboxes.indexOf(checkbox);
+                  if (idx !== -1) rowCheckboxes.splice(idx, 1);
+                }
+                syncHeaderCheckbox();
+              } catch (err) {
+                console.error(err);
+                alert(err.message || "Delete failed.");
+              } finally {
+                deleteBtn.disabled = false;
+              }
+            };
+          }
         });
       } catch (e) {
         console.error("OTP init failed", e);
@@ -145,65 +666,33 @@
       });
     });
   
-    const exportBtn = document.querySelector(".fab-export");
     const loader = document.getElementById("pdfLoader");
-  
-    if (exportBtn && loader) {
-      const showLoader = () => {
-        loader.hidden = false;
-        loader.setAttribute("aria-busy", "true");
-      };
-      const hideLoader = () => {
-        loader.hidden = true;
-        loader.setAttribute("aria-busy", "false");
-      };
-      const filenameFromDisposition = (resp) => {
-        const cd = resp.headers.get("Content-Disposition") || "";
-        let m = cd.match(/filename\*=(?:UTF-8''|)([^;]+)/i);
-        if (m && m[1]) {
-          try { return decodeURIComponent(m[1].replace(/^"(.*)"$/, "$1")); } catch(e){}
-          return m[1].replace(/^"(.*)"$/, "$1");
-        }
-        m = cd.match(/filename="?([^"]+)"?/i);
-        if (m && m[1]) return m[1];
-        const ts = new Date().toISOString().replace(/[:T\-\.]/g, "").slice(0, 15);
-        return `otp_export_${ts}.pdf`;
-      };
-  
-      exportBtn.addEventListener("click", async (e) => {
-        e.preventDefault();
-        const href = exportBtn.getAttribute("href");
-        if (!href) return;
-  
-        exportBtn.style.pointerEvents = "none";
-        exportBtn.setAttribute("aria-disabled", "true");
-  
-        let loaderTimer = setTimeout(showLoader, 250);
-  
-        try {
-          const res = await fetch(href, { credentials: "same-origin" });
-          if (!res.ok) throw new Error(`Export failed (${res.status})`);
-          const blob = await res.blob();
-          const url = URL.createObjectURL(blob);
-  
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = filenameFromDisposition(res);
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          URL.revokeObjectURL(url);
-        } catch (err) {
-          console.error(err);
-          alert("PDF export failed. Please try again.");
-        } finally {
-          clearTimeout(loaderTimer);
-          hideLoader();
-          exportBtn.style.pointerEvents = "";
-          exportBtn.removeAttribute("aria-disabled");
-        }
-      }, { passive: false });
-    }
+
+    const showLoader = () => {
+      if (!loader) return;
+      loader.hidden = false;
+      loader.setAttribute("aria-busy", "true");
+    };
+
+    const hideLoader = () => {
+      if (!loader) return;
+      loader.hidden = true;
+      loader.setAttribute("aria-busy", "false");
+    };
+
+    const filenameFromDisposition = (resp) => {
+      const cd = resp.headers.get("Content-Disposition") || "";
+      let m = cd.match(/filename\*=(?:UTF-8''|)([^;]+)/i);
+      if (m && m[1]) {
+        try { return decodeURIComponent(m[1].replace(/^"(.*)"$/, "$1")); } catch(e){}
+        return m[1].replace(/^"(.*)"$/, "$1");
+      }
+      m = cd.match(/filename="?([^"]+)"?/i);
+      if (m && m[1]) return m[1];
+      const ts = new Date().toISOString().replace(/[:T\-\.]/g, "").slice(0, 15);
+      return `otp_export_${ts}.pdf`;
+    };
+
   });
   
   function copySafe(t) {
@@ -245,26 +734,215 @@
 .search-results-table tbody tr:last-child td:last-child {
   border-bottom-right-radius: 12px;
 }
+
 .search-results-table th, .search-results-table td {
   padding: 0.6rem 1rem;
   border: 1px solid #ddd;
   text-align: left;
   font-family: 'Roboto', sans-serif;
+  vertical-align: middle;
+}
+
+.search-results-table th.select-col,
+.search-results-table td.select-cell {
+  width: 1%;
+  white-space: nowrap;
+  text-align: center;
+  padding-left: 0.7rem;
+  padding-right: 0.7rem;
 }
 
 .search-results-table .mono {
   font-family: monospace;
 }
 
+.otp-cell {
+  min-width: 180px;
+}
+
+
 .otp-live-cell {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  justify-content: space-between;
+  gap: 0.75rem;
   min-width: 180px;
+  width: 100%;
+}
+
+.check-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.check-wrap input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.check-ui {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  border: 1px solid #cfcfcf;
+  background: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.check-ui::after {
+  content: "";
+  width: 5px;
+  height: 3px;
+  border-left: 1.6px solid transparent;
+  border-bottom: 1.6px solid transparent;
+  transform: translate(0, -0.5px) rotate(-45deg);
+  transform-origin: center;
+  opacity: 0;
+  transition: opacity 0.18s ease, border-color 0.18s ease;
+}
+
+.check-wrap input:checked + .check-ui {
+  background: #f3ecfe;
+  border-color: #b98af0;
+}
+
+.check-wrap input:checked + .check-ui::after {
+  opacity: 1;
+  border-left-color: #6a1fbf;
+  border-bottom-color: #6a1fbf;
+}
+
+.check-wrap input:indeterminate + .check-ui {
+  background: #f3ecfe;
+  border-color: #b98af0;
+}
+
+.check-wrap input:indeterminate + .check-ui::after {
+  width: 5px;
+  height: 0;
+  border-left: none;
+  border-bottom: 1.6px solid #6a1fbf;
+  transform: none;
+  opacity: 1;
+}
+
+.check-wrap:hover .check-ui {
+  border-color: #b98af0;
+  background: #faf6ff;
+}
+
+.check-wrap input:focus-visible + .check-ui {
+  box-shadow: 0 0 0 3px rgba(106, 31, 191, 0.12);
+}
+
+.dark-mode .check-ui {
+  background: #171717;
+  border-color: #3b3b3b;
+}
+
+.dark-mode .check-wrap:hover .check-ui {
+  background: #221b2d;
+  border-color: #6f56a0;
+}
+
+.dark-mode .check-wrap input:checked + .check-ui,
+.dark-mode .check-wrap input:indeterminate + .check-ui {
+  background: #2a2136;
+  border-color: #6f56a0;
+}
+
+.dark-mode .check-wrap input:checked + .check-ui::after,
+.dark-mode .check-wrap input:indeterminate + .check-ui::after {
+  border-bottom-color: #d8c4ff;
+}
+
+.dark-mode .check-wrap input:checked + .check-ui::after {
+  border-left-color: #d8c4ff;
+}
+
+.actions-col {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.actions-cell {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.action-btn {
+  width: 30px;
+  height: 30px;
+  border: 1px solid #e3e3e3;
+  background: #ffffff;
+  color: #555;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.action-btn:hover {
+  background: #f3ecfe;
+  border-color: #ceb0f7;
+  color: #6a1fbf;
+}
+
+.action-btn .material-symbols-outlined {
+  font-size: 18px;
+  line-height: 1;
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+
+.delete-btn:hover {
+  background: #fff1f2;
+  border-color: #fecdd3;
+  color: #dc2626;
+}
+
+.dark-mode .action-btn {
+  background: #181818;
+  border-color: #343434;
+  color: #b8b8b8;
+}
+
+.dark-mode .action-btn:hover {
+  background: #2a2136;
+  border-color: #6f56a0;
+  color: #d8c4ff;
+}
+
+.dark-mode .delete-btn:hover {
+  background: #321c21;
+  border-color: #7f1d1d;
+  color: #ff9aa5;
 }
 
 .code-text {
   flex-grow: 1;
+  display: inline-flex;
+  align-items: center;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -339,6 +1017,19 @@
   border: 1px solid #e5e5e5;
 }
 
+.search-results-table th.actions-col,
+.search-results-table td.actions-cell {
+  text-align: center;
+}
+
+.search-results-table td.otp-cell {
+  background-color: #f9f9f9;
+}
+
+.dark-mode .search-results-table td.otp-cell {
+  background-color: #1c1c1c;
+}
+
 .dark-mode .circle-bg {
   stroke: #333;
 }
@@ -364,59 +1055,137 @@
   animation: scaleFadeIn 0.35s ease-out forwards;
 }
 
-.fab-export {
+
+.bulk-bar {
     position: fixed;
-    bottom: 80px;
-    right: 30px;
-    width: 52px;
-    height: 52px;
-    border-radius: 50%;
-    background-color: #e6d0fd;
-    color: #6a1fbf;
-    font-size: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-decoration: none;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-    z-index: 9999;
-    border: 1px solid #c49cf8;
-    transition: background-color 0.2s, border-color 0.2s;
+    left: 50%;
+    bottom: 72px;
+    transform: translateX(-50%) translateY(20px);
+    transform-origin: center bottom;
+    z-index: 10001;
     opacity: 0;
-    transform: translateY(20px);
-    animation: fabFlyIn 500ms ease-out forwards;
-    animation-delay: 200ms;
+    filter: blur(10px);
+    pointer-events: none;
+    transition: opacity 0.5s ease-out, transform 0.5s ease-out, filter 0.26s ease;
+    will-change: opacity, transform, filter;
 }
 
-.fab-export:hover {
+.bulk-bar.show {
+    opacity: 1;
+    pointer-events: auto;
+    filter: blur(0);
+    transform: translateX(-50%) translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .bulk-bar {
+        filter: none;
+        transition: opacity 0.18s ease;
+        transform: translateX(-50%) translateY(0);
+    }
+
+    .bulk-bar.show {
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
+.bulk-bar-inner {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.6rem;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.94);
+    border: 1px solid #e3e3e3;
+    box-shadow: none;
+    backdrop-filter: blur(10px);
+}
+
+.bulk-count {
+    font-family: 'Roboto', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    color: #555;
+    padding: 0 0.25rem 0 0.15rem;
+    white-space: nowrap;
+}
+
+.bulk-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    cursor: pointer;
+    transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, opacity 0.18s ease;
+}
+
+.bulk-btn .material-symbols-outlined {
+    font-size: 18px;
+    line-height: 1;
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+.bulk-pdf {
+    background-color: #e6d0fd;
+    border: 1px solid #c49cf8;
+    color: #6a1fbf;
+}
+
+.bulk-pdf:hover {
     background-color: #dbbafc;
     border-color: #b076f5;
     color: #6a1fbf;
 }
 
-.dark-mode .fab-export {
-    background-color: #7a5fa3;
-    color: #f1e7ff;
-    border: 1px solid #9b7dc8;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+.bulk-delete {
+    background-color: #ffd6d4;
+    border: 1px solid #f28b89;
+    color: #c71515;
 }
 
-.dark-mode .fab-export:hover {
+.bulk-delete:hover {
+    background-color: #ffc2bf;
+    border-color: #e46360;
+    color: #c71515;
+}
+
+.dark-mode .bulk-bar-inner {
+    background: rgba(24, 24, 24, 0.94);
+    border-color: #343434;
+    box-shadow: none;
+}
+
+.dark-mode .bulk-count {
+    color: #cfcfcf;
+}
+
+.dark-mode .bulk-pdf {
+    background-color: #7a5fa3;
+    border: 1px solid #9b7dc8;
+    color: #f1e7ff;
+}
+
+.dark-mode .bulk-pdf:hover {
     background-color: #8f73b8;
     border-color: #b191d9;
     color: #f1e7ff;
 }
 
-@keyframes fabFlyIn {
-    0% {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    100% {
-        opacity: 1;
-        transform: translateY(0);
-    }
+.dark-mode .bulk-delete {
+    background-color: #a14f4f;
+    border: 1px solid #c96c6c;
+    color: #ffd6d6;
 }
+
+.dark-mode .bulk-delete:hover {
+    background-color: #ba6868;
+    border-color: #e48787;
+    color: #ffd6d6;
+}
+
 .otp-row:nth-child(1) { animation-delay: 0.05s; }
 .otp-row:nth-child(2) { animation-delay: 0.1s; }
 .otp-row:nth-child(3) { animation-delay: 0.15s; }
@@ -487,5 +1256,350 @@
   color: #eee;
 }
 .pdf-loader[hidden] { display: none !important; }
+.confirm-delete-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10020;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+}
+
+.confirm-delete-modal.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.confirm-delete-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(4px);
+}
+
+.confirm-delete-card {
+  position: relative;
+  width: min(92vw, 360px);
+  background: #ffffff;
+  border: 1px solid #e5e5e5;
+  border-radius: 16px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.18);
+  padding: 1rem;
+  transform: translateY(10px) scale(0.98);
+  transition: transform 0.18s ease;
+}
+
+.confirm-delete-modal.show .confirm-delete-card {
+  transform: translateY(0) scale(1);
+}
+
+.confirm-delete-card h3 {
+  margin: 0 0 0.45rem 0;
+  font-size: 1rem;
+  font-family: 'Roboto', sans-serif;
+}
+
+.confirm-delete-text {
+  margin: 0 0 0.8rem 0;
+  font-size: 0.92rem;
+  color: #555;
+  font-family: 'Roboto', sans-serif;
+  line-height: 1.4;
+}
+
+.confirm-delete-input {
+  width: 100%;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid #d8d8d8;
+  background: #fafafa;
+  padding: 0 0.85rem;
+  font-size: 0.95rem;
+  font-family: 'Roboto', sans-serif;
+  outline: none;
+  margin-bottom: 0.85rem;
+}
+
+.confirm-delete-input:focus {
+  border-color: #d8d8d8;
+  box-shadow: none;
+}
+
+.confirm-delete-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.55rem;
+}
+
+.confirm-delete-cancel,
+.confirm-delete-submit {
+  height: 36px;
+  border-radius: 10px;
+  padding: 0 0.9rem;
+  font-family: 'Roboto', sans-serif;
+  cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, opacity 0.18s ease;
+}
+
+.confirm-delete-cancel {
+  background-color: #f0f0f0;
+  border: 1px solid #cfcfcf;
+  color: #333;
+}
+
+.confirm-delete-cancel:hover {
+  background-color: #e7e7e7;
+  border-color: #b8b8b8;
+}
+
+.confirm-delete-submit {
+  background-color: #ffd6d4;
+  border: 1px solid #f28b89;
+  color: #c71515;
+}
+
+.confirm-delete-submit:hover {
+  background-color: #ffc2bf;
+  border-color: #e46360;
+}
+
+.confirm-delete-submit:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.dark-mode .confirm-delete-card {
+  background: #1c1c1c;
+  border-color: #343434;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+}
+
+.dark-mode .confirm-delete-text {
+  color: #c7c7c7;
+}
+
+.dark-mode .confirm-delete-input {
+  background: #111;
+  border-color: #343434;
+  color: #eee;
+}
+
+.dark-mode .confirm-delete-cancel {
+  background-color: #2a2a2a;
+  border: 1px solid #444;
+  color: #eee;
+}
+
+.dark-mode .confirm-delete-cancel:hover {
+  background-color: #343434;
+  border-color: #555;
+}
+
+.dark-mode .confirm-delete-submit {
+  background-color: #a14f4f;
+  border: 1px solid #c96c6c;
+  color: #ffd6d6;
+}
+
+.dark-mode .confirm-delete-submit:hover {
+  background-color: #ba6868;
+  border-color: #e48787;
+}
+/* Edit OTP Modal Styles */
+.edit-otp-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10021;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+}
+
+.edit-otp-modal.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.edit-otp-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(4px);
+}
+
+.edit-otp-card {
+  position: relative;
+  width: min(92vw, 480px);
+  background: #f9f9f9;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 1.4rem;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  font-size: 14px;
+  font-family: 'Roboto', sans-serif;
+  transform: translateY(10px) scale(0.98);
+  transition: transform 0.18s ease;
+}
+
+.edit-otp-modal.show .edit-otp-card {
+  transform: translateY(0) scale(1);
+}
+
+.edit-otp-close {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  font-size: 1.4rem;
+  cursor: pointer;
+  color: #999;
+  transition: color 0.2s ease;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  line-height: 1;
+}
+
+.edit-otp-close:hover {
+  color: #333;
+}
+
+.edit-otp-card h3 {
+  margin: 0 0 1rem 0;
+  font-size: 1rem;
+  color: #111;
+}
+
+.edit-otp-form label {
+  font-weight: 500;
+  color: #333;
+  display: block;
+  margin-bottom: 0.4rem;
+  text-align: left;
+  padding-left: 2px;
+}
+
+.edit-otp-input-wrap {
+  position: relative;
+  margin-bottom: 1.1rem;
+}
+
+.edit-otp-input-wrap input,
+.edit-otp-input-wrap select {
+  width: 100%;
+  padding: 0.8rem;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  font-size: 14px;
+  background: #fff;
+  color: #111;
+  transition: border-color 0.2s ease;
+  appearance: auto;
+}
+
+.edit-otp-input-wrap input:focus,
+.edit-otp-input-wrap select:focus {
+  border-color: #555;
+  outline: none;
+}
+
+.edit-otp-input-wrap input[readonly] {
+  background-color: #f0f0f0;
+  cursor: not-allowed;
+  color: #777;
+}
+
+.edit-otp-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 1.2rem;
+}
+
+.edit-otp-save,
+.edit-otp-cancel {
+  padding: 0.6rem 1.2rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.edit-otp-save {
+  background-color: #111;
+  color: #fff;
+  border: none;
+}
+
+.edit-otp-save:hover {
+  background-color: #333;
+}
+
+.edit-otp-cancel {
+  background-color: #f0f0f0;
+  border: 1px solid #cfcfcf;
+  color: #333;
+}
+
+.edit-otp-cancel:hover {
+  background-color: #e7e7e7;
+  border-color: #b8b8b8;
+}
+
+.dark-mode .edit-otp-card {
+  background: #1c1c1c;
+  border-color: #333;
+  color: #eee;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+}
+
+.dark-mode .edit-otp-close:hover {
+  color: #eee;
+}
+
+.dark-mode .edit-otp-card h3,
+.dark-mode .edit-otp-form label {
+  color: #ccc;
+}
+
+.dark-mode .edit-otp-input-wrap input,
+.dark-mode .edit-otp-input-wrap select {
+  background-color: #111;
+  border: 1px solid #444;
+  color: #eee;
+}
+
+.dark-mode .edit-otp-input-wrap input:focus,
+.dark-mode .edit-otp-input-wrap select:focus {
+  border-color: #888;
+}
+
+.dark-mode .edit-otp-input-wrap input[readonly] {
+  background-color: #1a1a1a;
+  color: #999;
+}
+
+.dark-mode .edit-otp-save {
+  background-color: #eee;
+  color: #111;
+}
+
+.dark-mode .edit-otp-save:hover {
+  background-color: #ddd;
+}
+
+.dark-mode .edit-otp-cancel {
+  background-color: #2a2a2a;
+  color: #eee;
+  border: 1px solid #444;
+}
+
+.dark-mode .edit-otp-cancel:hover {
+  background-color: #343434;
+  border-color: #555;
+}
 </style>
 {% endblock %}

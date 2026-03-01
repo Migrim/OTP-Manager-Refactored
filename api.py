@@ -26,6 +26,35 @@ def normalize_secret(s):
     s = re.sub(r"[^A-Z2-7]", "", s)
     return s
 
+def current_user_is_admin():
+    uid = getattr(g, "user_id", None)
+    if not uid:
+        return False
+    try:
+        with sqlite3.connect(DB_PATH) as db:
+            c = db.cursor()
+            c.execute("SELECT is_admin FROM users WHERE id = ?", (uid,))
+            row = c.fetchone()
+            return bool(row and row[0])
+    except:
+        return False
+
+def wants_json_response():
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return True
+    accept = request.headers.get("Accept", "")
+    return "application/json" in accept
+
+def _delete_secret_by_id(secret_id):
+    with sqlite3.connect(DB_PATH) as db:
+        cursor = db.cursor()
+        cursor.execute("SELECT name, email, company_id, secret FROM otp_secrets WHERE id = ?", (secret_id,))
+        meta = cursor.fetchone()
+        cursor.execute("DELETE FROM otp_secrets WHERE id = ?", (secret_id,))
+        db.commit()
+        deleted = cursor.rowcount > 0
+    return meta, deleted
+
 def build_otpauth_uri(account_name, issuer, secret):
     label = f"{issuer}:{account_name}" if issuer else account_name
     params = f"secret={secret}&issuer={issuer or 'OTP-Tool'}&algorithm=SHA1&digits=6&period=30"
@@ -416,31 +445,47 @@ def edit_company():
 @api_bp.route("/delete-secret", methods=["POST"])
 def delete_secret():
     t0 = time.perf_counter()
+
+    if not current_user_is_admin():
+        logger.warning(f"{u(getattr(g, 'user_id', None))} delete_secret result=forbidden_not_admin")
+        if wants_json_response():
+            return jsonify({"error": "Only admins can delete secrets"}), 403
+        flash("Only admins can delete secrets.", "error")
+        return redirect(url_for("home"))
+
     secret_id = request.form.get("secret_id")
     if not secret_id:
         logger.warning(f"{u(getattr(g, 'user_id', None))} delete_secret result=missing_secret_id")
+        if wants_json_response():
+            return jsonify({"error": "Missing secret_id"}), 400
         flash("No secret ID provided.", "error")
         return redirect(url_for("home"))
+
     try:
-        with sqlite3.connect(DB_PATH) as db:
-            cursor = db.cursor()
-            cursor.execute("SELECT name, email, company_id, secret FROM otp_secrets WHERE id = ?", (secret_id,))
-            meta = cursor.fetchone()
-            cursor.execute("DELETE FROM otp_secrets WHERE id = ?", (secret_id,))
-            db.commit()
-        if meta:
+        meta, deleted = _delete_secret_by_id(secret_id)
+
+        if deleted and meta:
             cname = get_company_name(meta[2])
             dt = round((time.perf_counter() - t0) * 1000)
             logger.info(
                 f"{u(getattr(g, 'user_id', None))} deleted secret id={secret_id} "
                 f"name={meta[0]} email={meta[1]} company={cname} secret={meta[3]} duration_ms={dt}"
             )
-        else:
-            logger.warning(f"{u(getattr(g, 'user_id', None))} delete_secret id={secret_id} result=not_found")
-        flash("Secret deleted successfully.", "success")
+            if wants_json_response():
+                return jsonify({"status": "deleted", "id": int(secret_id)})
+            flash("Secret deleted successfully.", "success")
+            return redirect(url_for("home"))
+
+        logger.warning(f"{u(getattr(g, 'user_id', None))} delete_secret id={secret_id} result=not_found")
+        if wants_json_response():
+            return jsonify({"error": "Secret not found"}), 404
+        flash("Secret not found.", "error")
         return redirect(url_for("home"))
+
     except Exception:
         logger.exception(f"{u(getattr(g, 'user_id', None))} delete_secret id={secret_id} result=error")
+        if wants_json_response():
+            return jsonify({"error": "An error occurred while deleting the secret"}), 500
         flash("An error occurred while deleting the secret.", "error")
         return redirect(url_for("home"))
 
@@ -460,122 +505,232 @@ def live_logs():
 
 @api_bp.route("/export-search", methods=["GET"])
 def export_search():
-    """
-    Returns a PDF with search results: Name, Email, Secret and a QR code
-    for each entry (otpauth:// URI).
-    """
     q = (request.args.get("q") or "").strip()
-    like = f"%{q}%"
+    raw_ids = request.args.getlist("secret_id")
+    selected_ids = []
+    for value in raw_ids:
+        try:
+            selected_ids.append(int(value))
+        except:
+            pass
 
     with sqlite3.connect(DB_PATH) as db:
         c = db.cursor()
-        c.execute("""
-            SELECT s.name, s.email, s.secret,
-                   COALESCE(c.name, '') AS company_name
-            FROM otp_secrets s
-            LEFT JOIN companies c ON c.company_id = s.company_id
-            WHERE (? = '')
-               OR s.name    LIKE ?
-               OR s.email   LIKE ?
-               OR c.name    LIKE ?
-        """, (q, like, like, like))
-        rows = c.fetchall()
 
-    if not rows:
-        buf = io.BytesIO()
-        p = canvas.Canvas(buf, pagesize=A4)
-        p.setFont("Helvetica-Bold", 14)
-        p.drawString(30*mm, 270*mm, f"No results for: {q}")
-        p.showPage(); p.save()
-        buf.seek(0)
-        dt = datetime.datetime.now().strftime("%Y-%m-%d_%H%M")
-        return send_file(buf, mimetype="application/pdf",
-                         as_attachment=True,
-                         download_name=f"otp_export_{dt}.pdf")
+        if selected_ids:
+            placeholders = ",".join("?" for _ in selected_ids)
+            c.execute(f"""
+                SELECT
+                    s.id,
+                    s.name,
+                    s.email,
+                    s.secret,
+                    COALESCE(c.name, '') AS company_name
+                FROM otp_secrets s
+                LEFT JOIN companies c ON c.company_id = s.company_id
+                WHERE s.id IN ({placeholders})
+                ORDER BY s.name COLLATE NOCASE
+            """, selected_ids)
+        else:
+            like = f"%{q}%"
+            c.execute("""
+                SELECT
+                    s.id,
+                    s.name,
+                    s.email,
+                    s.secret,
+                    COALESCE(c.name, '') AS company_name
+                FROM otp_secrets s
+                LEFT JOIN companies c ON c.company_id = s.company_id
+                WHERE (? = '')
+                   OR s.name  LIKE ?
+                   OR s.email LIKE ?
+                   OR c.name  LIKE ?
+                ORDER BY s.name COLLATE NOCASE
+            """, (q, like, like, like))
+
+        rows = c.fetchall()
 
     buf = io.BytesIO()
     page_w, page_h = A4
     p = canvas.Canvas(buf, pagesize=A4)
+    p.setTitle("OTP Export")
 
-    margin = 18 * mm
+    margin = 16 * mm
+    content_w = page_w - (margin * 2)
     y = page_h - margin
-    p.setFillColor(colors.black)
-    p.setFont("Helvetica-Bold", 16)
-    p.drawString(margin, y, "OTP Export")
-    p.setFont("Helvetica", 10)
-    p.setFillColor(colors.grey)
-    p.drawString(margin, y - 12, f"Search: {q}")
-    p.drawRightString(page_w - margin, y - 12, datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))
-    y -= 22 * mm
 
-    card_h = 34 * mm
-    gap = 6 * mm
-    qr_size = 28 * mm
-    radius = 4 * mm
+    bg_top = colors.HexColor("#f7f7fb")
+    card_fill = colors.HexColor("#fbfbfd")
+    card_stroke = colors.HexColor("#e5e7eb")
+    text_main = colors.HexColor("#111111")
+    text_muted = colors.HexColor("#666b75")
+    accent = colors.HexColor("#6a1fbf")
+    accent_soft = colors.HexColor("#efe7fb")
+    divider = colors.HexColor("#ececf2")
 
-    def new_page():
+    def draw_header(first_page=False):
         nonlocal y
-        p.showPage()
+        if not first_page:
+            p.showPage()
+
         y = page_h - margin
-        p.setFillColor(colors.black)
-        p.setFont("Helvetica-Bold", 16)
-        p.drawString(margin, y, "OTP Export")
-        p.setFont("Helvetica", 10)
-        p.setFillColor(colors.grey)
-        p.drawString(margin, y - 12, f"Search: {q}")
-        p.drawRightString(page_w - margin, y - 12, datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))
-        y -= 22 * mm
 
-    for (name, email, raw_secret, company_name) in rows:
-        secret = normalize_secret(raw_secret or "")
-        issuer = company_name or "OTP-Tool"
+        p.setFillColor(bg_top)
+        p.rect(0, page_h - 42 * mm, page_w, 42 * mm, fill=1, stroke=0)
 
-        if y - card_h < margin:
-            new_page()
+        pill_x = margin
+        pill_y = y - 8.5 * mm
+        pill_w = 28 * mm
+        pill_h = 8 * mm
 
-        x = margin
-        p.setFillColorRGB(0.98, 0.98, 0.98)   
-        p.setStrokeColorRGB(0.90, 0.90, 0.90)
-        p.roundRect(x, y - card_h, page_w - 2*margin, card_h, radius, fill=1, stroke=1)
+        p.setFillColor(accent_soft)
+        p.roundRect(pill_x, pill_y, pill_w, pill_h, 3 * mm, fill=1, stroke=0)
 
-        left_pad = x + 8*mm
-        top = y - 7*mm
+        p.setFillColor(accent)
+        p.setFont("Helvetica-Bold", 9)
+        p.drawCentredString(pill_x + (pill_w / 2), pill_y + 2.45 * mm, "OTP EXPORT")
 
-        p.setFillColor(colors.black)
+        p.setFillColor(text_main)
+        p.setFont("Helvetica-Bold", 20)
+        p.drawString(margin, y - 15.5 * mm, "Authentication Secrets")
+
+        p.setFillColor(text_muted)
+        p.setFont("Helvetica", 9.5)
+        p.drawString(margin, y - 20.8 * mm, "Scan a QR code below with your preferred OTP app to add the account.")
+
+        p.drawRightString(page_w - margin, y - 20.8 * mm, datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))
+
+        y -= 34 * mm
+
+    def draw_empty():
+        draw_header(first_page=True)
+        p.setFillColor(card_fill)
+        p.setStrokeColor(card_stroke)
+        p.roundRect(margin, y - 24 * mm, content_w, 18 * mm, 4 * mm, fill=1, stroke=1)
+
+        p.setFillColor(text_main)
         p.setFont("Helvetica-Bold", 12)
-        p.drawString(left_pad, top, name or "(no name)")
+        p.drawString(margin + 8 * mm, y - 14 * mm, "No matching entries")
 
-        p.setFont("Helvetica", 9)
-        p.setFillColor(colors.darkgray)
-        p.drawString(left_pad, top - 6*mm, (email or "no-email"))
+        p.setFillColor(text_muted)
+        p.setFont("Helvetica", 9.5)
+        label = f'Search "{q}" returned no results.' if q else "No matching secrets were found for this export."
+        p.drawString(margin + 8 * mm, y - 19.5 * mm, label)
 
-        p.setFillColor(colors.black)
-        p.setFont("Courier", 10)
-        pretty_secret = " ".join(re.findall(".{1,4}", secret)) if secret else "(no secret)"
-        p.drawString(left_pad, top - 12*mm, f"Secret: {pretty_secret}")
+    def draw_footer():
+        p.setFillColor(text_muted)
+        p.setFont("Helvetica", 8)
+        p.drawString(margin, 8 * mm, "Generated by OTP-Tool from One-Auth.net")
+        p.drawRightString(page_w - margin, 8 * mm, f"Page {p.getPageNumber()}")
 
-        p.setFont("Helvetica", 9)
-        p.setFillColor(colors.darkgray)
-        p.drawString(left_pad, top - 18*mm, f"Issuer: {issuer}")
+    def fit_text(text, font_name, font_size, max_width):
+        text = text or ""
+        if p.stringWidth(text, font_name, font_size) <= max_width:
+            return text
+        ellipsis = "..."
+        while text and p.stringWidth(text + ellipsis, font_name, font_size) > max_width:
+            text = text[:-1]
+        return text + ellipsis if text else ellipsis
 
-        uri = build_otpauth_uri(account_name=(email or name or "account"), issuer=issuer, secret=secret)
-        qr_img = qrcode.make(uri)
+    def masked_secret_groups(secret):
+        if not secret:
+            return "(no secret)"
+        return " ".join(re.findall(".{1,4}", secret))
+
+    def make_qr(secret, issuer, account_name):
+        uri = build_otpauth_uri(account_name=account_name, issuer=issuer, secret=secret)
+        qr = qrcode.QRCode(border=1, box_size=8)
+        qr.add_data(uri)
+        qr.make(fit=True)
+        qr_img = qr.make_image(fill_color="black", back_color="white")
         qr_bytes = io.BytesIO()
         qr_img.save(qr_bytes, format="PNG")
         qr_bytes.seek(0)
-        img = ImageReader(qr_bytes)
+        return ImageReader(qr_bytes)
 
-        img_x = page_w - margin - qr_size - 8  
-        img_y = y - card_h + (card_h - qr_size)/2
-        p.drawImage(img, img_x, img_y, qr_size, qr_size, mask='auto')
+    draw_header(first_page=True)
+
+    if not rows:
+        draw_empty()
+        draw_footer()
+        p.save()
+        buf.seek(0)
+        dt = datetime.datetime.now().strftime("%Y-%m-%d_%H%M")
+        return send_file(
+            buf,
+            mimetype="application/pdf",
+            as_attachment=True,
+            download_name=f"otp_export_{dt}.pdf"
+        )
+
+    card_h = 40 * mm
+    gap = 5 * mm
+    qr_size = 24 * mm
+    radius = 5 * mm
+
+    for secret_id, name, email, raw_secret, company_name in rows:
+        secret = normalize_secret(raw_secret or "")
+        issuer = company_name or "OTP-Tool"
+        account_name = email or name or "account"
+
+        if y - card_h < 18 * mm:
+            draw_footer()
+            draw_header()
+
+        x = margin
+
+        p.setFillColor(card_fill)
+        p.setStrokeColor(card_stroke)
+        p.setLineWidth(0.7)
+        p.roundRect(x, y - card_h, content_w, card_h, radius, fill=1, stroke=1)
+
+        p.setFillColor(accent_soft)
+        p.roundRect(x + 5 * mm, y - 10 * mm, 13 * mm, 6.2 * mm, 2.5 * mm, fill=1, stroke=0)
+
+        p.setFillColor(accent)
+        p.setFont("Helvetica-Bold", 7.5)
+        p.drawCentredString(x + 11.5 * mm, y - 7.7 * mm, "TOTP")
+
+        left = x + 8 * mm
+        text_w = content_w - qr_size - 22 * mm
+
+        p.setFillColor(text_main)
+        p.setFont("Helvetica-Bold", 12)
+        p.drawString(left, y - 15 * mm, fit_text(name or "(no name)", "Helvetica-Bold", 12, text_w))
+
+        p.setFillColor(text_muted)
+        p.setFont("Helvetica", 9)
+        p.drawString(left, y - 21 * mm, fit_text(email or "no-email", "Helvetica", 9, text_w))
+
+        p.setFillColor(text_main)
+        p.setFont("Helvetica", 9)
+        p.drawString(left, y - 27.5 * mm, f"Issuer: {fit_text(issuer, 'Helvetica', 9, text_w - 18 * mm)}")
+
+        p.setFillColor(text_main)
+        p.setFont("Courier", 9.5)
+        p.drawString(left, y - 34 * mm, fit_text(masked_secret_groups(secret), "Courier", 9.5, text_w))
+
+        qr_img = make_qr(secret, issuer, account_name)
+        qr_x = x + content_w - qr_size - 7 * mm
+        qr_y = y - card_h + ((card_h - qr_size) / 2)
+        p.drawImage(qr_img, qr_x, qr_y, qr_size, qr_size, mask="auto")
+
+        p.setStrokeColor(divider)
+        p.setLineWidth(0.5)
+        p.line(qr_x - 5 * mm, y - card_h + 5 * mm, qr_x - 5 * mm, y - 5 * mm)
 
         y -= (card_h + gap)
 
-    p.showPage()
+    draw_footer()
     p.save()
     buf.seek(0)
 
     dt = datetime.datetime.now().strftime("%Y-%m-%d_%H%M")
-    return send_file(buf, mimetype="application/pdf",
-                     as_attachment=True,
-                     download_name=f"otp_export_{dt}.pdf")
+    suffix = "selected" if selected_ids else "search"
+    return send_file(
+        buf,
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=f"otp_export_{suffix}_{dt}.pdf"
+    )
