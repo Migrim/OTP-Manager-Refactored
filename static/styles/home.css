@@ -70,7 +70,7 @@
   position:absolute;top:0;left:0;white-space:nowrap;transition:opacity .35s cubic-bezier(.4,0,.2,1);
   pointer-events:none;font-weight:400;color:var(--secret-color)
 }
-.otp-secret::before{content:attr(data-hidden);opacity:1;filter:blur(.3px);transform:scale(1)}
+.otp-secret::before{content:attr(data-hidden);opacity:1;transform:scale(1)}
 .otp-secret::after{content:attr(data-real);opacity:0;transform:scale(.98)}
 .otp-secret.reveal::before{opacity:0;transform:scale(1.02)}
 .otp-secret.reveal::after{opacity:1;transform:scale(1)}
