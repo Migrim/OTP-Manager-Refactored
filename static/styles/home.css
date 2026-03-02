@@ -943,3 +943,11 @@ body:not(.dark-mode) #editOtpModal {
 .dark-mode .otp-card.otp-problem-highlight {
     border-color: #ffc247;
 }
+.otp-email {
+    display: inline-block;
+    max-width: 260px;
+    vertical-align: bottom;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}

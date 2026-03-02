@@ -501,7 +501,7 @@
                         ${SHOW_EMAIL ? `
                             <div class="otp-field">
                                 <span class="otp-field-label">E-Mail:</span>
-                                <span class="otp-field-value">${entry.email}</span>
+                                <span class="otp-field-value otp-email" title="${entry.email || ""}">${formatEmailDisplay(entry.email)}</span>
                             </div>
                         ` : ``}
                         ${SHOW_TEXT_TIMER ? `
@@ -569,7 +569,7 @@
                         ${SHOW_EMAIL ? `
                             <div class="otp-field">
                                 <span class="otp-field-label">E-Mail:</span>
-                                <span class="otp-field-value">${entry.email}</span>
+                                <span class="otp-field-value otp-email" title="${entry.email || ""}">${formatEmailDisplay(entry.email)}</span>
                             </div>
                         ` : ``}
                         ${SHOW_TEXT_TIMER ? `
@@ -781,5 +781,52 @@
     document.addEventListener("DOMContentLoaded", () => {
         document.body.classList.add("home");
     });
+
+    function formatEmailDisplay(email, maxLength = 34) {
+        const value = String(email || "").trim();
+
+        if (!value || value.toLowerCase() === "none") return value;
+
+        if (!value.includes("@")) {
+            return value.length > maxLength
+                ? value.slice(0, Math.max(1, maxLength - 3)) + "..."
+                : value;
+        }
+
+        const atIndex = value.lastIndexOf("@");
+        const local = value.slice(0, atIndex);
+        const domain = value.slice(atIndex + 1);
+
+        if (!local || !domain) {
+            return value.length > maxLength
+                ? value.slice(0, Math.max(1, maxLength - 3)) + "..."
+                : value;
+        }
+
+        if (value.length <= maxLength) return value;
+
+        const domainPart = "@" + domain;
+        const minLocalChars = 6;
+        const ellipsis = "...";
+
+        const preferredLocalLength = maxLength - domainPart.length - ellipsis.length;
+
+        if (preferredLocalLength >= minLocalChars) {
+            return local.slice(0, preferredLocalLength) + ellipsis + domainPart;
+        }
+
+        const minDomainVisible = 12;
+        const availableDomain = Math.max(
+            minDomainVisible,
+            maxLength - minLocalChars - ellipsis.length - 1
+        );
+
+        if (availableDomain > 0 && domainPart.length > availableDomain) {
+            const shortenedDomain = domain.slice(0, Math.max(1, availableDomain - 4)) + "...";
+            return local.slice(0, minLocalChars) + ellipsis + "@" + shortenedDomain;
+        }
+
+        return local.slice(0, minLocalChars) + ellipsis + domainPart;
+    }
 </script>
 {% endblock %}
