@@ -447,6 +447,8 @@
     }
 
     async function loadOTPs() {
+        visibleCards.clear();
+        
         const res = await fetch('/api/secrets');
         const secrets = await res.json();
         const pinnedRes = await fetch('/api/user-pinned');
@@ -614,23 +616,34 @@
         applyBlurIfNeeded();
     }
 
+    let cardObserver = null;
+
     function setupObserver() {
-        const observer = new IntersectionObserver(entries => {
+        if (cardObserver) {
+            cardObserver.disconnect();
+        }
+
+        cardObserver = new IntersectionObserver(entries => {
             for (const entry of entries) {
-            const card = entry.target;
-            if (entry.isIntersecting) {
-                visibleCards.add(card);
-                refreshCardCode(card);
-            } else {
-                visibleCards.delete(card);
-            }
+                const card = entry.target;
+                if (entry.isIntersecting) {
+                    visibleCards.add(card);
+                    refreshCardCode(card);
+                } else {
+                    visibleCards.delete(card);
+                }
             }
         }, { root: null, threshold: 0.1 });
-        document.querySelectorAll('.otp-card').forEach(card => observer.observe(card));
+
+        document.querySelectorAll('.otp-card').forEach(card => cardObserver.observe(card));
     }
 
+    let globalUpdaterInterval = null;
+
     function startGlobalUpdater() {
-        setInterval(async () => {
+        if (globalUpdaterInterval) return;
+
+        globalUpdaterInterval = setInterval(async () => {
             const now = Math.floor(Date.now() / 1000);
             const currentSlot = Math.floor(now / 30);
             const remaining = 30 - (now % 30);
