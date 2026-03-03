@@ -64,6 +64,31 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+def has_permission(permission_name):
+    if not getattr(g, "logged_in", False):
+        return False
+    if getattr(g, "is_admin", False):
+        return True
+    return bool(getattr(g, permission_name, False))
+
+def permission_required(permission_name):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not g.logged_in:
+                logger.warning("Unauthorized access attempt (not logged in).")
+                flash("You first need to Login.", "warning")
+                return redirect(url_for("login"))
+
+            if not has_permission(permission_name):
+                logger.warning(f"{u(g.user_id)} missing permission '{permission_name}'.")
+                flash("Access denied.", "error")
+                return redirect(url_for("home"))
+
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
 def row_to_settings(row):
     if not row:
         return {}
@@ -91,20 +116,61 @@ def load_user():
     g.logged_in = g.user_id is not None
     g.user_settings = {}
     g.username = None
+    g.can_delete = False
+    g.can_edit = False
+    g.can_add_companies = False
+    g.can_delete_companies = False
+    g.can_add_secrets = False
+    g.can_add_users = False
+
     if g.logged_in:
         with sqlite3.connect(DB_PATH) as db:
             cursor = db.cursor()
-            cursor.execute("SELECT * FROM users WHERE id = ?", (g.user_id,))
+            cursor.execute("""
+                SELECT
+                    id, username, password, last_login_time, session_token,
+                    is_admin, can_delete, can_edit, can_add_companies,
+                    can_delete_companies, can_add_secrets, can_add_users,
+                    pinned, show_timer, show_otp_type, show_content_titles,
+                    alert_color, text_color, show_emails, show_company,
+                    blur_on_inactive, show_including_admin_on_top
+                FROM users
+                WHERE id = ?
+            """, (g.user_id,))
             row = cursor.fetchone()
+
             if row:
                 g.username = row[1]
-                g.user_settings = row_to_settings(row)
+                g.is_admin = bool(row[5])
+                g.can_delete = bool(row[6]) or g.is_admin
+                g.can_edit = bool(row[7]) or g.is_admin
+                g.can_add_companies = bool(row[8]) or g.is_admin
+                g.can_delete_companies = bool(row[9]) or g.is_admin
+                g.can_add_secrets = bool(row[10]) or g.is_admin
+                g.can_add_users = bool(row[11]) or g.is_admin
+                g.user_settings = {
+                    "show_timer": int(row[13] or 0),
+                    "show_otp_type": int(row[14] or 0),
+                    "show_content_titles": int(row[15] or 0),
+                    "alert_color": row[16] or "#333333",
+                    "text_color": row[17] or "#FFFFFF",
+                    "show_emails": int(row[18] or 0),
+                    "show_company": int(row[19] or 0),
+                    "blur_on_inactive": int(row[20] or 0),
+                    "show_including_admin_on_top": int(row[21] or 0),
+                }
 
 @app.context_processor
 def inject_user():
     return dict(
         is_logged_in=g.logged_in,
         is_admin=g.is_admin,
+        can_delete=g.can_delete,
+        can_edit=g.can_edit,
+        can_add_companies=g.can_add_companies,
+        can_delete_companies=g.can_delete_companies,
+        can_add_secrets=g.can_add_secrets,
+        can_add_users=g.can_add_users,
         user_settings=g.user_settings,
         show_index_button=INDEX_TEMPLATE_PRESENT
     )
@@ -198,15 +264,18 @@ def home():
 
 @app.route("/users")
 @login_required
+@permission_required("can_add_users")
 def users():
-    if not g.is_admin:
-        logger.warning(f"{u(g.user_id)} attempted to access /users without admin rights.")
-        flash("Access denied.", "error")
-        return redirect(url_for("home"))
-
     with sqlite3.connect(DB_PATH) as db:
         cursor = db.cursor()
-        cursor.execute("SELECT id, username, is_admin FROM users ORDER BY username ASC")
+        cursor.execute("""
+            SELECT
+                id, username, is_admin,
+                can_delete, can_edit, can_add_companies,
+                can_delete_companies, can_add_secrets, can_add_users
+            FROM users
+            ORDER BY username ASC
+        """)
         user_list = cursor.fetchall()
 
     return render_template("users.html", users=user_list)
@@ -214,8 +283,8 @@ def users():
 @app.route("/companies")
 @login_required
 def companies():
-    if not g.is_admin:
-        logger.warning(f"{u(g.user_id)} attempted to access /companies without admin rights.")
+    if not (has_permission("can_add_companies") or has_permission("can_delete_companies")):
+        logger.warning(f"{u(g.user_id)} attempted to access /companies without permission.")
         flash("Access denied.", "error")
         return redirect(url_for("home"))
 
@@ -312,6 +381,7 @@ def update_settings():
 
 @app.route("/add", methods=["GET", "POST"])
 @login_required
+@permission_required("can_add_secrets")
 def add():
     if request.method == "POST":
         name = request.form.get("name")

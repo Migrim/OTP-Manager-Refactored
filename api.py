@@ -26,24 +26,58 @@ def normalize_secret(s):
     s = re.sub(r"[^A-Z2-7]", "", s)
     return s
 
-def current_user_is_admin():
+def current_user_permissions():
     uid = getattr(g, "user_id", None)
+    permissions = {
+        "is_admin": False,
+        "can_delete": False,
+        "can_edit": False,
+        "can_add_companies": False,
+        "can_delete_companies": False,
+        "can_add_secrets": False,
+        "can_add_users": False
+    }
+
     if not uid:
-        return False
+        return permissions
+
     try:
         with sqlite3.connect(DB_PATH) as db:
             c = db.cursor()
-            c.execute("SELECT is_admin FROM users WHERE id = ?", (uid,))
+            c.execute("""
+                SELECT
+                    is_admin, can_delete, can_edit, can_add_companies,
+                    can_delete_companies, can_add_secrets, can_add_users
+                FROM users
+                WHERE id = ?
+            """, (uid,))
             row = c.fetchone()
-            return bool(row and row[0])
+
+            if row:
+                permissions["is_admin"] = bool(row[0])
+                permissions["can_delete"] = bool(row[1]) or permissions["is_admin"]
+                permissions["can_edit"] = bool(row[2]) or permissions["is_admin"]
+                permissions["can_add_companies"] = bool(row[3]) or permissions["is_admin"]
+                permissions["can_delete_companies"] = bool(row[4]) or permissions["is_admin"]
+                permissions["can_add_secrets"] = bool(row[5]) or permissions["is_admin"]
+                permissions["can_add_users"] = bool(row[6]) or permissions["is_admin"]
     except:
-        return False
+        pass
+
+    return permissions
+
+def current_user_has_permission(permission_name):
+    return bool(current_user_permissions().get(permission_name, False))
 
 def wants_json_response():
+    if request.is_json:
+        return True
     if request.headers.get("X-Requested-With") == "XMLHttpRequest":
         return True
+    if request.args.get("format") == "json":
+        return True
     accept = request.headers.get("Accept", "")
-    return "application/json" in accept
+    return "application/json" in accept and "text/html" not in accept
 
 def _delete_secret_by_id(secret_id):
     with sqlite3.connect(DB_PATH) as db:
@@ -211,6 +245,9 @@ def get_single_secret(secret_id):
 
 @api_bp.route("/secrets", methods=["POST"])
 def create_secret():
+    if not current_user_has_permission("can_add_secrets"):
+        logger.warning(f"{u(getattr(g, 'user_id', None))} create_secret result=forbidden_missing_permission")
+        return jsonify({"error": "Missing permission: can_add_secrets"}), 403
     t0 = time.perf_counter()
     data = request.json or {}
     payload = sanitize_payload(data)
@@ -242,6 +279,9 @@ def create_secret():
 
 @api_bp.route("/secrets/<int:secret_id>", methods=["PUT"])
 def update_secret(secret_id):
+    if not current_user_has_permission("can_edit"):
+        logger.warning(f"{u(getattr(g, 'user_id', None))} update_secret result=forbidden_missing_permission")
+        return jsonify({"error": "Missing permission: can_edit"}), 403
     t0 = time.perf_counter()
     data = request.json or {}
     payload = sanitize_payload(data)
@@ -283,18 +323,44 @@ def update_secret(secret_id):
 
 @api_bp.route("/create-user", methods=["POST"])
 def create_user():
+    if not current_user_has_permission("can_add_users"):
+        logger.warning(f"{u(getattr(g, 'user_id', None))} create_user result=forbidden_missing_permission")
+        flash("You do not have permission to manage users.", "error")
+        return redirect("/users")
     t0 = time.perf_counter()
     data = request.form
     username = data.get("username")
     is_admin = int(data.get("is_admin") == "on")
+    can_delete = int(data.get("can_delete") == "on")
+    can_edit = int(data.get("can_edit") == "on")
+    can_add_companies = int(data.get("can_add_companies") == "on")
+    can_delete_companies = int(data.get("can_delete_companies") == "on")
+    can_add_secrets = int(data.get("can_add_secrets") == "on")
+    can_add_users = int(data.get("can_add_users") == "on")
     if not username or not data.get("password"):
         logger.warning(f"{u(getattr(g, 'user_id', None))} create_user result=missing_fields")
         return jsonify({"error": "Missing fields"}), 400
     hashed = bcrypt.generate_password_hash(data.get("password")).decode("utf-8")
     with sqlite3.connect(DB_PATH) as db:
         cursor = db.cursor()
-        cursor.execute("INSERT INTO users (username, password, is_admin) VALUES (?, ?, ?)",
-                       (username, hashed, is_admin))
+        cursor.execute("""
+            INSERT INTO users (
+                username, password, is_admin,
+                can_delete, can_edit, can_add_companies,
+                can_delete_companies, can_add_secrets, can_add_users
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            username,
+            hashed,
+            is_admin,
+            can_delete,
+            can_edit,
+            can_add_companies,
+            can_delete_companies,
+            can_add_secrets,
+            can_add_users
+        ))
         db.commit()
         new_id = cursor.lastrowid
     dt = round((time.perf_counter() - t0) * 1000)
@@ -303,6 +369,10 @@ def create_user():
 
 @api_bp.route("/reset-password", methods=["POST"])
 def reset_password():
+    if not current_user_has_permission("can_add_users"):
+        logger.warning(f"{u(getattr(g, 'user_id', None))} reset_password result=forbidden_missing_permission")
+        flash("You do not have permission to manage users.", "error")
+        return redirect("/users")
     t0 = time.perf_counter()
     target_id = request.form.get("user_id")
     if not target_id or not request.form.get("new_password"):
@@ -324,6 +394,10 @@ def reset_password():
 
 @api_bp.route("/delete-user", methods=["POST"])
 def delete_user():
+    if not current_user_has_permission("can_add_users"):
+        logger.warning(f"{u(getattr(g, 'user_id', None))} delete_user result=forbidden_missing_permission")
+        flash("You do not have permission to manage users.", "error")
+        return redirect("/users")
     t0 = time.perf_counter()
     target_id = request.form.get("user_id")
     if not target_id:
@@ -342,30 +416,67 @@ def delete_user():
             logger.warning(f"{u(getattr(g, 'user_id', None))} delete_user id={target_id} result=not_found")
             return jsonify({"error": "User not found"}), 404
 
-@api_bp.route("/toggle-admin", methods=["POST"])
-def toggle_admin():
+@api_bp.route("/update-user-permissions", methods=["POST"])
+def update_user_permissions():
+    if not current_user_has_permission("can_add_users"):
+        logger.warning(f"{u(getattr(g, 'user_id', None))} update_user_permissions result=forbidden_missing_permission")
+        flash("You do not have permission to manage user rights.", "error")
+        return redirect("/users")
+
     t0 = time.perf_counter()
     target_id = request.form.get("user_id")
     if not target_id:
-        logger.warning(f"{u(getattr(g, 'user_id', None))} toggle_admin result=missing_user_id")
+        logger.warning(f"{u(getattr(g, 'user_id', None))} update_user_permissions result=missing_user_id")
         return jsonify({"error": "Missing user_id"}), 400
+
+    is_admin = 1 if request.form.get("is_admin") == "on" else 0
+    can_delete = 1 if request.form.get("can_delete") == "on" else 0
+    can_edit = 1 if request.form.get("can_edit") == "on" else 0
+    can_add_companies = 1 if request.form.get("can_add_companies") == "on" else 0
+    can_delete_companies = 1 if request.form.get("can_delete_companies") == "on" else 0
+    can_add_secrets = 1 if request.form.get("can_add_secrets") == "on" else 0
+    can_add_users = 1 if request.form.get("can_add_users") == "on" else 0
+
     with sqlite3.connect(DB_PATH) as db:
         cursor = db.cursor()
-        cursor.execute("SELECT is_admin, username FROM users WHERE id = ?", (target_id,))
+        cursor.execute("SELECT username FROM users WHERE id = ?", (target_id,))
         row = cursor.fetchone()
         if not row:
-            logger.warning(f"{u(getattr(g, 'user_id', None))} toggle_admin id={target_id} result=not_found")
+            logger.warning(f"{u(getattr(g, 'user_id', None))} update_user_permissions id={target_id} result=not_found")
             return jsonify({"error": "User not found"}), 404
-        current_status = row[0]
-        new_status = 0 if current_status else 1
-        cursor.execute("UPDATE users SET is_admin = ? WHERE id = ?", (new_status, target_id))
+
+        cursor.execute("""
+            UPDATE users
+            SET is_admin = ?,
+                can_delete = ?,
+                can_edit = ?,
+                can_add_companies = ?,
+                can_delete_companies = ?,
+                can_add_secrets = ?,
+                can_add_users = ?
+            WHERE id = ?
+        """, (
+            is_admin,
+            can_delete,
+            can_edit,
+            can_add_companies,
+            can_delete_companies,
+            can_add_secrets,
+            can_add_users,
+            target_id
+        ))
         db.commit()
+
     dt = round((time.perf_counter() - t0) * 1000)
-    logger.info(f"{u(getattr(g, 'user_id', None))} toggled admin for {user_ref(user_id=target_id, username=row[1])} to={bool(new_status)} duration_ms={dt}")
+    logger.info(f"{u(getattr(g, 'user_id', None))} updated permissions for {user_ref(user_id=target_id, username=row[0])} duration_ms={dt}")
     return redirect("/users")
 
 @api_bp.route("/create-company", methods=["POST"])
 def create_company():
+    if not current_user_has_permission("can_add_companies"):
+        logger.warning(f"{u(getattr(g, 'user_id', None))} create_company result=forbidden_missing_permission")
+        flash("You do not have permission to add companies.", "error")
+        return redirect("/companies")
     t0 = time.perf_counter()
     name = request.form.get("name")
     kundennummer = request.form.get("kundennummer")
@@ -386,6 +497,10 @@ def create_company():
 
 @api_bp.route("/delete-company", methods=["POST"])
 def delete_company():
+    if not current_user_has_permission("can_delete_companies"):
+        logger.warning(f"{u(getattr(g, 'user_id', None))} delete_company result=forbidden_missing_permission")
+        flash("You do not have permission to delete companies.", "error")
+        return redirect("/companies")
     t0 = time.perf_counter()
     company_id = request.form.get("company_id")
     if not company_id:
@@ -406,6 +521,10 @@ def delete_company():
 
 @api_bp.route("/edit-company", methods=["POST"])
 def edit_company():
+    if not current_user_has_permission("can_edit"):
+        logger.warning(f"{u(getattr(g, 'user_id', None))} edit_company result=forbidden_missing_permission")
+        flash("You do not have permission to edit companies.", "error")
+        return redirect("/companies")
     t0 = time.perf_counter()
     company_id = request.form.get("company_id")
     name = request.form.get("name")
@@ -446,12 +565,12 @@ def edit_company():
 def delete_secret():
     t0 = time.perf_counter()
 
-    if not current_user_is_admin():
-        logger.warning(f"{u(getattr(g, 'user_id', None))} delete_secret result=forbidden_not_admin")
+    if not current_user_has_permission("can_delete"):
+        logger.warning(f"{u(getattr(g, 'user_id', None))} delete_secret result=forbidden_missing_permission")
         if wants_json_response():
-            return jsonify({"error": "Only admins can delete secrets"}), 403
-        flash("Only admins can delete secrets.", "error")
-        return redirect(url_for("home"))
+            return jsonify({"error": "Missing permission: can_delete"}), 403
+        flash("You do not have permission to delete secrets.", "error")
+        return redirect(request.referrer or url_for("home"))
 
     secret_id = request.form.get("secret_id")
     if not secret_id:
@@ -459,7 +578,7 @@ def delete_secret():
         if wants_json_response():
             return jsonify({"error": "Missing secret_id"}), 400
         flash("No secret ID provided.", "error")
-        return redirect(url_for("home"))
+        return redirect(request.referrer or url_for("home"))
 
     try:
         meta, deleted = _delete_secret_by_id(secret_id)
@@ -474,20 +593,20 @@ def delete_secret():
             if wants_json_response():
                 return jsonify({"status": "deleted", "id": int(secret_id)})
             flash("Secret deleted successfully.", "success")
-            return redirect(url_for("home"))
+            return redirect(request.referrer or url_for("home"))
 
         logger.warning(f"{u(getattr(g, 'user_id', None))} delete_secret id={secret_id} result=not_found")
         if wants_json_response():
             return jsonify({"error": "Secret not found"}), 404
         flash("Secret not found.", "error")
-        return redirect(url_for("home"))
+        return redirect(request.referrer or url_for("home"))
 
     except Exception:
         logger.exception(f"{u(getattr(g, 'user_id', None))} delete_secret id={secret_id} result=error")
         if wants_json_response():
             return jsonify({"error": "An error occurred while deleting the secret"}), 500
         flash("An error occurred while deleting the secret.", "error")
-        return redirect(url_for("home"))
+        return redirect(request.referrer or url_for("home"))
 
 @api_bp.route("/logs")
 def live_logs():

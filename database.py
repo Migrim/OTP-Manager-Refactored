@@ -110,6 +110,12 @@ def init_db():
                 last_login_time INTEGER,
                 session_token TEXT,
                 is_admin INTEGER DEFAULT 0,
+                can_delete INTEGER DEFAULT 0,
+                can_edit INTEGER DEFAULT 0,
+                can_add_companies INTEGER DEFAULT 0,
+                can_delete_companies INTEGER DEFAULT 0,
+                can_add_secrets INTEGER DEFAULT 0,
+                can_add_users INTEGER DEFAULT 0,
                 pinned TEXT DEFAULT '',
                 show_timer INTEGER DEFAULT 0,
                 show_otp_type INTEGER DEFAULT 1,
@@ -124,6 +130,19 @@ def init_db():
         """)
         c.execute("PRAGMA table_info(users)")
         cols = [row[1] for row in c.fetchall()]
+
+        if "can_delete" not in cols:
+            c.execute("ALTER TABLE users ADD COLUMN can_delete INTEGER DEFAULT 0")
+        if "can_edit" not in cols:
+            c.execute("ALTER TABLE users ADD COLUMN can_edit INTEGER DEFAULT 0")
+        if "can_add_companies" not in cols:
+            c.execute("ALTER TABLE users ADD COLUMN can_add_companies INTEGER DEFAULT 0")
+        if "can_delete_companies" not in cols:
+            c.execute("ALTER TABLE users ADD COLUMN can_delete_companies INTEGER DEFAULT 0")
+        if "can_add_secrets" not in cols:
+            c.execute("ALTER TABLE users ADD COLUMN can_add_secrets INTEGER DEFAULT 0")
+        if "can_add_users" not in cols:
+            c.execute("ALTER TABLE users ADD COLUMN can_add_users INTEGER DEFAULT 0")
         if "blur_on_inactive" not in cols:
             c.execute("ALTER TABLE users ADD COLUMN blur_on_inactive INTEGER DEFAULT 0")
         if "show_including_admin_on_top" not in cols:
@@ -134,7 +153,14 @@ def init_db():
             db.commit()
         c.execute("SELECT id FROM users WHERE id = 1")
         if c.fetchone() is None:
-            c.execute("INSERT INTO users (id, username, password, is_admin) VALUES (1, 'admin', '1234', 1)")
+            c.execute("""
+                INSERT INTO users (
+                    id, username, password, is_admin,
+                    can_delete, can_edit, can_add_companies,
+                    can_delete_companies, can_add_secrets, can_add_users
+                )
+                VALUES (1, 'admin', '1234', 1, 1, 1, 1, 1, 1, 1)
+            """)
             db.commit()
         c.execute("SELECT COUNT(*) FROM statistics")
         if (c.fetchone() or [0])[0] == 0:

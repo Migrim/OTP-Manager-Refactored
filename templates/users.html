@@ -16,23 +16,36 @@
             <div class="users-empty-text">No users stored</div>
         </div>
     {% else %}
-        {% for id, username, is_admin in users %}
+        {% for id, username, user_is_admin, can_delete, can_edit, can_add_companies, can_delete_companies, can_add_secrets, can_add_users in users %}
         {% set delay = range(30, 150)|random %}
-        <div class="user-card" data-user-id="{{ id }}" style="animation-delay: {{ delay }}ms;">
+        <div
+            class="user-card"
+            data-user-id="{{ id }}"
+            data-username="{{ username }}"
+            data-is-admin="{{ 1 if user_is_admin else 0 }}"
+            data-can-delete="{{ 1 if can_delete else 0 }}"
+            data-can-edit="{{ 1 if can_edit else 0 }}"
+            data-can-add-companies="{{ 1 if can_add_companies else 0 }}"
+            data-can-delete-companies="{{ 1 if can_delete_companies else 0 }}"
+            data-can-add-secrets="{{ 1 if can_add_secrets else 0 }}"
+            data-can-add-users="{{ 1 if can_add_users else 0 }}"
+            style="animation-delay: {{ delay }}ms;"
+        >
             <div class="user-name">{{ username }}</div>
             <div class="user-status">
-                {{ "is Administrator" if is_admin else "is not Administrator" }}
+                {{ "is Administrator" if user_is_admin else "is not Administrator" }}
             </div>
             <div class="user-actions">
                 <button class="action-button copy" title="Reset Password">
                     <span class="material-icons">lock_reset</span>
                 </button>
-                <form method="post" action="/api/toggle-admin">
-                    <input type="hidden" name="user_id" value="{{ id }}">
-                    <button class="action-button edit" title="Toggle Admin">
-                        <span class="material-icons">{{ "admin_panel_settings" if is_admin else "person_add" }}</span>
-                    </button>
-                </form>
+
+                {% if is_admin %}
+                <button class="action-button edit open-rights-modal" title="Manage Rights" type="button">
+                    <span class="material-icons">tune</span>
+                </button>
+                {% endif %}
+
                 <button class="action-button delete" title="Delete User">
                     <span class="material-icons">delete</span>
                 </button>
@@ -42,9 +55,11 @@
     {% endif %}
 </div>
 
+{% if is_admin %}
 <a href="#" class="fab-add-user" id="openAddUserModal" title="Add User">
     <span class="material-icons">add</span>
 </a>
+{% endif %}
 
 <div id="addUserModal" class="add-user-modal">
     <div class="add-user-modal-content">
@@ -70,6 +85,103 @@
 
             <div class="add-user-button-row">
                 <button type="submit">Add User</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="rightsModal" class="add-user-modal">
+    <div class="add-user-modal-content rights-modal-content">
+        <span class="add-user-close" id="closeRightsModal">&times;</span>
+
+        <div class="rights-modal-header">
+            <div class="rights-modal-title">User Rights</div>
+            <div class="rights-modal-subtitle" id="rights-username-text">Manage permissions for user</div>
+        </div>
+
+        <form class="add-user-form rights-form" method="post" action="/api/update-user-permissions" id="rightsForm">
+            <input type="hidden" id="rights-user-id" name="user_id">
+
+            <div class="rights-group">
+                <div class="rights-group-title">Administrator</div>
+                <div class="rights-item rights-item-main">
+                    <label class="settings-switch rights-switch-row">
+                        <input type="checkbox" id="rights_is_admin" name="is_admin">
+                        <span class="slider"></span>
+                        <span class="switch-text">Full access</span>
+                    </label>
+                    <div class="setting-description rights-description">Gives this user full access to all areas and automatically enables every permission below.</div>
+                </div>
+            </div>
+
+            <div class="rights-group">
+                <div class="rights-group-title">Secret Access</div>
+
+                <div class="rights-item">
+                    <label class="settings-switch rights-switch-row">
+                        <input type="checkbox" id="rights_can_add_secrets" name="can_add_secrets">
+                        <span class="slider"></span>
+                        <span class="switch-text">Can add secrets</span>
+                    </label>
+                    <div class="setting-description rights-description">Allows adding new OTP secrets.</div>
+                </div>
+
+                <div class="rights-item">
+                    <label class="settings-switch rights-switch-row">
+                        <input type="checkbox" id="rights_can_edit" name="can_edit">
+                        <span class="slider"></span>
+                        <span class="switch-text">Can edit entries</span>
+                    </label>
+                    <div class="setting-description rights-description">Allows editing secrets and company entries.</div>
+                </div>
+
+                <div class="rights-item">
+                    <label class="settings-switch rights-switch-row">
+                        <input type="checkbox" id="rights_can_delete" name="can_delete">
+                        <span class="slider"></span>
+                        <span class="switch-text">Can delete secrets</span>
+                    </label>
+                    <div class="setting-description rights-description">Allows deleting stored OTP secrets.</div>
+                </div>
+            </div>
+
+            <div class="rights-group">
+                <div class="rights-group-title">Company Access</div>
+
+                <div class="rights-item">
+                    <label class="settings-switch rights-switch-row">
+                        <input type="checkbox" id="rights_can_add_companies" name="can_add_companies">
+                        <span class="slider"></span>
+                        <span class="switch-text">Can add companies</span>
+                    </label>
+                    <div class="setting-description rights-description">Allows creating new companies.</div>
+                </div>
+
+                <div class="rights-item">
+                    <label class="settings-switch rights-switch-row">
+                        <input type="checkbox" id="rights_can_delete_companies" name="can_delete_companies">
+                        <span class="slider"></span>
+                        <span class="switch-text">Can delete companies</span>
+                    </label>
+                    <div class="setting-description rights-description">Allows removing stored companies.</div>
+                </div>
+            </div>
+
+            <div class="rights-group">
+                <div class="rights-group-title">User Management</div>
+
+                <div class="rights-item">
+                    <label class="settings-switch rights-switch-row">
+                        <input type="checkbox" id="rights_can_add_users" name="can_add_users">
+                        <span class="slider"></span>
+                        <span class="switch-text">Can manage users</span>
+                    </label>
+                    <div class="setting-description rights-description">Allows creating users, resetting passwords and deleting users.</div>
+                </div>
+            </div>
+
+            <div class="add-user-button-row rights-save-row">
+                <button type="submit">Save Rights</button>
             </div>
         </form>
     </div>
@@ -110,49 +222,59 @@
 </div>
 
 <script>
-    document.getElementById("openAddUserModal").onclick = () => {
-        document.getElementById("addUserModal").style.display = "flex";
-    };
-    document.getElementById("closeAddUserModal").onclick = () => {
-        document.getElementById("addUserModal").style.display = "none";
-    };
-    window.onclick = (e) => {
-        if (e.target.id === "addUserModal") {
-            document.getElementById("addUserModal").style.display = "none";
-        }
-    };
+    const addUserModal = document.getElementById("addUserModal");
+    const resetPasswordModal = document.getElementById("resetPasswordModal");
+    const confirmDeleteModal = document.getElementById("confirmDeleteModal");
+    const rightsModal = document.getElementById("rightsModal");
+
+    const openAddUserButton = document.getElementById("openAddUserModal");
+    const closeAddUserButton = document.getElementById("closeAddUserModal");
+    const closeResetPasswordButton = document.getElementById("closeResetPasswordModal");
+    const closeDeleteButton = document.getElementById("closeDeleteModal");
+    const closeRightsButton = document.getElementById("closeRightsModal");
+
+    function setModal(modal, show) {
+        if (!modal) return;
+        modal.style.display = show ? "flex" : "none";
+    }
+
+    if (openAddUserButton) {
+        openAddUserButton.onclick = (e) => {
+            e.preventDefault();
+            setModal(addUserModal, true);
+        };
+    }
+
+    if (closeAddUserButton) {
+        closeAddUserButton.onclick = () => setModal(addUserModal, false);
+    }
+
+    if (closeResetPasswordButton) {
+        closeResetPasswordButton.onclick = () => setModal(resetPasswordModal, false);
+    }
+
+    if (closeDeleteButton) {
+        closeDeleteButton.onclick = () => setModal(confirmDeleteModal, false);
+    }
+
+    if (closeRightsButton) {
+        closeRightsButton.onclick = () => setModal(rightsModal, false);
+    }
+
+    window.addEventListener("click", (e) => {
+        if (e.target.id === "addUserModal") setModal(addUserModal, false);
+        if (e.target.id === "resetPasswordModal") setModal(resetPasswordModal, false);
+        if (e.target.id === "confirmDeleteModal") setModal(confirmDeleteModal, false);
+        if (e.target.id === "rightsModal") setModal(rightsModal, false);
+    });
 
     document.querySelectorAll(".action-button.copy").forEach(btn => {
         btn.onclick = (e) => {
             const userCard = e.currentTarget.closest(".user-card");
             const userId = userCard.dataset.userId;
             document.getElementById("reset-user-id").value = userId;
-            document.getElementById("resetPasswordModal").style.display = "flex";
+            setModal(resetPasswordModal, true);
         };
-    });
-
-    document.getElementById("closeResetPasswordModal").onclick = () => {
-        document.getElementById("resetPasswordModal").style.display = "none";
-    };
-
-    window.addEventListener("click", (e) => {
-        if (e.target.id === "resetPasswordModal") {
-            document.getElementById("resetPasswordModal").style.display = "none";
-        }
-    });
-    document.getElementById("toggleResetPassword").addEventListener("click", () => {
-        const input = document.getElementById("reset_password");
-        const icon = document.getElementById("toggleResetPassword");
-        const isVisible = input.type === "text";
-        input.type = isVisible ? "password" : "text";
-        icon.textContent = isVisible ? "visibility_off" : "visibility";
-    });
-    document.getElementById("toggleAddPassword").addEventListener("click", () => {
-        const input = document.getElementById("add_password");
-        const icon = document.getElementById("toggleAddPassword");
-        const isVisible = input.type === "text";
-        input.type = isVisible ? "password" : "text";
-        icon.textContent = isVisible ? "visibility_off" : "visibility";
     });
 
     document.querySelectorAll(".action-button.delete").forEach(btn => {
@@ -160,18 +282,65 @@
             const userCard = e.currentTarget.closest(".user-card");
             const userId = userCard.dataset.userId;
             document.getElementById("delete-user-id").value = userId;
-            document.getElementById("confirmDeleteModal").style.display = "flex";
+            setModal(confirmDeleteModal, true);
         };
     });
 
-    document.getElementById("closeDeleteModal").onclick = () => {
-        document.getElementById("confirmDeleteModal").style.display = "none";
-    };
+    function syncAdminState() {
+        const isAdmin = document.getElementById("rights_is_admin").checked;
+        const fields = [
+            document.getElementById("rights_can_delete"),
+            document.getElementById("rights_can_edit"),
+            document.getElementById("rights_can_add_companies"),
+            document.getElementById("rights_can_delete_companies"),
+            document.getElementById("rights_can_add_secrets"),
+            document.getElementById("rights_can_add_users")
+        ];
 
-    window.addEventListener("click", (e) => {
-        if (e.target.id === "confirmDeleteModal") {
-            document.getElementById("confirmDeleteModal").style.display = "none";
-        }
+        fields.forEach(field => {
+            field.disabled = isAdmin;
+            if (isAdmin) {
+                field.checked = true;
+            }
+        });
+    }
+
+    document.querySelectorAll(".open-rights-modal").forEach(btn => {
+        btn.onclick = (e) => {
+            const userCard = e.currentTarget.closest(".user-card");
+
+            document.getElementById("rights-user-id").value = userCard.dataset.userId;
+            document.getElementById("rights-username-text").textContent = `Manage permissions for ${userCard.dataset.username}`;
+
+            document.getElementById("rights_is_admin").checked = userCard.dataset.isAdmin === "1";
+            document.getElementById("rights_can_delete").checked = userCard.dataset.canDelete === "1";
+            document.getElementById("rights_can_edit").checked = userCard.dataset.canEdit === "1";
+            document.getElementById("rights_can_add_companies").checked = userCard.dataset.canAddCompanies === "1";
+            document.getElementById("rights_can_delete_companies").checked = userCard.dataset.canDeleteCompanies === "1";
+            document.getElementById("rights_can_add_secrets").checked = userCard.dataset.canAddSecrets === "1";
+            document.getElementById("rights_can_add_users").checked = userCard.dataset.canAddUsers === "1";
+
+            syncAdminState();
+            setModal(rightsModal, true);
+        };
+    });
+
+    document.getElementById("rights_is_admin").addEventListener("change", syncAdminState);
+
+    document.getElementById("toggleResetPassword").addEventListener("click", () => {
+        const input = document.getElementById("reset_password");
+        const icon = document.getElementById("toggleResetPassword");
+        const isVisible = input.type === "text";
+        input.type = isVisible ? "password" : "text";
+        icon.textContent = isVisible ? "visibility_off" : "visibility";
+    });
+
+    document.getElementById("toggleAddPassword").addEventListener("click", () => {
+        const input = document.getElementById("add_password");
+        const icon = document.getElementById("toggleAddPassword");
+        const isVisible = input.type === "text";
+        input.type = isVisible ? "password" : "text";
+        icon.textContent = isVisible ? "visibility_off" : "visibility";
     });
 </script>
 
