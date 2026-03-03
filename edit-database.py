@@ -227,7 +227,7 @@ def upgrade_database():
                 data.get("alert_color", "#333333") or "#333333",
                 data.get("text_color", "#FFFFFF") or "#FFFFFF",
                 int(data.get("show_emails", 0) or 0),
-                int(data.get("show_company", 0) or 0),3
+                int(data.get("show_company", 0) or 0),
                 int(data.get("blur_on_inactive", 1) or 1),
                 int(data.get("show_including_admin_on_top", 0) or 0)
             ))
@@ -242,42 +242,26 @@ def upgrade_database():
         print("→ Done.\n")
         return
 
-    print("→ Core schema exists. Checking for any missing current columns...")
+    print("→ 'pinned' column already exists. Checking for new columns...")
     changed = False
 
-    additions = [
-        ("can_delete", "ALTER TABLE users ADD COLUMN can_delete INTEGER DEFAULT 0"),
-        ("can_edit", "ALTER TABLE users ADD COLUMN can_edit INTEGER DEFAULT 0"),
-        ("can_add_companies", "ALTER TABLE users ADD COLUMN can_add_companies INTEGER DEFAULT 0"),
-        ("can_delete_companies", "ALTER TABLE users ADD COLUMN can_delete_companies INTEGER DEFAULT 0"),
-        ("can_add_secrets", "ALTER TABLE users ADD COLUMN can_add_secrets INTEGER DEFAULT 0"),
-        ("can_add_users", "ALTER TABLE users ADD COLUMN can_add_users INTEGER DEFAULT 0"),
-        ("blur_on_inactive", "ALTER TABLE users ADD COLUMN blur_on_inactive INTEGER DEFAULT 0"),
-        ("show_including_admin_on_top", "ALTER TABLE users ADD COLUMN show_including_admin_on_top INTEGER DEFAULT 0")
-    ]
+    if "blur_on_inactive" not in columns:
+        print("→ Adding 'blur_on_inactive' column to users...")
+        cur.execute("ALTER TABLE users ADD COLUMN blur_on_inactive INTEGER DEFAULT 0")
+        changed = True
+    else:
+        print("✓ 'blur_on_inactive' column already exists.")
 
-    for column_name, sql in additions:
-        if column_name not in columns:
-            print(f"→ Adding '{column_name}' column to users...")
-            cur.execute(sql)
-            changed = True
-        else:
-            print(f"✓ '{column_name}' column already exists.")
+    if "show_including_admin_on_top" not in columns:
+        print("→ Adding 'show_including_admin_on_top' column to users...")
+        cur.execute("ALTER TABLE users ADD COLUMN show_including_admin_on_top INTEGER DEFAULT 0")
+        changed = True
+    else:
+        print("✓ 'show_including_admin_on_top' column already exists.")
 
     if not changed:
         print("✓ Database schema is already up to date.")
 
-    print("→ Ensuring admin users have all permissions...")
-    cur.execute("""
-        UPDATE users
-        SET can_delete = 1,
-            can_edit = 1,
-            can_add_companies = 1,
-            can_delete_companies = 1,
-            can_add_secrets = 1,
-            can_add_users = 1
-        WHERE is_admin = 1
-    """)
     conn.commit()
     conn.close()
     print("→ Done.\n")
