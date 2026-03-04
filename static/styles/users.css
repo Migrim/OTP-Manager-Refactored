@@ -652,6 +652,7 @@ body.companies #search-otp-fake {
     background: #fff;
     border-radius: 50%;
     transition: transform 0.2s ease;
+    cursor: not-allowed;
 }
 
 .rights-switch-row input:checked + .slider {
@@ -664,6 +665,8 @@ body.companies #search-otp-fake {
 
 .rights-switch-row input:disabled + .slider {
     opacity: 0.7;
+    cursor: not-allowed;
+    background-color: #d5bfef;
 }
 
 .rights-switch-row .switch-text {
@@ -727,4 +730,26 @@ body.companies #search-otp-fake {
 
 .dark-mode .rights-description {
     color: rgba(255, 255, 255, 0.5);
+}
+.user-you-badge {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    padding: 0.18rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: 0.02em;
+    background: #efe7ff;
+    color: #6a1fbf;
+    border: 1px solid #d8c2ff;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.dark-mode .user-you-badge {
+    background: #6f56a8;
+    color: #eee4ff;
+    border: 1px solid #9479cf;
 }

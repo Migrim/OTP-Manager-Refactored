@@ -165,6 +165,7 @@ def inject_user():
     return dict(
         is_logged_in=g.logged_in,
         is_admin=g.is_admin,
+        current_user_id=g.user_id,
         can_delete=g.can_delete,
         can_edit=g.can_edit,
         can_add_companies=g.can_add_companies,
@@ -278,7 +279,7 @@ def users():
         """)
         user_list = cursor.fetchall()
 
-    return render_template("users.html", users=user_list)
+    return render_template("users.html", users=user_list, current_user_id=g.user_id)
 
 @app.route("/companies")
 @login_required

@@ -31,6 +31,9 @@
             data-can-add-users="{{ 1 if can_add_users else 0 }}"
             style="animation-delay: {{ delay }}ms;"
         >
+            {% if id == current_user_id %}
+            <div class="user-you-badge">you</div>
+            {% endif %}
             <div class="user-name">{{ username }}</div>
             <div class="user-status">
                 {{ "is Administrator" if user_is_admin else "is not Administrator" }}
