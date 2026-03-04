@@ -149,9 +149,6 @@ def init_db():
         if "show_including_admin_on_top" not in cols:
             c.execute("ALTER TABLE users ADD COLUMN show_including_admin_on_top INTEGER DEFAULT 0")
         db.commit()
-        if created:
-            c.execute("INSERT OR IGNORE INTO companies (name) VALUES ('Public'), ('Private')")
-            db.commit()
         c.execute("SELECT id FROM users WHERE id = 1")
         if c.fetchone() is None:
             c.execute("""
