@@ -675,18 +675,15 @@ body:not(.dark-mode) #editOtpModal {
 @keyframes otpEmptyFadeIn {
     0% {
         opacity: 0;
-        transform: translate(-50%, -50%) scale(0.96);
-    }
-    70% {
-        opacity: 0.8;
-        transform: translate(-50%, -50%) scale(1.02);
+        filter: blur(8px);
+        transform: translate(-50%, calc(-50% + 18px)) scale(0.985);
     }
     100% {
         opacity: 0.85;
+        filter: blur(0);
         transform: translate(-50%, -50%) scale(1);
     }
 }
-
 .otp-empty-state {
     position: fixed;
     top: 50%;
@@ -698,8 +695,9 @@ body:not(.dark-mode) #editOtpModal {
     text-align: center;
     gap: 8px;
     opacity: 0.85;
-    animation: otpEmptyFadeIn 0.45s cubic-bezier(0.25, 1, 0.3, 1) forwards;
-    will-change: transform, opacity;
+    animation: otpEmptyFadeIn 1.20s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    will-change: transform, opacity, filter;
+    backface-visibility: hidden;
     user-select: none;
 }
 
