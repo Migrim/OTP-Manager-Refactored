@@ -7,8 +7,9 @@ import json
 from datetime import datetime
 from logger import logger
 
-INSTANCE_DIR = "instance"
-BACKUP_DIR = "backup"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+INSTANCE_DIR = os.path.join(BASE_DIR, "instance")
+BACKUP_DIR = os.path.join(BASE_DIR, "backup")
 STATE_PATH = os.path.join(INSTANCE_DIR, "maintenance_state.json")
 DB_NAME = "otp.db"
 DB_PATH = os.path.join(INSTANCE_DIR, DB_NAME)
