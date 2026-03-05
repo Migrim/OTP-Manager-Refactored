@@ -120,14 +120,31 @@ def valid_port(port):
         return False
 
 def port_in_use(host, port):
+    targets = []
+    host = str(host or "").strip()
     try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(0.5)
-        result = s.connect_ex((host, int(port)))
-        s.close()
-        return result == 0
+        port = int(port)
     except:
         return False
+
+    if host in ("0.0.0.0", "::", ""):
+        targets = ["127.0.0.1"]
+    elif host == "localhost":
+        targets = ["127.0.0.1"]
+    else:
+        targets = [host]
+
+    for target in targets:
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(0.5)
+            result = s.connect_ex((target, port))
+            s.close()
+            if result == 0:
+                return True
+        except:
+            pass
+    return False
 
 def read_pid():
     try:
@@ -176,6 +193,22 @@ def pid_alive(pid):
     except:
         return False
 
+def configured_port_in_use():
+    cfg = read_settings()
+    return port_in_use(cfg.get("host"), cfg.get("port"))
+
+def cleanup_if_stale():
+    pid = read_pid()
+    if not pid:
+        return False
+    if pid_alive(pid):
+        return False
+    if configured_port_in_use():
+        return False
+    remove_pid()
+    remove_state()
+    return True
+
 def fmt_uptime(start_ts):
     if not start_ts:
         return "-"
@@ -194,8 +227,10 @@ def fmt_uptime(start_ts):
     return f"{h:02d}:{m:02d}:{s:02d}"
 
 def status():
+    cleanup_if_stale()
     pid = read_pid()
     st = read_state()
+
     if pid and pid_alive(pid):
         return {
             "running": True,
@@ -204,8 +239,19 @@ def status():
             "cmd": st.get("cmd"),
             "log": LOG_PATH
         }
-    if pid and not pid_alive(pid):
+
+    if configured_port_in_use():
+        return {
+            "running": True,
+            "pid": pid,
+            "started_at": st.get("started_at"),
+            "cmd": st.get("cmd"),
+            "log": LOG_PATH
+        }
+
+    if pid:
         remove_pid()
+    remove_state()
     return {
         "running": False,
         "pid": None,
@@ -308,11 +354,12 @@ def start_server():
 
 def stop_server(grace_seconds=6):
     pid = read_pid()
-    if not pid:
+
+    if not pid and not configured_port_in_use():
         remove_state()
         return True, "Already stopped."
 
-    if not pid_alive(pid):
+    if pid and not pid_alive(pid) and not configured_port_in_use():
         remove_pid()
         remove_state()
         return True, "Already stopped."
@@ -324,8 +371,12 @@ def stop_server(grace_seconds=6):
             else:
                 os.kill(int(target_pid), signal.SIGTERM)
             return True, None
+        except ProcessLookupError:
+            return True, None
+        except PermissionError:
+            return False, "Permission denied while sending SIGTERM."
         except Exception as e:
-            return False, e
+            return False, str(e)
 
     def kill_kill(target_pid):
         try:
@@ -334,32 +385,51 @@ def stop_server(grace_seconds=6):
             else:
                 os.kill(int(target_pid), signal.SIGKILL)
             return True, None
+        except ProcessLookupError:
+            return True, None
+        except PermissionError:
+            return False, "Permission denied while sending SIGKILL."
         except Exception as e:
-            return False, e
+            return False, str(e)
 
-    ok, err = kill_term(pid)
-    if not ok:
-        return False, f"Could not send SIGTERM: {err}"
+    if pid and pid_alive(pid):
+        ok, err = kill_term(pid)
+        if not ok:
+            if not configured_port_in_use():
+                remove_pid()
+                remove_state()
+                return True, "Stopped."
+            return False, f"Could not send SIGTERM: {err}"
 
     t0 = time.time()
     while time.time() - t0 < grace_seconds:
-        if not pid_alive(pid):
+        if not configured_port_in_use() and (not pid or not pid_alive(pid)):
             remove_pid()
             remove_state()
             return True, "Stopped."
         time.sleep(0.2)
 
-    ok, err = kill_kill(pid)
-    if not ok:
-        return False, f"Could not force stop (SIGKILL): {err}"
+    if pid and pid_alive(pid):
+        ok, err = kill_kill(pid)
+        if not ok:
+            if not configured_port_in_use():
+                remove_pid()
+                remove_state()
+                return True, "Stopped."
+            return False, f"Could not force stop (SIGKILL): {err}"
 
     t1 = time.time()
     while time.time() - t1 < 3:
-        if not pid_alive(pid):
+        if not configured_port_in_use() and (not pid or not pid_alive(pid)):
             remove_pid()
             remove_state()
             return True, "Stopped (forced)."
         time.sleep(0.2)
+
+    if not configured_port_in_use():
+        remove_pid()
+        remove_state()
+        return True, "Stopped."
 
     return False, "Stop failed: process still alive."
 
