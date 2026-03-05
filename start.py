@@ -613,7 +613,7 @@ ASCII_TITLE = r"""
 """.strip("\n")
 
 TITLE_WIDTH = max((len(r) for r in ASCII_TITLE.splitlines()), default=0)
-LINE_WIDTH = max(72, TITLE_WIDTH + 10)
+MIN_LINE_WIDTH = TITLE_WIDTH
 
 def draw_header():
     ensure_settings_file()
@@ -677,7 +677,7 @@ def print_urls_line():
     urls = server_urls()
     if not urls:
         return
-    print(lavender("─" * LINE_WIDTH))
+    print(lavender(hr()))
     print(bold("URL") + "      : " + gray("  ".join(urls)))
 
 def follow_log(path):
@@ -688,7 +688,7 @@ def follow_log(path):
         clear()
         print(bold("Peek terminal output"))
         print(dim("q = back, f = follow (live)"))
-        print(lavender("─" * LINE_WIDTH))
+        print(lavender(hr()))
         for ln in read_last_lines(path, 60):
             print(ln)
         print_urls_line()
@@ -698,7 +698,7 @@ def follow_log(path):
         clear()
         print(bold("Peek terminal output"))
         print(dim("Following... type q + Enter to stop"))
-        print(lavender("─" * LINE_WIDTH))
+        print(lavender(hr()))
         try:
             with open(path, "r", encoding="utf-8", errors="replace") as f:
                 f.seek(0, os.SEEK_END)
@@ -733,10 +733,10 @@ def follow_log(path):
 
 def term_width():
     try:
-        return max(68, min(92, shutil.get_terminal_size((80, 24)).columns))
+        return max(MIN_LINE_WIDTH, shutil.get_terminal_size((80, 24)).columns)
     except:
-        return min(LINE_WIDTH, 92)
-
+        return MIN_LINE_WIDTH
+    
 def hr(w=None):
     w = w or term_width()
     return "─" * w
@@ -748,7 +748,7 @@ def settings_menu():
         clear()
         cfg = read_settings()
         print(bold("Settings"))
-        print(lavender("─" * LINE_WIDTH))
+        print(lavender(hr()))
         print(f"{bold('1)')} Set port              {gray(str(cfg['port']))}")
         print(f"{bold('2)')} Set secret            {gray(mask_secret(cfg['secret_key']))}")
         print(f"{bold('3)')} Reset to defaults")
