@@ -218,13 +218,25 @@ def fmt_uptime(start_ts):
         return "-"
     if delta < 0:
         delta = 0
-    d = delta // 86400
-    h = (delta % 86400) // 3600
-    m = (delta % 3600) // 60
-    s = delta % 60
-    if d > 0:
-        return f"{d}d {h:02d}:{m:02d}:{s:02d}"
-    return f"{h:02d}:{m:02d}:{s:02d}"
+
+    months = delta // (30 * 86400)
+    delta %= 30 * 86400
+    days = delta // 86400
+    delta %= 86400
+    hours = delta // 3600
+    delta %= 3600
+    minutes = delta // 60
+    seconds = delta % 60
+
+    parts = []
+    if months > 0:
+        parts.append(f"{months}mo")
+    if days > 0 or months > 0:
+        parts.append(f"{days}d")
+    parts.append(f"{hours:02d}h")
+    parts.append(f"{minutes:02d}m")
+    parts.append(f"{seconds:02d}s")
+    return " ".join(parts)
 
 def status():
     cleanup_if_stale()
@@ -610,7 +622,8 @@ def draw_header():
     cfg = read_settings()
     started_at = st.get("started_at") if s["running"] else None
     up = fmt_uptime(started_at)
-    line = "─" * LINE_WIDTH
+    w = term_width()
+    line = hr(w)
 
     stat = green("RUNNING") if s["running"] else red("STOPPED")
     pid_txt = f"{s['pid']}" if s["running"] else "-"
@@ -619,7 +632,7 @@ def draw_header():
 
     print(lavender(line))
     for row in ASCII_TITLE.splitlines():
-        print(lavender(row.center(LINE_WIDTH)))
+        print(lavender(row.center(w)))
     print(lavender(line))
     print(f"{bold('Status')}   : {stat}    {bold('PID')}: {pid_txt}    {bold('Uptime')}: {up}")
     print(f"{bold('Version')}  : {gray(version_txt)}")
@@ -718,6 +731,16 @@ def follow_log(path):
             if cmd == "q":
                 continue
 
+def term_width():
+    try:
+        return max(68, min(92, shutil.get_terminal_size((80, 24)).columns))
+    except:
+        return min(LINE_WIDTH, 92)
+
+def hr(w=None):
+    w = w or term_width()
+    return "─" * w
+
 def settings_menu():
     ensure_settings_file()
 
@@ -771,18 +794,34 @@ def settings_menu():
         toast("Invalid selection.", False)
 
 def menu_action(choice):
-    if choice == "1":
+    c0 = (choice or "").strip().lower()
+    s = status()
+
+    can_start = not s["running"]
+    can_stop = s["running"]
+    can_update = not s["running"]
+
+    if c0 in ("s", "1"):
+        if not can_start:
+            toast("Server is already running.", False)
+            return
         ok, msg = start_server()
         toast(msg, ok)
         return
-    if choice == "2":
+
+    if c0 in ("t", "2"):
+        if not can_stop:
+            toast("Server is already stopped.", False)
+            return
         ok, msg = stop_server()
         toast(msg, ok)
         return
-    if choice == "3":
+
+    if c0 in ("l", "3"):
         follow_log(LOG_PATH)
         return
-    if choice == "4":
+
+    if c0 in ("c", "4"):
         try:
             info = check_for_update()
             if info["update_available"]:
@@ -792,8 +831,9 @@ def menu_action(choice):
         except Exception as e:
             toast(f"Version check failed: {e}", False)
         return
-    if choice == "5":
-        if status()["running"]:
+
+    if c0 in ("u", "5"):
+        if not can_update:
             toast("Stop the server before updating.", False)
             return
         ans = input(yellow("Type update to continue: ")).strip().lower()
@@ -806,24 +846,40 @@ def menu_action(choice):
         except Exception as e:
             toast(f"Update failed: {e}", False)
         return
-    if choice == "6":
+
+    if c0 in ("g", "6"):
         settings_menu()
         return
-    if choice == "0":
+
+    if c0 in ("q", "0"):
         clear()
         raise SystemExit
+
     toast("Invalid selection.", False)
 
 def show_menu_once():
     clear()
     draw_header()
-    print(f"{bold('1)')} Start server")
-    print(f"{bold('2)')} Stop server")
-    print(f"{bold('3)')} Peek terminal output")
-    print(f"{bold('4)')} Check for updates")
-    print(f"{bold('5)')} Update from GitHub")
-    print(f"{bold('6)')} Settings")
-    print(f"{bold('0)')} Exit")
+    s = status()
+
+    can_start = not s["running"]
+    can_stop = s["running"]
+    can_update = not s["running"]
+
+    def menu_line(key, label, enabled=True, note=""):
+        text = f"{bold(key)}  {label}"
+        if note:
+            text += f" {gray(note)}"
+        return text if enabled else dim(text)
+
+    print(bold("Actions"))
+    print(menu_line("S", "Start server", can_start, "(already running)" if not can_start else ""))
+    print(menu_line("T", "Stop server", can_stop, "(already stopped)" if not can_stop else ""))
+    print(menu_line("L", "Peek terminal output", True))
+    print(menu_line("C", "Check for updates", True))
+    print(menu_line("U", "Update from GitHub", can_update, "(stop server first)" if not can_update else ""))
+    print(menu_line("G", "Settings", True))
+    print(menu_line("Q", "Exit", True))
     print("")
     return input(bold("Select: ")).strip()
 
