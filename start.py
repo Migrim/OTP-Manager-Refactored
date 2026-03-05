@@ -274,8 +274,9 @@ def status():
 
 def ensure_log_file():
     try:
-        with open(LOG_PATH, "w", encoding="utf-8") as f:
-            f.write("")
+        if not os.path.exists(LOG_PATH):
+            with open(LOG_PATH, "a", encoding="utf-8") as f:
+                f.write("")
     except:
         pass
 
@@ -636,7 +637,8 @@ def draw_header():
     print(lavender(line))
     print(f"{bold('Status')}   : {stat}    {bold('PID')}: {pid_txt}    {bold('Uptime')}: {up}")
     print(f"{bold('Version')}  : {gray(version_txt)}")
-    print(f"{bold('Port')}     : {gray(str(cfg['port']))}    {bold('Secret')}: {gray(mask_secret(cfg['secret_key']))}")
+    print(f"{bold('Port')}     : {gray(str(cfg['port']))}")
+    print(f"{bold('Secret')}   : {gray(mask_secret(cfg['secret_key']))}")
     print(f"{bold('Log')}      : {gray(log_txt)}")
     print(lavender(line))
 
@@ -689,7 +691,8 @@ def follow_log(path):
         print(bold("Peek terminal output"))
         print(dim("q = back, f = follow (live)"))
         print(lavender(hr()))
-        for ln in read_last_lines(path, 60):
+        n = max(10, min(28, term_height() - 11))
+        for ln in read_last_lines(path, n):
             print(ln)
         print_urls_line()
         return input(dim("Command: ")).strip().lower()
@@ -736,6 +739,12 @@ def term_width():
         return max(MIN_LINE_WIDTH, shutil.get_terminal_size((80, 24)).columns)
     except:
         return MIN_LINE_WIDTH
+    
+def term_height():
+    try:
+        return max(12, shutil.get_terminal_size((80, 24)).lines)
+    except:
+        return 24
     
 def hr(w=None):
     w = w or term_width()
