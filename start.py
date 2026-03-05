@@ -30,6 +30,7 @@ def dim(s): return c(s, "2")
 def red(s): return c(s, "31")
 def green(s): return c(s, "32")
 def yellow(s): return c(s, "33")
+def lavender(s): return c(s, "38;5;183")
 def cyan(s): return c(s, "36")
 def gray(s): return c(s, "90")
 
@@ -247,24 +248,37 @@ def stop_server(grace_seconds=6):
 
     return False, "Stop failed: process still alive."
 
+ASCII_TITLE = r"""
+  ░██████   ░██████████░█████████     ░██████████                      ░██ 
+ ░██   ░██      ░██    ░██     ░██        ░██                          ░██ 
+░██     ░██     ░██    ░██     ░██        ░██     ░███████   ░███████  ░██ 
+░██     ░██     ░██    ░█████████         ░██    ░██    ░██ ░██    ░██ ░██ 
+░██     ░██     ░██    ░██                ░██    ░██    ░██ ░██    ░██ ░██ 
+ ░██   ░██      ░██    ░██                ░██    ░██    ░██ ░██    ░██ ░██ 
+  ░██████       ░██    ░██                ░██     ░███████   ░███████  ░██ 
+""".strip("\n")
+
+TITLE_WIDTH = max((len(r) for r in ASCII_TITLE.splitlines()), default=0)
+LINE_WIDTH = max(72, TITLE_WIDTH + 10)
+
 def draw_header():
     s = status()
     st = read_state()
     started_at = st.get("started_at") if s["running"] else None
     up = fmt_uptime(started_at)
-    line = "─" * 64
+    line = "─" * LINE_WIDTH
 
-    title = f"{bold('OTP-Tool Server Control')}"
     stat = green("RUNNING") if s["running"] else red("STOPPED")
     pid_txt = f"{s['pid']}" if s["running"] else "-"
     log_txt = LOG_PATH
 
-    print(cyan(line))
-    print(title)
-    print(cyan(line))
+    print(lavender(line))
+    for row in ASCII_TITLE.splitlines():
+        print(lavender(row.center(LINE_WIDTH)))
+    print(lavender(line))
     print(f"{bold('Status')}   : {stat}    {bold('PID')}: {pid_txt}    {bold('Uptime')}: {up}")
     print(f"{bold('Log')}      : {gray(log_txt)}")
-    print(cyan(line))
+    print(lavender(line))
 
 def toast(msg, ok=True):
     tag = green("✓") if ok else red("✗")
@@ -303,7 +317,7 @@ def print_urls_line():
     urls = server_urls()
     if not urls:
         return
-    print(cyan("─" * 64))
+    print(lavender("─" * LINE_WIDTH))
     print(bold("URL") + "      : " + gray("  ".join(urls)))
 
 def follow_log(path):
@@ -314,7 +328,7 @@ def follow_log(path):
         clear()
         print(bold("Peek terminal output"))
         print(dim("q = back, f = follow (live)"))
-        print(cyan("─" * 64))
+        print(lavender("─" * LINE_WIDTH))
         for ln in read_last_lines(path, 60):
             print(ln)
         print_urls_line()
@@ -324,7 +338,7 @@ def follow_log(path):
         clear()
         print(bold("Peek terminal output"))
         print(dim("Following... type q + Enter to stop"))
-        print(cyan("─" * 64))
+        print(lavender("─" * LINE_WIDTH))
         try:
             with open(path, "r", encoding="utf-8", errors="replace") as f:
                 f.seek(0, os.SEEK_END)
