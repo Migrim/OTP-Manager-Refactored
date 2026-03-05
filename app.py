@@ -17,6 +17,19 @@ app.secret_key = "your-very-secret-key"
 app.register_blueprint(api_bp, url_prefix="/api")
 DB_PATH = os.path.join("instance", "otp.db")
 
+VERSION_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "VERSION")
+INDEX_TEMPLATE_PRESENT = os.path.isfile(os.path.join(app.template_folder or "templates", "index.html"))
+
+def get_app_version():
+    try:
+        with open(VERSION_PATH, "r", encoding="utf-8") as f:
+            version = f.read().strip()
+            return version or "0.0.0"
+    except FileNotFoundError:
+        return "0.0.0"
+    except Exception:
+        return "0.0.0"
+
 def user_ref(user_id=None, username=None):
     try:
         if user_id is not None and username is None:
@@ -173,7 +186,8 @@ def inject_user():
         can_add_secrets=g.can_add_secrets,
         can_add_users=g.can_add_users,
         user_settings=g.user_settings,
-        show_index_button=INDEX_TEMPLATE_PRESENT
+        show_index_button=INDEX_TEMPLATE_PRESENT,
+        app_version=get_app_version()
     )
 
 @app.route("/login", methods=["GET", "POST"])
@@ -549,7 +563,6 @@ def maintenance_loop():
         time.sleep(3600)
 
 if __name__ == "__main__":
-    INDEX_TEMPLATE_PRESENT = os.path.isfile(os.path.join(app.template_folder or 'templates', 'index.html'))
     start_thread = (os.environ.get("WERKZEUG_RUN_MAIN") == "true") or not app.debug
     if start_thread:
         t = threading.Thread(target=maintenance_loop, daemon=True)
