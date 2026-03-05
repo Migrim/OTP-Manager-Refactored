@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, g, jsonify
 import sqlite3
+import json
 import os
 import uuid
 from datetime import datetime
@@ -13,9 +14,38 @@ from database import hourly_maintenance, acquire_lock, release_lock
 
 app = Flask(__name__)
 bcrypt.init_app(app)
-app.secret_key = "your-very-secret-key"
-app.register_blueprint(api_bp, url_prefix="/api")
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join("instance", "otp.db")
+SETTINGS_PATH = os.path.join(BASE_DIR, "settings.json")
+
+def load_app_settings():
+    defaults = {
+        "host": "0.0.0.0",
+        "port": 7440,
+        "secret_key": "change-this-secret"
+    }
+    try:
+        with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f) or {}
+    except:
+        data = {}
+    host = str(os.environ.get("OTP_HOST") or data.get("host") or defaults["host"]).strip() or defaults["host"]
+    try:
+        port = int(os.environ.get("OTP_PORT") or data.get("port") or defaults["port"])
+    except:
+        port = defaults["port"]
+    secret_key = str(os.environ.get("OTP_SECRET_KEY") or data.get("secret_key") or defaults["secret_key"]).strip() or defaults["secret_key"]
+    return {
+        "host": host,
+        "port": port,
+        "secret_key": secret_key
+    }
+
+APP_SETTINGS = load_app_settings()
+
+app.secret_key = APP_SETTINGS["secret_key"]
+app.register_blueprint(api_bp, url_prefix="/api")
 
 VERSION_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "VERSION")
 INDEX_TEMPLATE_PRESENT = os.path.isfile(os.path.join(app.template_folder or "templates", "index.html"))
@@ -567,4 +597,4 @@ if __name__ == "__main__":
     if start_thread:
         t = threading.Thread(target=maintenance_loop, daemon=True)
         t.start()
-    app.run(host="0.0.0.0", port=7440, debug=True, use_reloader=True)
+    app.run(host=APP_SETTINGS["host"], port=APP_SETTINGS["port"], debug=True, use_reloader=True)

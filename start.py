@@ -19,6 +19,7 @@ STATE_PATH = os.path.join(BASE_DIR, "otp-server.state.json")
 LOG_PATH = os.path.join(BASE_DIR, "otp-server.output.log")
 APP_PY_PATH = os.path.join(BASE_DIR, "app.py")
 VERSION_PATH = os.path.join(BASE_DIR, "VERSION")
+SETTINGS_PATH = os.path.join(BASE_DIR, "settings.json")
 
 PYTHON = sys.executable or "python3"
 APP_CMD = [PYTHON, os.path.join(BASE_DIR, "app.py")]
@@ -42,7 +43,8 @@ PROTECTED_NAMES = {
 PROTECTED_FILES = {
     os.path.basename(PID_PATH),
     os.path.basename(STATE_PATH),
-    os.path.basename(LOG_PATH)
+    os.path.basename(LOG_PATH),
+    os.path.basename(SETTINGS_PATH)
 }
 
 ANSI = sys.stdout.isatty()
@@ -65,6 +67,67 @@ def clear():
     if not ANSI:
         return
     os.system("cls" if os.name == "nt" else "clear")
+
+def get_default_settings():
+    return {
+        "host": "0.0.0.0",
+        "port": 7440,
+        "secret_key": "change-this-secret"
+    }
+
+def read_settings():
+    defaults = get_default_settings()
+    try:
+        with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f) or {}
+    except:
+        data = {}
+    host = str(data.get("host") or defaults["host"]).strip() or defaults["host"]
+    try:
+        port = int(data.get("port", defaults["port"]))
+    except:
+        port = defaults["port"]
+    secret_key = str(data.get("secret_key") or defaults["secret_key"]).strip() or defaults["secret_key"]
+    return {
+        "host": host,
+        "port": port,
+        "secret_key": secret_key
+    }
+
+def write_settings(data):
+    current = get_default_settings()
+    current.update(data or {})
+    with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
+        json.dump(current, f, ensure_ascii=False, indent=2)
+
+def ensure_settings_file():
+    if not os.path.exists(SETTINGS_PATH):
+        write_settings(get_default_settings())
+
+def mask_secret(secret):
+    secret = str(secret or "")
+    if not secret:
+        return "-"
+    if len(secret) <= 4:
+        return "*" * len(secret)
+    return secret[:2] + ("*" * (len(secret) - 4)) + secret[-2:]
+
+def valid_port(port):
+    try:
+        port = int(port)
+        return 1 <= port <= 65535
+    except:
+        return False
+
+def port_in_use(host, port):
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(0.5)
+        result = s.connect_ex((host, int(port)))
+        s.close()
+        return result == 0
+    except:
+        return False
 
 def read_pid():
     try:
@@ -159,21 +222,9 @@ def ensure_log_file():
         pass
 
 def parse_app_bind():
-    host = "127.0.0.1"
-    port = 7440
-    try:
-        with open(APP_PY_PATH, "r", encoding="utf-8", errors="replace") as f:
-            src = f.read()
-
-        m_port = re.search(r"app\.run\([\s\S]*?\bport\s*=\s*([0-9]{2,6})", src)
-        if m_port:
-            port = int(m_port.group(1))
-
-        m_host = re.search(r"app\.run\([\s\S]*?\bhost\s*=\s*(['\"])(.*?)\1", src)
-        if m_host:
-            host = m_host.group(2).strip()
-    except:
-        pass
+    cfg = read_settings()
+    host = cfg["host"]
+    port = cfg["port"]
     return host, port
 
 def detect_lan_ip():
@@ -204,6 +255,18 @@ def start_server():
         return True, f"Already running (PID {s['pid']})."
 
     ensure_log_file()
+    ensure_settings_file()
+
+    cfg = read_settings()
+    host = cfg["host"]
+    port = cfg["port"]
+    secret_key = cfg["secret_key"]
+
+    if not valid_port(port):
+        return False, f"Invalid port: {port}"
+
+    if port_in_use("127.0.0.1", port):
+        return False, f"Port {port} is already in use."
 
     try:
         logf = open(LOG_PATH, "w", encoding="utf-8", buffering=1)
@@ -212,6 +275,9 @@ def start_server():
 
     env = os.environ.copy()
     env.setdefault("PYTHONUNBUFFERED", "1")
+    env["OTP_HOST"] = str(host)
+    env["OTP_PORT"] = str(port)
+    env["OTP_SECRET_KEY"] = str(secret_key)
 
     try:
         p = subprocess.Popen(
@@ -234,9 +300,11 @@ def start_server():
     write_state({
         "started_at": time.time(),
         "cmd": APP_CMD,
-        "log": LOG_PATH
+        "log": LOG_PATH,
+        "host": host,
+        "port": port
     })
-    return True, f"Started (PID {p.pid})."
+    return True, f"Started (PID {p.pid}) on port {port}."
 
 def stop_server(grace_seconds=6):
     pid = read_pid()
@@ -249,10 +317,29 @@ def stop_server(grace_seconds=6):
         remove_state()
         return True, "Already stopped."
 
-    try:
-        os.kill(pid, signal.SIGTERM)
-    except Exception as e:
-        return False, f"Could not send SIGTERM: {e}"
+    def kill_term(target_pid):
+        try:
+            if os.name != "nt":
+                os.killpg(int(target_pid), signal.SIGTERM)
+            else:
+                os.kill(int(target_pid), signal.SIGTERM)
+            return True, None
+        except Exception as e:
+            return False, e
+
+    def kill_kill(target_pid):
+        try:
+            if os.name != "nt":
+                os.killpg(int(target_pid), signal.SIGKILL)
+            else:
+                os.kill(int(target_pid), signal.SIGKILL)
+            return True, None
+        except Exception as e:
+            return False, e
+
+    ok, err = kill_term(pid)
+    if not ok:
+        return False, f"Could not send SIGTERM: {err}"
 
     t0 = time.time()
     while time.time() - t0 < grace_seconds:
@@ -262,16 +349,17 @@ def stop_server(grace_seconds=6):
             return True, "Stopped."
         time.sleep(0.2)
 
-    try:
-        os.kill(pid, signal.SIGKILL)
-    except Exception as e:
-        return False, f"Could not force stop (SIGKILL): {e}"
+    ok, err = kill_kill(pid)
+    if not ok:
+        return False, f"Could not force stop (SIGKILL): {err}"
 
-    time.sleep(0.2)
-    if not pid_alive(pid):
-        remove_pid()
-        remove_state()
-        return True, "Stopped (forced)."
+    t1 = time.time()
+    while time.time() - t1 < 3:
+        if not pid_alive(pid):
+            remove_pid()
+            remove_state()
+            return True, "Stopped (forced)."
+        time.sleep(0.2)
 
     return False, "Stop failed: process still alive."
 
@@ -394,11 +482,11 @@ def apply_update_files(file_list):
         shutil.copy2(src, dst)
 
 def update_from_github():
+    if status()["running"]:
+        return False, "Stop the server before updating."
     info = check_for_update()
     if not info["update_available"]:
         return True, f"Already up to date ({info['local']})."
-
-    was_running = status()["running"]
 
     with tempfile.TemporaryDirectory(prefix="otp_update_") as temp_dir:
         zip_path = os.path.join(temp_dir, "update.zip")
@@ -411,11 +499,6 @@ def update_from_github():
         if not file_list:
             return False, "No update files found in downloaded archive."
 
-        if was_running:
-            ok, msg = stop_server()
-            if not ok:
-                return False, f"Update aborted. Could not stop server: {msg}"
-
         backed_up = []
         try:
             backed_up = backup_existing_files(file_list, backup_root)
@@ -425,8 +508,6 @@ def update_from_github():
                 restore_backup(backup_root, backed_up)
             except:
                 pass
-            if was_running:
-                start_server()
             return False, f"Update failed and rollback was attempted: {e}"
 
         new_local = read_local_version()
@@ -435,16 +516,9 @@ def update_from_github():
                 restore_backup(backup_root, backed_up)
             except:
                 pass
-            if was_running:
-                start_server()
             return False, "Update aborted because local VERSION did not update correctly."
 
-        restart_msg = ""
-        if was_running:
-            ok, msg = start_server()
-            restart_msg = f" Server restart: {msg}"
-
-        return True, f"Updated from {info['local']} to {info['remote']}.{restart_msg}"
+        return True, f"Updated from {info['local']} to {info['remote']}."
 
 ASCII_TITLE = r"""
   ░██████   ░██████████░█████████     ░██████████                      ░██ 
@@ -460,8 +534,10 @@ TITLE_WIDTH = max((len(r) for r in ASCII_TITLE.splitlines()), default=0)
 LINE_WIDTH = max(72, TITLE_WIDTH + 10)
 
 def draw_header():
+    ensure_settings_file()
     s = status()
     st = read_state()
+    cfg = read_settings()
     started_at = st.get("started_at") if s["running"] else None
     up = fmt_uptime(started_at)
     line = "─" * LINE_WIDTH
@@ -477,6 +553,7 @@ def draw_header():
     print(lavender(line))
     print(f"{bold('Status')}   : {stat}    {bold('PID')}: {pid_txt}    {bold('Uptime')}: {up}")
     print(f"{bold('Version')}  : {gray(version_txt)}")
+    print(f"{bold('Port')}     : {gray(str(cfg['port']))}    {bold('Secret')}: {gray(mask_secret(cfg['secret_key']))}")
     print(f"{bold('Log')}      : {gray(log_txt)}")
     print(lavender(line))
 
@@ -551,8 +628,6 @@ def follow_log(path):
                         cmd = sys.stdin.readline().strip().lower()
                         if cmd == "q":
                             return "q"
-                    else:
-                        pass
         except Exception as e:
             print(red(str(e)))
             print(dim("Press Enter..."), end="")
@@ -572,6 +647,58 @@ def follow_log(path):
             mode = "tail"
             if cmd == "q":
                 continue
+
+def settings_menu():
+    ensure_settings_file()
+
+    while True:
+        clear()
+        cfg = read_settings()
+        print(bold("Settings"))
+        print(lavender("─" * LINE_WIDTH))
+        print(f"{bold('1)')} Set port              {gray(str(cfg['port']))}")
+        print(f"{bold('2)')} Set secret            {gray(mask_secret(cfg['secret_key']))}")
+        print(f"{bold('3)')} Reset to defaults")
+        print(f"{bold('0)')} Back")
+        print("")
+        choice = input(bold("Select: ")).strip()
+
+        if choice == "1":
+            value = input("New port: ").strip()
+            if not valid_port(value):
+                toast("Invalid port. Use 1 to 65535.", False)
+                continue
+            value = int(value)
+            if status()["running"] and read_settings().get("port") != value:
+                toast("Stop the server before changing the port.", False)
+                continue
+            cfg["port"] = value
+            write_settings(cfg)
+            toast(f"Port saved: {value}", True)
+            continue
+
+        if choice == "2":
+            value = input("New secret: ").strip()
+            if len(value) < 8:
+                toast("Secret should be at least 8 characters long.", False)
+                continue
+            cfg["secret_key"] = value
+            write_settings(cfg)
+            toast("Secret saved.", True)
+            continue
+
+        if choice == "3":
+            if status()["running"]:
+                toast("Stop the server before resetting settings.", False)
+                continue
+            write_settings(get_default_settings())
+            toast("Settings reset.", True)
+            continue
+
+        if choice == "0":
+            return
+
+        toast("Invalid selection.", False)
 
 def menu_action(choice):
     if choice == "1":
@@ -596,6 +723,9 @@ def menu_action(choice):
             toast(f"Version check failed: {e}", False)
         return
     if choice == "5":
+        if status()["running"]:
+            toast("Stop the server before updating.", False)
+            return
         ans = input(yellow("Type update to continue: ")).strip().lower()
         if ans != "update":
             toast("Update cancelled.", False)
@@ -605,6 +735,9 @@ def menu_action(choice):
             toast(msg, ok)
         except Exception as e:
             toast(f"Update failed: {e}", False)
+        return
+    if choice == "6":
+        settings_menu()
         return
     if choice == "0":
         clear()
@@ -619,11 +752,13 @@ def show_menu_once():
     print(f"{bold('3)')} Peek terminal output")
     print(f"{bold('4)')} Check for updates")
     print(f"{bold('5)')} Update from GitHub")
+    print(f"{bold('6)')} Settings")
     print(f"{bold('0)')} Exit")
     print("")
     return input(bold("Select: ")).strip()
 
 def main():
+    ensure_settings_file()
     while True:
         clear()
         draw_header()
