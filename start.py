@@ -3,10 +3,14 @@ import sys
 import time
 import json
 import signal
+import shutil
+import zipfile
+import tempfile
 import subprocess
 from datetime import datetime
 import re
 import socket
+import urllib.request
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -14,9 +18,32 @@ PID_PATH = os.path.join(BASE_DIR, "otp-server.pid")
 STATE_PATH = os.path.join(BASE_DIR, "otp-server.state.json")
 LOG_PATH = os.path.join(BASE_DIR, "otp-server.output.log")
 APP_PY_PATH = os.path.join(BASE_DIR, "app.py")
+VERSION_PATH = os.path.join(BASE_DIR, "VERSION")
 
 PYTHON = sys.executable or "python3"
 APP_CMD = [PYTHON, os.path.join(BASE_DIR, "app.py")]
+
+GITHUB_OWNER = "Migrim"
+GITHUB_REPO = "OTP-Manager-Refactored"
+GITHUB_BRANCH = "main"
+
+REMOTE_VERSION_URL = f"https://raw.githubusercontent.com/{GITHUB_OWNER}/{GITHUB_REPO}/{GITHUB_BRANCH}/VERSION"
+REMOTE_ZIP_URL = f"https://codeload.github.com/{GITHUB_OWNER}/{GITHUB_REPO}/zip/refs/heads/{GITHUB_BRANCH}"
+
+PROTECTED_NAMES = {
+    "instance",
+    "logs",
+    ".git",
+    "__pycache__",
+    ".venv",
+    "venv"
+}
+
+PROTECTED_FILES = {
+    os.path.basename(PID_PATH),
+    os.path.basename(STATE_PATH),
+    os.path.basename(LOG_PATH)
+}
 
 ANSI = sys.stdout.isatty()
 
@@ -248,6 +275,177 @@ def stop_server(grace_seconds=6):
 
     return False, "Stop failed: process still alive."
 
+def read_local_version():
+    try:
+        with open(VERSION_PATH, "r", encoding="utf-8") as f:
+            return f.read().strip() or "0.0.0"
+    except:
+        return "0.0.0"
+
+def normalize_version(v):
+    v = str(v or "").strip()
+    if v.startswith("v") or v.startswith("V"):
+        v = v[1:]
+    return v
+
+def version_tuple(v):
+    v = normalize_version(v)
+    parts = re.findall(r"\d+", v)
+    if not parts:
+        return (0,)
+    return tuple(int(x) for x in parts)
+
+def fetch_text(url, timeout=10):
+    req = urllib.request.Request(url, headers={"User-Agent": "OTP-Tool-Updater"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        charset = r.headers.get_content_charset() or "utf-8"
+        return r.read().decode(charset, errors="replace")
+
+def download_file(url, dest_path, timeout=30):
+    req = urllib.request.Request(url, headers={"User-Agent": "OTP-Tool-Updater"})
+    with urllib.request.urlopen(req, timeout=timeout) as r, open(dest_path, "wb") as f:
+        shutil.copyfileobj(r, f)
+
+def get_remote_version():
+    txt = fetch_text(REMOTE_VERSION_URL, timeout=10).strip()
+    if not txt:
+        raise RuntimeError("Remote VERSION file is empty.")
+    return txt
+
+def check_for_update():
+    local_v = read_local_version()
+    remote_v = get_remote_version()
+    is_newer = version_tuple(remote_v) > version_tuple(local_v)
+    return {
+        "local": local_v,
+        "remote": remote_v,
+        "update_available": is_newer
+    }
+
+def is_protected_rel_path(rel_path):
+    rel_path = rel_path.replace("\\", "/").strip("/")
+    if not rel_path:
+        return True
+    parts = [p for p in rel_path.split("/") if p not in ("", ".")]
+    if not parts:
+        return True
+    if parts[0] in PROTECTED_NAMES:
+        return True
+    if any(p in PROTECTED_NAMES for p in parts):
+        return True
+    if len(parts) == 1 and parts[0] in PROTECTED_FILES:
+        return True
+    return False
+
+def safe_rel_path(path, root):
+    rel = os.path.relpath(path, root)
+    rel = rel.replace("\\", "/")
+    if rel.startswith("../") or rel == "..":
+        raise RuntimeError("Unsafe path detected.")
+    return rel
+
+def collect_update_files(source_root):
+    items = []
+    for root, dirs, files in os.walk(source_root):
+        dirs[:] = [d for d in dirs if d not in PROTECTED_NAMES and not d.startswith(".git")]
+        for name in files:
+            src = os.path.join(root, name)
+            if os.path.islink(src):
+                continue
+            rel = safe_rel_path(src, source_root)
+            if is_protected_rel_path(rel):
+                continue
+            items.append((src, rel))
+    return items
+
+def extract_repo_root(zip_path, temp_dir):
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        zf.extractall(temp_dir)
+    dirs = [os.path.join(temp_dir, x) for x in os.listdir(temp_dir)]
+    dirs = [d for d in dirs if os.path.isdir(d)]
+    if len(dirs) != 1:
+        raise RuntimeError("Could not detect extracted repository root.")
+    return dirs[0]
+
+def backup_existing_files(file_list, backup_root):
+    backed_up = []
+    for _, rel in file_list:
+        dst = os.path.join(BASE_DIR, rel)
+        if os.path.exists(dst):
+            backup_dst = os.path.join(backup_root, rel)
+            os.makedirs(os.path.dirname(backup_dst), exist_ok=True)
+            shutil.copy2(dst, backup_dst)
+            backed_up.append(rel)
+    return backed_up
+
+def restore_backup(backup_root, backed_up):
+    for rel in backed_up:
+        src = os.path.join(backup_root, rel)
+        dst = os.path.join(BASE_DIR, rel)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        shutil.copy2(src, dst)
+
+def apply_update_files(file_list):
+    for src, rel in file_list:
+        dst = os.path.join(BASE_DIR, rel)
+        parent = os.path.dirname(dst)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        shutil.copy2(src, dst)
+
+def update_from_github():
+    info = check_for_update()
+    if not info["update_available"]:
+        return True, f"Already up to date ({info['local']})."
+
+    was_running = status()["running"]
+
+    with tempfile.TemporaryDirectory(prefix="otp_update_") as temp_dir:
+        zip_path = os.path.join(temp_dir, "update.zip")
+        backup_root = os.path.join(temp_dir, "backup")
+
+        download_file(REMOTE_ZIP_URL, zip_path, timeout=60)
+        repo_root = extract_repo_root(zip_path, temp_dir)
+        file_list = collect_update_files(repo_root)
+
+        if not file_list:
+            return False, "No update files found in downloaded archive."
+
+        if was_running:
+            ok, msg = stop_server()
+            if not ok:
+                return False, f"Update aborted. Could not stop server: {msg}"
+
+        backed_up = []
+        try:
+            backed_up = backup_existing_files(file_list, backup_root)
+            apply_update_files(file_list)
+        except Exception as e:
+            try:
+                restore_backup(backup_root, backed_up)
+            except:
+                pass
+            if was_running:
+                start_server()
+            return False, f"Update failed and rollback was attempted: {e}"
+
+        new_local = read_local_version()
+        if version_tuple(new_local) < version_tuple(info["remote"]):
+            try:
+                restore_backup(backup_root, backed_up)
+            except:
+                pass
+            if was_running:
+                start_server()
+            return False, "Update aborted because local VERSION did not update correctly."
+
+        restart_msg = ""
+        if was_running:
+            ok, msg = start_server()
+            restart_msg = f" Server restart: {msg}"
+
+        return True, f"Updated from {info['local']} to {info['remote']}.{restart_msg}"
+
 ASCII_TITLE = r"""
   ░██████   ░██████████░█████████     ░██████████                      ░██ 
  ░██   ░██      ░██    ░██     ░██        ░██                          ░██ 
@@ -271,12 +469,14 @@ def draw_header():
     stat = green("RUNNING") if s["running"] else red("STOPPED")
     pid_txt = f"{s['pid']}" if s["running"] else "-"
     log_txt = LOG_PATH
+    version_txt = read_local_version()
 
     print(lavender(line))
     for row in ASCII_TITLE.splitlines():
         print(lavender(row.center(LINE_WIDTH)))
     print(lavender(line))
     print(f"{bold('Status')}   : {stat}    {bold('PID')}: {pid_txt}    {bold('Uptime')}: {up}")
+    print(f"{bold('Version')}  : {gray(version_txt)}")
     print(f"{bold('Log')}      : {gray(log_txt)}")
     print(lavender(line))
 
@@ -385,6 +585,27 @@ def menu_action(choice):
     if choice == "3":
         follow_log(LOG_PATH)
         return
+    if choice == "4":
+        try:
+            info = check_for_update()
+            if info["update_available"]:
+                toast(f"Update available: {info['local']} -> {info['remote']}", True)
+            else:
+                toast(f"Already up to date: {info['local']}", True)
+        except Exception as e:
+            toast(f"Version check failed: {e}", False)
+        return
+    if choice == "5":
+        ans = input(yellow("Type update to continue: ")).strip().lower()
+        if ans != "update":
+            toast("Update cancelled.", False)
+            return
+        try:
+            ok, msg = update_from_github()
+            toast(msg, ok)
+        except Exception as e:
+            toast(f"Update failed: {e}", False)
+        return
     if choice == "0":
         clear()
         raise SystemExit
@@ -396,6 +617,8 @@ def show_menu_once():
     print(f"{bold('1)')} Start server")
     print(f"{bold('2)')} Stop server")
     print(f"{bold('3)')} Peek terminal output")
+    print(f"{bold('4)')} Check for updates")
+    print(f"{bold('5)')} Update from GitHub")
     print(f"{bold('0)')} Exit")
     print("")
     return input(bold("Select: ")).strip()
