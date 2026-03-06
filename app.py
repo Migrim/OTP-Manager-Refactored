@@ -12,6 +12,11 @@ from logger import logger
 import threading
 from database import hourly_maintenance, acquire_lock, release_lock
 
+_LOGIN_MAX_ATTEMPTS = 5
+_LOGIN_LOCKOUT_SECONDS = 900 
+_login_attempts: dict = {}
+_login_lock = threading.Lock()
+
 app = Flask(__name__)
 bcrypt.init_app(app)
 
@@ -147,6 +152,33 @@ def row_to_settings(row):
         "show_including_admin_on_top": int(row[15] or 0),
     }
 
+def _is_rate_limited(ip: str) -> float | None:
+    with _login_lock:
+        entry = _login_attempts.get(ip)
+        if not entry:
+            return None
+        now = time.time()
+        if entry["locked_until"] and now < entry["locked_until"]:
+            return entry["locked_until"] - now
+        if now - entry["window_start"] > _LOGIN_LOCKOUT_SECONDS:
+            del _login_attempts[ip]
+        return None
+
+def _record_failed_login(ip: str):
+    now = time.time()
+    with _login_lock:
+        entry = _login_attempts.get(ip)
+        if not entry or now - entry["window_start"] > _LOGIN_LOCKOUT_SECONDS:
+            _login_attempts[ip] = {"count": 1, "window_start": now, "locked_until": 0.0}
+        else:
+            entry["count"] += 1
+            if entry["count"] >= _LOGIN_MAX_ATTEMPTS:
+                entry["locked_until"] = now + _LOGIN_LOCKOUT_SECONDS
+
+def _clear_login_attempts(ip: str):
+    with _login_lock:
+        _login_attempts.pop(ip, None)
+
 @app.errorhandler(404)
 def page_not_found(e):
     logger.warning(f"404 Error: {request.path} not found.")
@@ -230,6 +262,14 @@ def login():
         return redirect(url_for("home"))
 
     if request.method == "POST":
+        ip = request.remote_addr
+        remaining = _is_rate_limited(ip)
+        if remaining is not None:
+            wait_min = int(remaining // 60) + 1
+            logger.warning(f"Rate limit hit on /login from IP={ip} ({remaining:.0f}s remaining)")
+            flash(f"Too many failed login attempts. Try again in {wait_min} minute(s).", "error")
+            return redirect(url_for("login"))
+
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
         keep_logged_in = "keep_logged_in" in request.form
@@ -259,6 +299,7 @@ def login():
                     flash("Password has been migrated to a secure hash.", "info")
 
                 if bcrypt.check_password_hash(stored_password, password):
+                    _clear_login_attempts(ip)
                     session_token = str(uuid.uuid4())
                     session["user_id"] = user_id
                     session["is_admin"] = is_admin
@@ -280,10 +321,12 @@ def login():
                     logger.debug(f"Login processing complete for {user_ref(user_id=user_id, username=username)} duration_ms={dt}")
                     return redirect(url_for("home"))
                 else:
+                    _record_failed_login(ip)
                     logger.warning(f"{user_ref(username=username)} failed login: invalid password.")
                     flash("Invalid credentials!", "error")
                     return redirect(url_for("login"))
             else:
+                _record_failed_login(ip)
                 logger.warning(f"Login failed: username='{username}' not found.")
                 flash("User not found.", "error")
                 return redirect(url_for("login"))
