@@ -79,6 +79,18 @@ def wants_json_response():
     accept = request.headers.get("Accept", "")
     return "application/json" in accept and "text/html" not in accept
 
+@api_bp.before_request
+def require_login_for_api():
+    if getattr(g, "logged_in", False):
+        return None
+
+    logger.warning(f"{u(getattr(g, 'user_id', None))} unauthorized API access path={request.path}")
+    if wants_json_response():
+        return jsonify({"error": "Authentication required"}), 401
+
+    flash("You first need to Login.", "warning")
+    return redirect(url_for("login"))
+
 def _delete_secret_by_id(secret_id):
     with sqlite3.connect(DB_PATH) as db:
         cursor = db.cursor()

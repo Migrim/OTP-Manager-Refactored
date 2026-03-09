@@ -7,6 +7,9 @@ document.addEventListener("DOMContentLoaded", () => {
     async function loadCompanies() {
         try {
             const res = await fetch("/companies/json");
+            if (res.status === 403) {
+                return;
+            }
             if (!res.ok) throw new Error("Failed to fetch companies");
             companies = await res.json();
             populateDropdown(companies);

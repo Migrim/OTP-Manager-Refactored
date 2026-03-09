@@ -13,12 +13,6 @@
         filter: blur(6px);
         opacity: 0.5;
     }
-    .action-button.delete.disabled,
-    .action-button.delete:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-        filter: grayscale(0.2);
-    }
 </style>
 {% endblock %}
 
@@ -99,6 +93,7 @@
     const SHOW_TEXT_TIMER = {{ 1 if user_settings.show_timer else 0 }};
     const blur_on_inactive = {{ 1 if user_settings.blur_on_inactive else 0 }};
     const SHOW_INCLUDE_ADMIN_ON_TOP = {{ 1 if user_settings.show_including_admin_on_top else 0 }};
+    const CAN_EDIT_SECRETS = {{ 1 if can_edit else 0 }};
     const CAN_DELETE_SECRETS = {{ 1 if can_delete else 0 }};
     const visibleCards = new Set();
     let companyOptionsCache = null;
@@ -518,7 +513,7 @@
                         ` : ``}
                         <div class="otp-actions">
                             <button class="action-button copy" title="Copy"><span class="material-icons">content_copy</span></button>
-                            <button class="action-button edit" title="Edit"><span class="material-icons">edit</span></button>
+                            <button class="action-button edit${CAN_EDIT_SECRETS ? '' : ' disabled'}" title="${CAN_EDIT_SECRETS ? 'Edit' : 'No permission to edit'}" ${CAN_EDIT_SECRETS ? '' : 'disabled aria-disabled="true"'}><span class="material-icons">edit</span></button>
                             <button class="action-button delete${CAN_DELETE_SECRETS ? '' : ' disabled'}" title="${CAN_DELETE_SECRETS ? 'Delete' : 'No permission to delete'}" ${CAN_DELETE_SECRETS ? '' : 'disabled aria-disabled="true"'}><span class="material-icons">delete</span></button>
                             ${SHOW_TEXT_TIMER ? `` : `
                                 <svg class="countdown-circle" width="26" height="26" viewBox="0 0 36 36">
@@ -586,7 +581,7 @@
                         ` : ``}
                         <div class="otp-actions">
                             <button class="action-button copy" title="Copy"><span class="material-icons">content_copy</span></button>
-                            <button class="action-button edit" title="Edit"><span class="material-icons">edit</span></button>
+                            <button class="action-button edit${CAN_EDIT_SECRETS ? '' : ' disabled'}" title="${CAN_EDIT_SECRETS ? 'Edit' : 'No permission to edit'}" ${CAN_EDIT_SECRETS ? '' : 'disabled aria-disabled="true"'}><span class="material-icons">edit</span></button>
                             <button class="action-button delete${CAN_DELETE_SECRETS ? '' : ' disabled'}" title="${CAN_DELETE_SECRETS ? 'Delete' : 'No permission to delete'}" ${CAN_DELETE_SECRETS ? '' : 'disabled aria-disabled="true"'}><span class="material-icons">delete</span></button>
                             ${SHOW_TEXT_TIMER ? `` : `
                                 <svg class="countdown-circle" width="26" height="26" viewBox="0 0 36 36">
@@ -681,6 +676,7 @@
     function attachEditHandlers() {
         document.querySelectorAll('.otp-card .action-button.edit').forEach(btn => {
             btn.onclick = async (e) => {
+                if (!CAN_EDIT_SECRETS || btn.disabled) return;
                 const card = e.currentTarget.closest(".otp-card");
                 const secretId = card.dataset.id;
 

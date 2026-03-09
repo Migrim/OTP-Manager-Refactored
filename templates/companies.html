@@ -35,10 +35,18 @@
                     <span class="material-symbols-outlined">search</span>
                     <span class="search-count">{{ secret_count }}</span>
                 </button>
-                <button class="action-button edit" title="Edit Company">
+                <button
+                    class="action-button edit"
+                    title="{{ 'Edit Company' if can_edit else 'No permission to edit companies' }}"
+                    {% if not can_edit %}disabled aria-disabled="true"{% endif %}
+                >
                     <span class="material-icons">edit</span>
                 </button>
-                <button class="action-button delete" title="Delete Company">
+                <button
+                    class="action-button delete"
+                    title="{{ 'Delete Company' if can_delete_companies else 'No permission to delete companies' }}"
+                    {% if not can_delete_companies %}disabled aria-disabled="true"{% endif %}
+                >
                     <span class="material-icons">delete</span>
                 </button>
             </div>
@@ -180,6 +188,7 @@
 
     document.querySelectorAll(".action-button.edit").forEach(btn => {
         btn.onclick = (e) => {
+            if (btn.disabled) return;
             const card = e.currentTarget.closest(".user-card");
             const companyId = card.dataset.companyId;
             const name = card.dataset.companyName || "";

@@ -92,6 +92,22 @@
     border-color: #649aff;
 }
 
+.action-button.edit:disabled {
+    background-color: #ececec;
+    border-color: #d3d3d3;
+    color: #9a9a9a;
+    cursor: not-allowed;
+}
+
+.action-button.edit:disabled .material-icons {
+    color: #9a9a9a;
+}
+
+.action-button.edit:disabled:hover {
+    background-color: #ececec;
+    border-color: #d3d3d3;
+}
+
 .action-button.delete {
     background-color: #ffd6d4;
     border-color: #f28b89;
@@ -101,6 +117,22 @@
 .action-button.delete:hover {
     background-color: #ffc2bf;
     border-color: #e46360;
+}
+
+.action-button.delete:disabled {
+    background-color: #ececec;
+    border-color: #d3d3d3;
+    color: #9a9a9a;
+    cursor: not-allowed;
+}
+
+.action-button.delete:disabled .material-icons {
+    color: #9a9a9a;
+}
+
+.action-button.delete:disabled:hover {
+    background-color: #ececec;
+    border-color: #d3d3d3;
 }
 
 .dark-mode .user-card {
@@ -144,6 +176,22 @@
     border-color: #92b4ff;
 }
 
+.dark-mode .action-button.edit:disabled {
+    background-color: #3a3a3a;
+    border-color: #555;
+    color: #7d7d7d;
+    cursor: not-allowed;
+}
+
+.dark-mode .action-button.edit:disabled .material-icons {
+    color: #7d7d7d;
+}
+
+.dark-mode .action-button.edit:disabled:hover {
+    background-color: #3a3a3a;
+    border-color: #555;
+}
+
 .dark-mode .action-button.delete {
     background-color: #a14f4f;
     border-color: #c96c6c;
@@ -153,6 +201,22 @@
 .dark-mode .action-button.delete:hover {
     background-color: #ba6868;
     border-color: #e48787;
+}
+
+.dark-mode .action-button.delete:disabled {
+    background-color: #3a3a3a;
+    border-color: #555;
+    color: #7d7d7d;
+    cursor: not-allowed;
+}
+
+.dark-mode .action-button.delete:disabled .material-icons {
+    color: #7d7d7d;
+}
+
+.dark-mode .action-button.delete:disabled:hover {
+    background-color: #3a3a3a;
+    border-color: #555;
 }
 .user-status {
     font-size: 0.85rem;

@@ -58,13 +58,15 @@
     
         <div class="navbar-right">
             {% if is_logged_in %}
-                <div class="search-box" id="company-dropdown-container">
-                    <div class="select-wrapper">
-                        <select id="companyDropdown" aria-label="Select company">
-                            <option value="" class="placeholder-option">Select Company...</option>
-                        </select>
+                {% if can_add_companies %}
+                    <div class="search-box" id="company-dropdown-container">
+                        <div class="select-wrapper">
+                            <select id="companyDropdown" aria-label="Select company">
+                                <option value="" class="placeholder-option">Select Company...</option>
+                            </select>
+                        </div>
                     </div>
-                </div>
+                {% endif %}
                 
                 <div class="search-box-otp" id="search-otp-container">
                     <div id="search-otp-fake" class="otp-search-placeholder-text">Search</div>

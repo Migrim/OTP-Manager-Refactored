@@ -397,6 +397,10 @@ def companies():
 @app.route("/companies/json")
 @login_required
 def companies_json():
+    if not has_permission("can_add_companies"):
+        logger.warning(f"{u(g.user_id)} attempted to access /companies/json without permission.")
+        return jsonify({"error": "Missing permission: can_add_companies"}), 403
+
     with sqlite3.connect(DB_PATH) as db:
         cursor = db.cursor()
         cursor.execute("SELECT company_id, name FROM companies ORDER BY name ASC")
