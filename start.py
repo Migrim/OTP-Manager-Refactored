@@ -7,10 +7,21 @@ import shutil
 import zipfile
 import tempfile
 import subprocess
+import threading
 from datetime import datetime
 import re
 import socket
 import urllib.request
+try:
+    import termios
+    import tty
+except Exception:
+    termios = None
+    tty = None
+try:
+    import msvcrt
+except Exception:
+    msvcrt = None
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -48,6 +59,15 @@ PROTECTED_FILES = {
 }
 
 ANSI = sys.stdout.isatty()
+BOOT_UPDATE_LOCK = threading.Lock()
+BOOT_UPDATE_STATUS = {
+    "state": "idle",   # idle | checking | done | error
+    "info": None,
+    "error": None
+}
+SYSTEM_METRICS_LOCK = threading.Lock()
+SYSTEM_METRICS_CACHE = {"ts": 0.0, "data": None}
+CPU_SNAPSHOT = None
 
 def c(s, code):
     if not ANSI:
@@ -62,6 +82,39 @@ def yellow(s): return c(s, "33")
 def lavender(s): return c(s, "38;5;183")
 def cyan(s): return c(s, "36")
 def gray(s): return c(s, "90")
+def color8(s, n): return c(s, f"38;5;{int(n)}")
+
+def clamp(v, lo=0.0, hi=100.0):
+    try:
+        x = float(v)
+    except:
+        return lo
+    return max(lo, min(hi, x))
+
+def metric_color_code(pct):
+    p = clamp(pct)
+    if p < 55:
+        return 77   # green
+    if p < 75:
+        return 149  # lime/yellow
+    if p < 88:
+        return 214  # orange
+    return 196      # red
+
+def progress_bar(pct, width=16):
+    p = clamp(pct)
+    filled = int(round((p / 100.0) * width))
+    filled = max(0, min(width, filled))
+    bar = ("█" * filled) + ("░" * (width - filled))
+    if filled <= 0:
+        return gray(bar)
+    return color8(bar, metric_color_code(p))
+
+def fmt_size_gib(num_bytes):
+    try:
+        return f"{(float(num_bytes) / (1024.0 ** 3)):.1f}G"
+    except:
+        return "n/a"
 
 def clear():
     if not ANSI:
@@ -86,6 +139,8 @@ def read_settings():
     try:
         port = int(data.get("port", defaults["port"]))
     except:
+        port = defaults["port"]
+    if not valid_port(port):
         port = defaults["port"]
     secret_key = str(data.get("secret_key") or defaults["secret_key"]).strip() or defaults["secret_key"]
     return {
@@ -130,16 +185,16 @@ def port_in_use(host, port):
     if host in ("0.0.0.0", "::", ""):
         targets = ["127.0.0.1"]
     elif host == "localhost":
-        targets = ["127.0.0.1"]
+        targets = ["127.0.0.1", "::1"]
     else:
         targets = [host]
 
     for target in targets:
         try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(0.5)
-            result = s.connect_ex((target, port))
-            s.close()
+            family = socket.AF_INET6 if ":" in target else socket.AF_INET
+            with socket.socket(family, socket.SOCK_STREAM) as s:
+                s.settimeout(0.5)
+                result = s.connect_ex((target, port))
             if result == 0:
                 return True
         except:
@@ -355,6 +410,27 @@ def start_server():
             pass
         return False, f"Failed to start: {e}"
 
+    # Wait briefly so we do not report success when the app exits immediately.
+    deadline = time.time() + 1.2
+    while time.time() < deadline:
+        rc = p.poll()
+        if rc is not None:
+            try:
+                logf.close()
+            except:
+                pass
+            tail = "\n".join(read_last_lines(LOG_PATH, n=12))
+            msg = f"Process exited during startup (code {rc})."
+            if tail:
+                msg += f"\nLast log lines:\n{tail}"
+            return False, msg
+        time.sleep(0.1)
+
+    try:
+        logf.close()
+    except:
+        pass
+
     write_pid(p.pid)
     write_state({
         "started_at": time.time(),
@@ -493,6 +569,154 @@ def check_for_update():
         "update_available": is_newer
     }
 
+def read_cpu_percent():
+    global CPU_SNAPSHOT
+    if sys.platform.startswith("linux"):
+        try:
+            with open("/proc/stat", "r", encoding="utf-8") as f:
+                line = f.readline().strip()
+            parts = line.split()
+            if len(parts) < 5 or parts[0] != "cpu":
+                return None
+            vals = [int(x) for x in parts[1:8]]
+            idle = vals[3] + vals[4]
+            total = sum(vals)
+            prev = CPU_SNAPSHOT
+            CPU_SNAPSHOT = (total, idle)
+            if not prev:
+                return None
+            dt = total - prev[0]
+            di = idle - prev[1]
+            if dt <= 0:
+                return None
+            return clamp((1.0 - (di / float(dt))) * 100.0)
+        except:
+            return None
+    try:
+        load1 = os.getloadavg()[0]
+        cores = os.cpu_count() or 1
+        return clamp((load1 / float(cores)) * 100.0)
+    except:
+        return None
+
+def read_ram_percent_and_detail():
+    if sys.platform.startswith("linux"):
+        try:
+            mem = {}
+            with open("/proc/meminfo", "r", encoding="utf-8") as f:
+                for ln in f:
+                    if ":" not in ln:
+                        continue
+                    k, v = ln.split(":", 1)
+                    mem[k.strip()] = int(v.strip().split()[0]) * 1024
+            total = mem.get("MemTotal")
+            avail = mem.get("MemAvailable")
+            if total and avail is not None and total > 0:
+                used = total - avail
+                pct = clamp((used / float(total)) * 100.0)
+                return pct, f"{fmt_size_gib(used)}/{fmt_size_gib(total)}"
+        except:
+            pass
+    if sys.platform == "darwin":
+        try:
+            total = int(subprocess.check_output(
+                ["sysctl", "-n", "hw.memsize"],
+                text=True
+            ).strip())
+            vm = subprocess.check_output(["vm_stat"], text=True)
+            m = re.search(r"page size of (\d+) bytes", vm)
+            page_size = int(m.group(1)) if m else 4096
+            pages = {}
+            for ln in vm.splitlines():
+                if ":" not in ln:
+                    continue
+                k, v = ln.split(":", 1)
+                token = v.strip().split()[0].strip(".")
+                try:
+                    pages[k.strip()] = int(token)
+                except:
+                    continue
+            avail_pages = (
+                pages.get("Pages free", 0)
+                + pages.get("Pages inactive", 0)
+                + pages.get("Pages speculative", 0)
+            )
+            avail = avail_pages * page_size
+            used = max(0, total - avail)
+            if total > 0:
+                pct = clamp((used / float(total)) * 100.0)
+                return pct, f"{fmt_size_gib(used)}/{fmt_size_gib(total)}"
+        except:
+            pass
+    try:
+        page = os.sysconf("SC_PAGE_SIZE")
+        total_pages = os.sysconf("SC_PHYS_PAGES")
+        avail_pages = os.sysconf("SC_AVPHYS_PAGES")
+        total = int(page) * int(total_pages)
+        avail = int(page) * int(avail_pages)
+        if total > 0:
+            used = total - avail
+            pct = clamp((used / float(total)) * 100.0)
+            return pct, f"{fmt_size_gib(used)}/{fmt_size_gib(total)}"
+    except:
+        pass
+    return None, None
+
+def read_storage_percent_and_detail():
+    try:
+        du = shutil.disk_usage(BASE_DIR)
+        used = du.total - du.free
+        pct = clamp((used / float(du.total)) * 100.0) if du.total > 0 else None
+        return pct, f"{fmt_size_gib(used)}/{fmt_size_gib(du.total)}"
+    except:
+        return None, None
+
+def get_system_metrics():
+    now = time.time()
+    with SYSTEM_METRICS_LOCK:
+        ts = SYSTEM_METRICS_CACHE.get("ts", 0.0)
+        data = SYSTEM_METRICS_CACHE.get("data")
+        if data and (now - ts) < 1.0:
+            return data
+
+    cpu_pct = read_cpu_percent()
+    ram_pct, ram_detail = read_ram_percent_and_detail()
+    disk_pct, disk_detail = read_storage_percent_and_detail()
+    out = {
+        "cpu_pct": cpu_pct,
+        "ram_pct": ram_pct,
+        "ram_detail": ram_detail,
+        "disk_pct": disk_pct,
+        "disk_detail": disk_detail
+    }
+    with SYSTEM_METRICS_LOCK:
+        SYSTEM_METRICS_CACHE["ts"] = now
+        SYSTEM_METRICS_CACHE["data"] = out
+    return out
+
+def start_boot_update_check():
+    with BOOT_UPDATE_LOCK:
+        if BOOT_UPDATE_STATUS["state"] in ("checking", "done"):
+            return
+        BOOT_UPDATE_STATUS["state"] = "checking"
+        BOOT_UPDATE_STATUS["info"] = None
+        BOOT_UPDATE_STATUS["error"] = None
+
+    def worker():
+        try:
+            info = check_for_update()
+            with BOOT_UPDATE_LOCK:
+                BOOT_UPDATE_STATUS["state"] = "done"
+                BOOT_UPDATE_STATUS["info"] = info
+                BOOT_UPDATE_STATUS["error"] = None
+        except Exception as e:
+            with BOOT_UPDATE_LOCK:
+                BOOT_UPDATE_STATUS["state"] = "error"
+                BOOT_UPDATE_STATUS["info"] = None
+                BOOT_UPDATE_STATUS["error"] = str(e)
+
+    threading.Thread(target=worker, daemon=True).start()
+
 def is_protected_rel_path(rel_path):
     rel_path = rel_path.replace("\\", "/").strip("/")
     if not rel_path:
@@ -613,8 +837,139 @@ ASCII_TITLE = r"""
   ░██████       ░██    ░██                ░██     ░███████   ░███████  ░██ 
 """.strip("\n")
 
-TITLE_WIDTH = max((len(r) for r in ASCII_TITLE.splitlines()), default=0)
-MIN_LINE_WIDTH = TITLE_WIDTH
+ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+MIN_LINE_WIDTH = 80
+
+def strip_ansi(s):
+    return ANSI_RE.sub("", str(s or ""))
+
+def visible_len(s):
+    return len(strip_ansi(s))
+
+def pad_visible(s, width):
+    text = str(s or "")
+    return text + (" " * max(0, width - visible_len(text)))
+
+def center_visible(s, width):
+    text = str(s or "")
+    v = visible_len(text)
+    if v >= width:
+        return text
+    left = (width - v) // 2
+    right = width - v - left
+    return (" " * left) + text + (" " * right)
+
+def shorten_middle(text, max_len):
+    s = str(text or "")
+    if max_len <= 0:
+        return ""
+    if len(s) <= max_len:
+        return s
+    if max_len <= 3:
+        return "." * max_len
+    keep = max_len - 3
+    left = keep // 2
+    right = keep - left
+    return s[:left] + "..." + s[-right:]
+
+def get_terminal_size():
+    try:
+        ts = shutil.get_terminal_size((100, 30))
+        return max(60, ts.columns), max(18, ts.lines)
+    except:
+        return 100, 30
+
+def print_centered(line, total_width):
+    left = max(0, (total_width - visible_len(line)) // 2)
+    print((" " * left) + line)
+
+def render_box(title, lines, hint=None):
+    tw, th = get_terminal_size()
+    body = list(lines or [])
+    widths = [visible_len(x) for x in body]
+    if title:
+        widths.append(visible_len(title) + 4)
+    if hint:
+        widths.append(visible_len(hint))
+    inner_w = min(max(widths + [54]), max(40, tw - 8))
+
+    top = lavender("┌" + ("─" * (inner_w + 2)) + "┐")
+    bottom = lavender("└" + ("─" * (inner_w + 2)) + "┘")
+    boxed = [top]
+
+    if title:
+        title_text = f" {title} "
+        t_line = f"│ {pad_visible(title_text, inner_w)} │"
+        boxed.append(lavender(t_line))
+        boxed.append(lavender("├" + ("─" * (inner_w + 2)) + "┤"))
+
+    for line in body:
+        boxed.append(lavender("│ ") + pad_visible(line, inner_w) + lavender(" │"))
+
+    if hint:
+        boxed.append(lavender("├" + ("─" * (inner_w + 2)) + "┤"))
+        boxed.append(lavender("│ ") + pad_visible(dim(hint), inner_w) + lavender(" │"))
+
+    boxed.append(bottom)
+
+    clear()
+    pad_top = max(0, (th - len(boxed)) // 2)
+    for _ in range(pad_top):
+        print("")
+    for row in boxed:
+        print_centered(row, tw)
+
+def print_centered_box(lines, title=None, hint=None, width=None):
+    tw, _ = get_terminal_size()
+    body = list(lines or [])
+    widths = [visible_len(x) for x in body]
+    if title:
+        widths.append(visible_len(title) + 4)
+    if hint:
+        widths.append(visible_len(hint))
+    inner_w = width if width else min(max(widths + [52]), max(40, tw - 12))
+
+    top = lavender("┌" + ("─" * (inner_w + 2)) + "┐")
+    bottom = lavender("└" + ("─" * (inner_w + 2)) + "┘")
+    print_centered(top, tw)
+    if title:
+        t_line = f"│ {pad_visible(f' {title} ', inner_w)} │"
+        print_centered(lavender(t_line), tw)
+        print_centered(lavender("├" + ("─" * (inner_w + 2)) + "┤"), tw)
+    for line in body:
+        row = lavender("│ ") + pad_visible(line, inner_w) + lavender(" │")
+        print_centered(row, tw)
+    if hint:
+        print_centered(lavender("├" + ("─" * (inner_w + 2)) + "┤"), tw)
+        row = lavender("│ ") + pad_visible(dim(hint), inner_w) + lavender(" │")
+        print_centered(row, tw)
+    print_centered(bottom, tw)
+
+def build_dashboard_lines():
+    ensure_settings_file()
+    s = status()
+    st = read_state()
+    cfg = read_settings()
+    started_at = st.get("started_at") if s["running"] else None
+    up = fmt_uptime(started_at)
+    stat = green("RUNNING") if s["running"] else red("STOPPED")
+    pid_txt = f"{s['pid']}" if s["running"] else "-"
+    version_txt = read_local_version()
+
+    lines = [
+        f"{bold('Status')} : {stat}",
+        f"{bold('PID')}    : {pid_txt}",
+        f"{bold('Uptime')} : {up}",
+        f"{bold('Version')}: {gray(version_txt)}",
+        f"{bold('Port')}   : {gray(str(cfg['port']))}",
+        f"{bold('Secret')} : {gray(mask_secret(cfg['secret_key']))}",
+        f"{bold('Log')}    : {gray(LOG_PATH)}",
+    ]
+    urls = server_urls()
+    if urls:
+        lines.append("")
+        lines.append(f"{bold('URL')}    : {gray('  '.join(urls))}")
+    return lines
 
 def draw_header():
     ensure_settings_file()
@@ -624,30 +979,94 @@ def draw_header():
     started_at = st.get("started_at") if s["running"] else None
     up = fmt_uptime(started_at)
     w = term_width()
-    line = hr(w)
 
     stat = green("RUNNING") if s["running"] else red("STOPPED")
     pid_txt = f"{s['pid']}" if s["running"] else "-"
-    log_txt = LOG_PATH
     version_txt = read_local_version()
+    status_box_width = 86
 
-    print(lavender(line))
+    clear()
     for row in ASCII_TITLE.splitlines():
         print(lavender(row.center(w)))
-    print(lavender(line))
-    print(f"{bold('Status')}   : {stat}    {bold('PID')}: {pid_txt}    {bold('Uptime')}: {up}")
-    print(f"{bold('Version')}  : {gray(version_txt)}")
-    print(f"{bold('Port')}     : {gray(str(cfg['port']))}")
-    print(f"{bold('Secret')}   : {gray(mask_secret(cfg['secret_key']))}")
-    print(f"{bold('Log')}      : {gray(log_txt)}")
-    print(lavender(line))
+
+    row_one = f"{bold('Status')}: {stat}    {bold('PID')}: {pid_txt}"
+    row_two = f"{bold('Uptime')}: {up}    {bold('Version')}: {gray(version_txt)}"
+    log_display = shorten_middle(LOG_PATH, max(24, status_box_width - 12))
+    with BOOT_UPDATE_LOCK:
+        upd_state = BOOT_UPDATE_STATUS.get("state")
+        upd_info = BOOT_UPDATE_STATUS.get("info")
+        upd_error = BOOT_UPDATE_STATUS.get("error")
+    if upd_state == "checking":
+        frames = ["|", "/", "-", "\\"]
+        spin = frames[int(time.time() * 6) % len(frames)]
+        update_line = f"{bold('Update')}  : {yellow(f'{spin} Checking on boot...')}"
+    elif upd_state == "done" and isinstance(upd_info, dict):
+        if upd_info.get("update_available"):
+            update_text = f"Available {upd_info.get('local')} -> {upd_info.get('remote')}"
+            update_line = f"{bold('Update')}  : {yellow(update_text)}"
+        else:
+            update_text = f"Up to date ({upd_info.get('local')})"
+            update_line = f"{bold('Update')}  : {green(update_text)}"
+    elif upd_state == "error":
+        err_short = shorten_middle(upd_error or "Unknown error", 52)
+        update_line = f"{bold('Update')}  : {red('Check failed')} {gray(err_short)}"
+    else:
+        update_line = f"{bold('Update')}  : {gray('Not checked yet')}"
+
+    info_lines = [
+        center_visible(row_one, status_box_width),
+        center_visible(row_two, status_box_width),
+        center_visible(gray("─" * 34), status_box_width),
+        "",
+        update_line,
+        f"{bold('Port')}    : {gray(str(cfg['port']))}",
+        f"{bold('Secret')}  : {gray(mask_secret(cfg['secret_key']))}",
+        f"{bold('Log')}     : {gray(log_display)}",
+    ]
+    urls = server_urls()
+    if urls:
+        info_lines.append(f"{bold('URL')}     : {gray('  '.join(urls))}")
+    sysm = get_system_metrics()
+    cpu_pct = sysm.get("cpu_pct")
+    ram_pct = sysm.get("ram_pct")
+    ram_detail = sysm.get("ram_detail")
+    disk_pct = sysm.get("disk_pct")
+    disk_detail = sysm.get("disk_detail")
+
+    def bar_line(label, pct, detail=None):
+        name = f"{label:>4}"
+        bar_w = 16
+        if pct is None:
+            empty = gray("░" * bar_w)
+            detail_txt = gray(detail) if detail else ""
+            return f"{bold(name)} : {empty}  n/a  {detail_txt}".rstrip()
+        p = int(round(clamp(pct)))
+        base = f"{bold(name)} : {progress_bar(p, width=bar_w)}  {p:>3d}%"
+        if detail:
+            base += f" {gray(detail)}"
+        return base
+
+    info_lines.append("")
+    info_lines.append(f"{bold('System')}  : {gray('CPU / RAM / Storage')}")
+    info_lines.append(bar_line("CPU", cpu_pct))
+    info_lines.append(bar_line("RAM", ram_pct, ram_detail))
+    info_lines.append(bar_line("Disk", disk_pct, disk_detail))
+
+    print("")
+    print_centered_box(
+        info_lines,
+        title="Server Status",
+        hint="Auto refresh every 5s. Press Enter to open menu.",
+        width=status_box_width
+    )
 
 def toast(msg, ok=True):
     tag = green("✓") if ok else red("✗")
     print("")
     print(f"{tag} {msg}")
-    print(dim("Press Enter to continue..."), end="")
-    input()
+    print(dim("Press any key to continue..."), end="", flush=True)
+    wait_for_any_key()
+    print("")
 
 def read_last_lines(path, n=60):
     try:
@@ -675,6 +1094,151 @@ def select_readable(timeout):
         time.sleep(timeout)
         return []
 
+def read_menu_key():
+    if os.name == "nt" and msvcrt:
+        ch = msvcrt.getwch()
+        if ch in ("\r", "\n"):
+            return "enter"
+        if ch in ("\x00", "\xe0"):
+            k = msvcrt.getwch()
+            if k == "H":
+                return "up"
+            if k == "P":
+                return "down"
+            return None
+        if ch == "\x1b":
+            return "esc"
+        return ch.lower()
+
+    if termios and tty and sys.stdin.isatty():
+        fd = sys.stdin.fileno()
+        old = termios.tcgetattr(fd)
+        try:
+            import select
+            tty.setraw(fd)
+            first = os.read(fd, 1)
+            if not first:
+                return None
+            ch = first.decode("utf-8", errors="ignore")
+            if ch in ("\r", "\n"):
+                return "enter"
+            if ch == "\x1b":
+                # VSCode terminal can deliver the rest of ESC sequences a few ms later.
+                seq = b""
+                t_end = time.time() + 0.22
+                while time.time() < t_end:
+                    r, _, _ = select.select([fd], [], [], 0.03)
+                    if not r:
+                        continue
+                    chunk = os.read(fd, 8)
+                    if not chunk:
+                        break
+                    seq += chunk
+                    if b"A" in seq or b"B" in seq:
+                        break
+                if seq.startswith(b"[") and len(seq) >= 2:
+                    code = chr(seq[1])
+                    if code == "A":
+                        return "up"
+                    if code == "B":
+                        return "down"
+                if seq.startswith(b"O") and len(seq) >= 2:
+                    code = chr(seq[1])
+                    if code == "A":
+                        return "up"
+                    if code == "B":
+                        return "down"
+                return "esc"
+            return ch.lower()
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
+    txt = input().strip().lower()
+    return txt[:1] if txt else "enter"
+
+def wait_for_any_key():
+    if os.name == "nt" and msvcrt:
+        _ = msvcrt.getwch()
+        return
+    if termios and tty and sys.stdin.isatty():
+        fd = sys.stdin.fileno()
+        old = termios.tcgetattr(fd)
+        try:
+            tty.setraw(fd)
+            _ = os.read(fd, 1)
+            return
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
+    input()
+
+def read_line_allow_escape(prompt):
+    print(prompt, end="", flush=True)
+
+    if os.name == "nt" and msvcrt:
+        buf = []
+        while True:
+            ch = msvcrt.getwch()
+            if ch in ("\r", "\n"):
+                print("")
+                return "".join(buf)
+            if ch == "\x1b":
+                print("")
+                return None
+            if ch in ("\b", "\x7f"):
+                if buf:
+                    buf.pop()
+                    print("\b \b", end="", flush=True)
+                continue
+            if ch in ("\x00", "\xe0"):
+                _ = msvcrt.getwch()
+                continue
+            if ch and ch.isprintable():
+                buf.append(ch)
+                print(ch, end="", flush=True)
+
+    if termios and tty and sys.stdin.isatty():
+        import select
+        fd = sys.stdin.fileno()
+        old = termios.tcgetattr(fd)
+        try:
+            tty.setraw(fd)
+            buf = []
+            while True:
+                b = os.read(fd, 1)
+                if not b:
+                    print("")
+                    return "".join(buf)
+                if b in (b"\r", b"\n"):
+                    print("")
+                    return "".join(buf)
+                if b in (b"\x7f", b"\x08"):
+                    if buf:
+                        buf.pop()
+                        print("\b \b", end="", flush=True)
+                    continue
+                if b == b"\x1b":
+                    # If more bytes follow quickly, this is likely an escape sequence.
+                    r, _, _ = select.select([fd], [], [], 0.03)
+                    if r:
+                        _ = os.read(fd, 8)
+                        continue
+                    print("")
+                    return None
+                ch = b.decode("utf-8", errors="ignore")
+                if ch and ch.isprintable():
+                    buf.append(ch)
+                    print(ch, end="", flush=True)
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
+    try:
+        value = input()
+    except EOFError:
+        return None
+    if value.strip().lower() == "esc":
+        return None
+    return value
+
 def print_urls_line():
     urls = server_urls()
     if not urls:
@@ -685,40 +1249,69 @@ def print_urls_line():
 def follow_log(path):
     ensure_log_file()
     mode = "tail"
+    urls_text = "  ".join(server_urls())
 
     def show_tail():
-        clear()
-        print(bold("Peek terminal output"))
-        print(dim("q = back, f = follow (live)"))
-        print(lavender(hr()))
-        n = max(10, min(28, term_height() - 11))
-        for ln in read_last_lines(path, n):
-            print(ln)
-        print_urls_line()
-        return input(dim("Command: ")).strip().lower()
+        n = max(10, min(22, term_height() - 14))
+        lines = read_last_lines(path, n)
+        body = []
+        if lines:
+            body.extend(lines)
+        else:
+            body.append(dim("No terminal output yet."))
+        if urls_text:
+            body.append("")
+            body.append(f"{bold('URL')} : {gray(urls_text)}")
+        body.append("")
+        body.append(dim("Q/B/Esc = back    F = follow live    R = refresh"))
+        render_box("Terminal Output", body, "Use arrow-style menu keys here too.")
+
+        key = read_menu_key()
+        if key in ("q", "b", "esc"):
+            return "q"
+        if key == "f":
+            return "f"
+        return "r"
 
     def show_follow():
-        clear()
-        print(bold("Peek terminal output"))
-        print(dim("Following... type q + Enter to stop"))
-        print(lavender(hr()))
-        try:
-            with open(path, "r", encoding="utf-8", errors="replace") as f:
-                f.seek(0, os.SEEK_END)
-                while True:
-                    line = f.readline()
-                    if line:
-                        print(line.rstrip("\n"))
-                        continue
-                    if sys.stdin in select_readable(0.25):
-                        cmd = sys.stdin.readline().strip().lower()
-                        if cmd == "q":
-                            return "q"
-        except Exception as e:
-            print(red(str(e)))
-            print(dim("Press Enter..."), end="")
-            input()
-            return "q"
+        while True:
+            n = max(10, min(22, term_height() - 14))
+            lines = read_last_lines(path, n)
+            body = []
+            if lines:
+                body.extend(lines)
+            else:
+                body.append(dim("No terminal output yet."))
+            if urls_text:
+                body.append("")
+                body.append(f"{bold('URL')} : {gray(urls_text)}")
+            body.append("")
+            body.append(dim("LIVE MODE: auto-refresh"))
+            body.append(dim("Q/B/Esc = back    R = refresh now"))
+            render_box("Live Terminal Output", body, "Updates automatically.")
+
+            try:
+                if os.name == "nt" and msvcrt:
+                    t_end = time.time() + 0.18
+                    while time.time() < t_end:
+                        if msvcrt.kbhit():
+                            key = read_menu_key()
+                            if key in ("q", "b", "esc"):
+                                return "q"
+                            break
+                        time.sleep(0.03)
+                    continue
+
+                key = None
+                if sys.stdin in select_readable(0.18):
+                    key = read_menu_key()
+                if key in ("q", "b", "esc"):
+                    return "q"
+            except Exception as e:
+                print(red(str(e)))
+                print(dim("Press any key..."), end="", flush=True)
+                wait_for_any_key()
+                return "q"
 
     while True:
         if mode == "tail":
@@ -750,23 +1343,107 @@ def hr(w=None):
     w = w or term_width()
     return "─" * w
 
+def run_with_spinner(label, fn, *args, **kwargs):
+    if not ANSI:
+        print(dim(f"{label}..."))
+        return fn(*args, **kwargs)
+
+    done = threading.Event()
+    result = {}
+    error = {}
+    frames = ["|", "/", "-", "\\"]
+
+    def worker():
+        try:
+            result["value"] = fn(*args, **kwargs)
+        except Exception as e:
+            error["exc"] = e
+        finally:
+            done.set()
+
+    def spin():
+        i = 0
+        while not done.wait(0.1):
+            frame = frames[i % len(frames)]
+            text = f"\r{cyan(frame)} {label}..."
+            print(text, end="", flush=True)
+            i += 1
+        clear_line = "\r" + (" " * max(24, len(label) + 8)) + "\r"
+        print(clear_line, end="", flush=True)
+
+    t_work = threading.Thread(target=worker, daemon=True)
+    t_spin = threading.Thread(target=spin, daemon=True)
+    t_work.start()
+    t_spin.start()
+    t_work.join()
+    t_spin.join()
+
+    if "exc" in error:
+        raise error["exc"]
+    return result.get("value")
+
 def settings_menu():
     ensure_settings_file()
 
+    items = [
+        {"key": "1", "choice": "1", "label": "Set port"},
+        {"key": "2", "choice": "2", "label": "Set secret"},
+        {"key": "3", "choice": "3", "label": "Reset to defaults"},
+        {"key": "B", "choice": "0", "label": "Back"},
+    ]
+
+    shortcuts = {it["key"]: it["choice"] for it in items}
+    shortcuts["b"] = "0"
+    shortcuts["q"] = "0"
+    selected = 0
+
     while True:
-        clear()
         cfg = read_settings()
-        print(bold("Settings"))
-        print(lavender(hr()))
-        print(f"{bold('1)')} Set port              {gray(str(cfg['port']))}")
-        print(f"{bold('2)')} Set secret            {gray(mask_secret(cfg['secret_key']))}")
-        print(f"{bold('3)')} Reset to defaults")
-        print(f"{bold('0)')} Back")
-        print("")
-        choice = input(bold("Select: ")).strip()
+        lines = [
+            f"{bold('Current Port')}   : {gray(str(cfg['port']))}",
+            f"{bold('Current Secret')} : {gray(mask_secret(cfg['secret_key']))}",
+            "",
+        ]
+
+        for idx, it in enumerate(items):
+            marker = "▶" if idx == selected else " "
+            label = f"{it['key']}  {it['label']}"
+            line = f"{marker} {label}"
+            if idx == selected:
+                line = cyan(line)
+            lines.append(line)
+
+        lines.append("")
+        lines.append(dim("Use ↑/↓ + Enter, or press 1/2/3/0 directly."))
+        render_box("Settings", lines, "Esc also goes back.")
+
+        key = read_menu_key()
+        if key == "up":
+            selected = (selected - 1) % len(items)
+            continue
+        if key == "down":
+            selected = (selected + 1) % len(items)
+            continue
+        if key == "enter":
+            choice = items[selected]["choice"]
+        elif key == "esc":
+            choice = "0"
+        elif key in shortcuts:
+            choice = shortcuts[key]
+        else:
+            continue
 
         if choice == "1":
-            value = input("New port: ").strip()
+            tw, _ = get_terminal_size()
+            prompt = (" " * max(0, (tw - 24) // 2)) + "New port: "
+            value = read_line_allow_escape(prompt)
+            if value is None:
+                toast("Port change cancelled.", False)
+                continue
+            value = value.strip()
+            if value.lower() == "b":
+                toast("Port change cancelled.", False)
+                continue
             if not valid_port(value):
                 toast("Invalid port. Use 1 to 65535.", False)
                 continue
@@ -814,7 +1491,7 @@ def menu_action(choice):
         if not can_start:
             toast("Server is already running.", False)
             return
-        ok, msg = start_server()
+        ok, msg = run_with_spinner("Starting server", start_server)
         toast(msg, ok)
         return
 
@@ -822,7 +1499,7 @@ def menu_action(choice):
         if not can_stop:
             toast("Server is already stopped.", False)
             return
-        ok, msg = stop_server()
+        ok, msg = run_with_spinner("Stopping server", stop_server)
         toast(msg, ok)
         return
 
@@ -860,52 +1537,87 @@ def menu_action(choice):
         settings_menu()
         return
 
-    if c0 in ("q", "0"):
-        clear()
-        raise SystemExit
+    if c0 in ("b", "0", "q"):
+        return "back"
 
     toast("Invalid selection.", False)
 
 def show_menu_once():
-    clear()
-    draw_header()
     s = status()
 
     can_start = not s["running"]
     can_stop = s["running"]
     can_update = not s["running"]
 
-    def menu_line(key, label, enabled=True, note=""):
-        text = f"{bold(key)}  {label}"
-        if note:
-            text += f" {gray(note)}"
-        return text if enabled else dim(text)
+    items = [
+        {"key": "S", "num": "1", "choice": "s", "label": "Start server", "enabled": can_start, "note": "(already running)"},
+        {"key": "T", "num": "2", "choice": "t", "label": "Stop server", "enabled": can_stop, "note": "(already stopped)"},
+        {"key": "L", "num": "3", "choice": "l", "label": "Peek terminal output", "enabled": True, "note": ""},
+        {"key": "C", "num": "4", "choice": "c", "label": "Check for updates", "enabled": True, "note": ""},
+        {"key": "U", "num": "5", "choice": "u", "label": "Update from GitHub", "enabled": can_update, "note": "(stop server first)"},
+        {"key": "G", "num": "6", "choice": "g", "label": "Settings", "enabled": True, "note": ""},
+        {"key": "B", "num": "0", "choice": "b", "label": "Back to main screen", "enabled": True, "note": ""},
+    ]
 
-    print(bold("Actions"))
-    print(menu_line("S", "Start server", can_start, "(already running)" if not can_start else ""))
-    print(menu_line("T", "Stop server", can_stop, "(already stopped)" if not can_stop else ""))
-    print(menu_line("L", "Peek terminal output", True))
-    print(menu_line("C", "Check for updates", True))
-    print(menu_line("U", "Update from GitHub", can_update, "(stop server first)" if not can_update else ""))
-    print(menu_line("G", "Settings", True))
-    print(menu_line("Q", "Exit", True))
-    print("")
-    return input(bold("Select: ")).strip()
+    shortcuts = {}
+    for it in items:
+        shortcuts[it["choice"]] = it["choice"]
+        shortcuts[it["key"].lower()] = it["choice"]
+        shortcuts[it["num"]] = it["choice"]
+    shortcuts["q"] = "b"
+
+    selected = 0
+
+    while True:
+        lines = []
+        for idx, it in enumerate(items):
+            marker = "▶" if idx == selected else " "
+            base = f"{it['key']}  {it['label']}"
+            if it["note"] and not it["enabled"]:
+                base += f" {gray(it['note'])}"
+            line = f"{marker} {base}"
+            if idx == selected:
+                line = cyan(line)
+            if not it["enabled"]:
+                line = dim(line)
+            lines.append(line)
+        lines.append("")
+        lines.append(dim("Use ↑/↓ + Enter, or press shortcut keys directly."))
+        lines.append(dim("Shortcuts: 1=S, 2=T, 3=L, 4=C, 5=U, 6=G, 0=B"))
+
+        render_box("Menu", lines, "Esc also goes back.")
+        key = read_menu_key()
+
+        if key == "up":
+            selected = (selected - 1) % len(items)
+            continue
+        if key == "down":
+            selected = (selected + 1) % len(items)
+            continue
+        if key == "enter":
+            return items[selected]["choice"]
+        if key == "esc":
+            return "b"
+        if key in shortcuts:
+            return shortcuts[key]
 
 def main():
     ensure_settings_file()
+    start_boot_update_check()
     while True:
-        clear()
         draw_header()
-        print(dim("Auto refresh every 5s. Press Enter to open menu."))
-        r = select_readable(5.0)
+        wait_seconds = 5.0
+        with BOOT_UPDATE_LOCK:
+            if BOOT_UPDATE_STATUS.get("state") == "checking":
+                wait_seconds = 0.12
+        r = select_readable(wait_seconds)
         if r:
             _ = sys.stdin.readline()
-            choice = show_menu_once()
-            try:
-                menu_action(choice)
-            except SystemExit:
-                return
+            while True:
+                choice = show_menu_once()
+                result = menu_action(choice)
+                if result == "back":
+                    break
 
 if __name__ == "__main__":
     main()
