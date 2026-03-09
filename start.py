@@ -61,7 +61,7 @@ PROTECTED_FILES = {
 ANSI = sys.stdout.isatty()
 BOOT_UPDATE_LOCK = threading.Lock()
 BOOT_UPDATE_STATUS = {
-    "state": "idle",   # idle | checking | done | error
+    "state": "idle",   
     "info": None,
     "error": None
 }
@@ -94,12 +94,12 @@ def clamp(v, lo=0.0, hi=100.0):
 def metric_color_code(pct):
     p = clamp(pct)
     if p < 55:
-        return 77   # green
+        return 77   
     if p < 75:
-        return 149  # lime/yellow
+        return 149  
     if p < 88:
-        return 214  # orange
-    return 196      # red
+        return 214  
+    return 196      
 
 def progress_bar(pct, width=16):
     p = clamp(pct)
@@ -410,7 +410,6 @@ def start_server():
             pass
         return False, f"Failed to start: {e}"
 
-    # Wait briefly so we do not report success when the app exits immediately.
     deadline = time.time() + 1.2
     while time.time() < deadline:
         rc = p.poll()
@@ -985,10 +984,6 @@ def draw_header():
     version_txt = read_local_version()
     status_box_width = 86
 
-    clear()
-    for row in ASCII_TITLE.splitlines():
-        print(lavender(row.center(w)))
-
     row_one = f"{bold('Status')}: {stat}    {bold('PID')}: {pid_txt}"
     row_two = f"{bold('Uptime')}: {up}    {bold('Version')}: {gray(version_txt)}"
     log_display = shorten_middle(LOG_PATH, max(24, status_box_width - 12))
@@ -1052,6 +1047,16 @@ def draw_header():
     info_lines.append(bar_line("RAM", ram_pct, ram_detail))
     info_lines.append(bar_line("Disk", disk_pct, disk_detail))
 
+    clear()
+    _, term_h = get_terminal_size()
+    ascii_h = len(ASCII_TITLE.splitlines())
+    box_h = len(info_lines) + 6  
+    total_h = ascii_h + 1 + box_h
+    top_pad = max(0, (term_h - total_h) // 2)
+    for _ in range(top_pad):
+        print("")
+    for row in ASCII_TITLE.splitlines():
+        print(lavender(row.center(w)))
     print("")
     print_centered_box(
         info_lines,
@@ -1123,7 +1128,6 @@ def read_menu_key():
             if ch in ("\r", "\n"):
                 return "enter"
             if ch == "\x1b":
-                # VSCode terminal can deliver the rest of ESC sequences a few ms later.
                 seq = b""
                 t_end = time.time() + 0.22
                 while time.time() < t_end:
@@ -1217,7 +1221,6 @@ def read_line_allow_escape(prompt):
                         print("\b \b", end="", flush=True)
                     continue
                 if b == b"\x1b":
-                    # If more bytes follow quickly, this is likely an escape sequence.
                     r, _, _ = select.select([fd], [], [], 0.03)
                     if r:
                         _ = os.read(fd, 8)
