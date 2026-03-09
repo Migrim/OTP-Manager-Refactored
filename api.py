@@ -456,9 +456,9 @@ def update_user_permissions():
         if not row:
             logger.warning(f"{u(getattr(g, 'user_id', None))} update_user_permissions id={target_id} result=not_found")
             return jsonify({"error": "User not found"}), 404
-        if bool(row[1]):
-            logger.warning(f"{u(getattr(g, 'user_id', None))} update_user_permissions id={target_id} result=forbidden_admin_locked")
-            flash("Admin permissions are locked and cannot be changed.", "error")
+        if str(row[0]).strip().lower() == "admin":
+            logger.warning(f"{u(getattr(g, 'user_id', None))} update_user_permissions id={target_id} result=forbidden_builtin_admin_locked")
+            flash("Permissions for user admin are locked and cannot be changed.", "error")
             return redirect("/users")
 
         cursor.execute("""

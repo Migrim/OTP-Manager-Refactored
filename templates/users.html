@@ -46,9 +46,9 @@
                 {% if is_admin %}
                 <button
                     class="action-button edit open-rights-modal"
-                    title="{{ 'Admin permissions are locked' if user_is_admin else 'Manage Rights' }}"
+                    title="{{ 'Permissions for user admin are locked' if username|lower == 'admin' else 'Manage Rights' }}"
                     type="button"
-                    {% if user_is_admin %}disabled aria-disabled="true"{% endif %}
+                    {% if username|lower == 'admin' %}disabled aria-disabled="true"{% endif %}
                 >
                     <span class="material-icons">tune</span>
                 </button>
