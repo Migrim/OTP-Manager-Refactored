@@ -55,14 +55,24 @@
         <button type="button" class="action-btn copy-btn" title="Copy OTP" aria-label="Copy OTP">
           <span class="material-symbols-outlined" aria-hidden="true">content_copy</span>
         </button>
-        <button type="button" class="action-btn edit-btn" title="Edit entry" aria-label="Edit entry">
+        <button
+          type="button"
+          class="action-btn edit-btn"
+          title="{{ 'Edit entry' if can_edit else 'No permission to edit' }}"
+          aria-label="Edit entry"
+          {% if not can_edit %}disabled aria-disabled="true"{% endif %}
+        >
           <span class="material-symbols-outlined" aria-hidden="true">edit</span>
         </button>
-        {% if session.get('is_admin') %}
-        <button type="button" class="action-btn delete-btn" title="Delete entry" aria-label="Delete entry">
+        <button
+          type="button"
+          class="action-btn delete-btn"
+          title="{{ 'Delete entry' if can_delete else 'No permission to delete' }}"
+          aria-label="Delete entry"
+          {% if not can_delete %}disabled aria-disabled="true"{% endif %}
+        >
           <span class="material-symbols-outlined" aria-hidden="true">delete</span>
         </button>
-        {% endif %}
         </div>
       </td>
     </tr>
@@ -75,11 +85,16 @@
 <div class="bulk-bar" id="bulkBar" hidden>
   <div class="bulk-bar-inner">
     <div class="bulk-count" id="bulkCount">0 selected</div>
-    {% if session.get('is_admin') %}
-    <button type="button" class="bulk-btn bulk-delete" id="bulkDeleteBtn" title="Bulk Delete" aria-label="Bulk Delete">
+    <button
+      type="button"
+      class="bulk-btn bulk-delete"
+      id="bulkDeleteBtn"
+      title="{{ 'Bulk Delete' if can_delete else 'No permission to delete' }}"
+      aria-label="Bulk Delete"
+      {% if not can_delete %}disabled aria-disabled="true"{% endif %}
+    >
       <span class="material-symbols-outlined" aria-hidden="true">delete</span>
     </button>
-    {% endif %}
     <button type="button" class="bulk-btn bulk-pdf" id="bulkPdfBtn" title="PDF Export" aria-label="PDF Export">
       <span class="material-symbols-outlined" aria-hidden="true">picture_as_pdf</span>
     </button>
@@ -146,6 +161,9 @@
 
 <script>
   document.addEventListener("DOMContentLoaded", () => {
+    const CAN_EDIT = {{ 1 if can_edit else 0 }};
+    const CAN_DELETE = {{ 1 if can_delete else 0 }};
+
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
         if (editOtpModal && !editOtpModal.hidden) {
@@ -416,6 +434,7 @@
     if (editOtpForm) {
       editOtpForm.addEventListener("submit", async (e) => {
         e.preventDefault();
+        if (!CAN_EDIT) return;
         validateNameInput(editNameInput);
         if (!editNameInput.checkValidity()) {
           editNameInput.reportValidity();
@@ -452,6 +471,7 @@
 
     if (bulkDeleteBtn) {
       bulkDeleteBtn.addEventListener("click", async () => {
+        if (!CAN_DELETE || bulkDeleteBtn.disabled) return;
         const selectedRows = getSelectedRows();
         if (!selectedRows.length) return;
 
@@ -615,6 +635,7 @@
 
           if (editBtn && secretId) {
             editBtn.onclick = async () => {
+              if (!CAN_EDIT || editBtn.disabled) return;
               try {
                 await openEditModalForSecret(secretId);
               } catch (err) {
@@ -626,6 +647,7 @@
 
           if (deleteBtn && secretId) {
             deleteBtn.onclick = async () => {
+              if (!CAN_DELETE || deleteBtn.disabled) return;
               const ok = await openDeleteConfirm(
                 `Type <strong>confirm</strong> to delete <strong>${escapeHtml(match.name)}</strong>.`
               );
@@ -914,6 +936,22 @@
   font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
 }
 
+.action-btn:disabled {
+  background: #ececec;
+  border-color: #d3d3d3;
+  color: #9a9a9a;
+  cursor: not-allowed;
+}
+
+.action-btn:disabled .material-symbols-outlined {
+  color: #9a9a9a;
+}
+
+.action-btn:disabled:hover {
+  background: #ececec;
+  border-color: #d3d3d3;
+  color: #9a9a9a;
+}
 
 .delete-btn:hover {
   background: #fff1f2;
@@ -931,6 +969,23 @@
   background: #2a2136;
   border-color: #6f56a0;
   color: #d8c4ff;
+}
+
+.dark-mode .action-btn:disabled {
+  background: #3a3a3a;
+  border-color: #555;
+  color: #7d7d7d;
+  cursor: not-allowed;
+}
+
+.dark-mode .action-btn:disabled .material-symbols-outlined {
+  color: #7d7d7d;
+}
+
+.dark-mode .action-btn:disabled:hover {
+  background: #3a3a3a;
+  border-color: #555;
+  color: #7d7d7d;
 }
 
 .dark-mode .delete-btn:hover {
@@ -1152,6 +1207,19 @@
     color: #c71515;
 }
 
+.bulk-btn:disabled {
+    background-color: #ececec;
+    border-color: #d3d3d3;
+    color: #9a9a9a;
+    cursor: not-allowed;
+}
+
+.bulk-btn:disabled:hover {
+    background-color: #ececec;
+    border-color: #d3d3d3;
+    color: #9a9a9a;
+}
+
 .dark-mode .bulk-bar-inner {
     background: rgba(24, 24, 24, 0.94);
     border-color: #343434;
@@ -1184,6 +1252,19 @@
     background-color: #ba6868;
     border-color: #e48787;
     color: #ffd6d6;
+}
+
+.dark-mode .bulk-btn:disabled {
+    background-color: #3a3a3a;
+    border-color: #555;
+    color: #7d7d7d;
+    cursor: not-allowed;
+}
+
+.dark-mode .bulk-btn:disabled:hover {
+    background-color: #3a3a3a;
+    border-color: #555;
+    color: #7d7d7d;
 }
 
 .otp-row:nth-child(1) { animation-delay: 0.05s; }
