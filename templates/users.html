@@ -44,7 +44,12 @@
                 </button>
 
                 {% if is_admin %}
-                <button class="action-button edit open-rights-modal" title="Manage Rights" type="button">
+                <button
+                    class="action-button edit open-rights-modal"
+                    title="{{ 'Admin permissions are locked' if user_is_admin else 'Manage Rights' }}"
+                    type="button"
+                    {% if user_is_admin %}disabled aria-disabled="true"{% endif %}
+                >
                     <span class="material-icons">tune</span>
                 </button>
                 {% endif %}
@@ -310,6 +315,7 @@
 
     document.querySelectorAll(".open-rights-modal").forEach(btn => {
         btn.onclick = (e) => {
+            if (btn.disabled) return;
             const userCard = e.currentTarget.closest(".user-card");
 
             document.getElementById("rights-user-id").value = userCard.dataset.userId;

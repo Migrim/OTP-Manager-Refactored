@@ -451,11 +451,15 @@ def update_user_permissions():
 
     with sqlite3.connect(DB_PATH) as db:
         cursor = db.cursor()
-        cursor.execute("SELECT username FROM users WHERE id = ?", (target_id,))
+        cursor.execute("SELECT username, is_admin FROM users WHERE id = ?", (target_id,))
         row = cursor.fetchone()
         if not row:
             logger.warning(f"{u(getattr(g, 'user_id', None))} update_user_permissions id={target_id} result=not_found")
             return jsonify({"error": "User not found"}), 404
+        if bool(row[1]):
+            logger.warning(f"{u(getattr(g, 'user_id', None))} update_user_permissions id={target_id} result=forbidden_admin_locked")
+            flash("Admin permissions are locked and cannot be changed.", "error")
+            return redirect("/users")
 
         cursor.execute("""
             UPDATE users
