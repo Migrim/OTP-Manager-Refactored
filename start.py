@@ -1071,7 +1071,7 @@ def draw_header():
     print_centered_box(
         info_lines,
         title="OTP Manager",
-        hint="↵ Open menu   X Exit",
+        hint="↵ Enter | Open menu   X Exit",
         width=status_box_width
     )
 
