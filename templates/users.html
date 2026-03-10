@@ -132,11 +132,6 @@
                 </span>
             </div>
 
-            <label class="add-user-checkbox">
-                <input type="checkbox" name="is_admin">
-                Administrator
-            </label>
-
             <div class="add-user-button-row">
                 <button type="submit">Add User</button>
             </div>
@@ -302,7 +297,7 @@
     const deleteUserUsername = document.getElementById("delete-user-username");
 
     function usesAnimatedModal(modal) {
-        return modal === resetPasswordModal || modal === confirmDeleteModal || modal === rightsModal;
+        return modal === addUserModal || modal === resetPasswordModal || modal === confirmDeleteModal || modal === rightsModal;
     }
 
     function setModal(modal, show) {

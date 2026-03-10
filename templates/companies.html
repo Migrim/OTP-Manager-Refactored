@@ -148,24 +148,33 @@
         };
     }
 
-    document.getElementById("openAddCompanyModal").onclick = () => {
-        document.getElementById("addCompanyModal").style.display = "flex";
-    };
-
-    document.getElementById("closeAddCompanyModal").onclick = () => {
-        document.getElementById("addCompanyModal").style.display = "none";
-    };
-
-    window.onclick = (e) => {
-        if (e.target.id === "addCompanyModal") {
-            document.getElementById("addCompanyModal").style.display = "none";
-        }
-    };
-
+    const addCompanyModal = document.getElementById("addCompanyModal");
     const confirmDeleteCompanyModal = document.getElementById("confirmDeleteCompanyModal");
     const editCompanyModal = document.getElementById("editCompanyModal");
     const deleteCompanyNameText = document.getElementById("delete-company-name-text");
     const editCompanyNameText = document.getElementById("edit-company-name-text");
+
+    function openAddCompanyModal() {
+        addCompanyModal.classList.add("is-open");
+    }
+
+    function closeAddCompanyModal() {
+        addCompanyModal.classList.remove("is-open");
+    }
+
+    document.getElementById("openAddCompanyModal").onclick = () => {
+        openAddCompanyModal();
+    };
+
+    document.getElementById("closeAddCompanyModal").onclick = () => {
+        closeAddCompanyModal();
+    };
+
+    window.onclick = (e) => {
+        if (e.target.id === "addCompanyModal") {
+            closeAddCompanyModal();
+        }
+    };
 
     function openDeleteCompanyModal() {
         confirmDeleteCompanyModal.classList.add("is-open");
