@@ -61,10 +61,12 @@ PROTECTED_FILES = {
 ANSI = sys.stdout.isatty()
 BOOT_UPDATE_LOCK = threading.Lock()
 BOOT_UPDATE_STATUS = {
-    "state": "idle",   
+    "state": "idle",
     "info": None,
-    "error": None
+    "error": None,
+    "last_check_ts": 0.0
 }
+UPDATE_CHECK_INTERVAL = 300  # re-check every 5 minutes
 SYSTEM_METRICS_LOCK = threading.Lock()
 SYSTEM_METRICS_CACHE = {"ts": 0.0, "data": None}
 CPU_SNAPSHOT = None
@@ -693,9 +695,11 @@ def get_system_metrics():
         SYSTEM_METRICS_CACHE["data"] = out
     return out
 
-def start_boot_update_check():
+def maybe_trigger_update_check():
     with BOOT_UPDATE_LOCK:
-        if BOOT_UPDATE_STATUS["state"] in ("checking", "done"):
+        if BOOT_UPDATE_STATUS.get("state") == "checking":
+            return
+        if time.time() - BOOT_UPDATE_STATUS.get("last_check_ts", 0.0) < UPDATE_CHECK_INTERVAL:
             return
         BOOT_UPDATE_STATUS["state"] = "checking"
         BOOT_UPDATE_STATUS["info"] = None
@@ -708,11 +712,13 @@ def start_boot_update_check():
                 BOOT_UPDATE_STATUS["state"] = "done"
                 BOOT_UPDATE_STATUS["info"] = info
                 BOOT_UPDATE_STATUS["error"] = None
+                BOOT_UPDATE_STATUS["last_check_ts"] = time.time()
         except Exception as e:
             with BOOT_UPDATE_LOCK:
                 BOOT_UPDATE_STATUS["state"] = "error"
                 BOOT_UPDATE_STATUS["info"] = None
                 BOOT_UPDATE_STATUS["error"] = str(e)
+                BOOT_UPDATE_STATUS["last_check_ts"] = time.time()
 
     threading.Thread(target=worker, daemon=True).start()
 
@@ -1385,6 +1391,232 @@ def run_with_spinner(label, fn, *args, **kwargs):
         raise error["exc"]
     return result.get("value")
 
+def _load_db_module():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "edit_database",
+        os.path.join(BASE_DIR, "edit-database.py")
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    # inject color functions so output matches start.py's ANSI state
+    mod.bold = bold
+    mod.dim = dim
+    mod.red = red
+    mod.green = green
+    mod.yellow = yellow
+    mod.gray = gray
+    return mod
+
+
+def _db_select_backup(db):
+    entries = db.get_backup_entries()
+    if not entries:
+        toast("No backup files found.", False)
+        return None
+
+    def fmt_size(b):
+        return f"{b / 1024:.1f} KB" if b < 1024 * 1024 else f"{b / (1024 * 1024):.2f} MB"
+
+    def fmt_age(mtime):
+        delta = int(time.time() - mtime)
+        if delta < 60:    return f"{delta}s ago"
+        if delta < 3600:  return f"{delta // 60}m ago"
+        if delta < 86400: return f"{delta // 3600}h ago"
+        return f"{delta // 86400}d ago"
+
+    selected = 0
+    while True:
+        lines = []
+        for idx, (mtime, name, size, path) in enumerate(entries):
+            marker = "▶" if idx == selected else " "
+            age = fmt_age(mtime) if mtime else "?"
+            label = f"{name}  {dim(fmt_size(size))}  {gray(age)}"
+            line = f"{marker} {label}" if idx != selected else cyan(f"▶ {name}") + f"  {dim(fmt_size(size))}  {gray(age)}"
+            lines.append(line)
+        lines.append("")
+        lines.append(dim("↑/↓ to select   Enter to confirm   Esc/B to cancel"))
+        render_box("Select Backup to Restore", lines)
+
+        key = read_menu_key()
+        if key == "up":
+            selected = (selected - 1) % len(entries)
+        elif key == "down":
+            selected = (selected + 1) % len(entries)
+        elif key == "enter":
+            _, name, size, path = entries[selected]
+            server_running = status()["running"]
+            conf_lines = [
+                f"  {yellow('!')} This will overwrite the current live database.",
+                "",
+                f"  File : {bold(name)}",
+                f"  Size : {gray(fmt_size(size))}",
+                "",
+            ]
+            if server_running:
+                conf_lines.append(f"  {yellow('!')} Server is running — it will be stopped and restarted.")
+                conf_lines.append("")
+            conf_lines.append(f"  {dim('A security backup of the current DB will be saved first.')}")
+            conf_lines.append("")
+            conf_lines.append(dim("Press Y to confirm, any other key to cancel."))
+            render_box("Confirm Restore", conf_lines)
+            k = read_menu_key()
+            if k == "y":
+                return path
+        elif key in ("esc", "b", "q"):
+            return None
+
+
+def database_menu():
+    try:
+        db = _load_db_module()
+    except Exception as e:
+        toast(f"Could not load database module: {e}", False)
+        return
+
+    items = [
+        {"key": "1", "choice": "1", "label": "Check integrity"},
+        {"key": "2", "choice": "2", "label": "Repair database"},
+        {"key": "3", "choice": "3", "label": "Upgrade schema"},
+        {"key": "4", "choice": "4", "label": "Database statistics"},
+        {"key": "5", "choice": "5", "label": "Vacuum database"},
+        {"key": "6", "choice": "6", "label": "Reset all sessions"},
+        {"key": "7", "choice": "7", "label": "Create backup"},
+        {"key": "8", "choice": "8", "label": "List backups"},
+        {"key": "9", "choice": "9", "label": "Load backup"},
+        {"key": "B", "choice": "0", "label": "Back"},
+    ]
+
+    shortcuts = {it["key"].lower(): it["choice"] for it in items}
+    shortcuts["q"] = "0"
+    selected = 0
+
+    while True:
+        lines = []
+        for idx, it in enumerate(items):
+            marker = "▶" if idx == selected else " "
+            label = f"{it['key']}  {it['label']}"
+            line = f"{marker} {label}"
+            if idx == selected:
+                line = cyan(line)
+            lines.append(line)
+        lines.append("")
+        lines.append(dim("Use ↑/↓ + Enter, or press 1-9/0 directly."))
+        render_box("Database Tools", lines, "Esc also goes back.")
+
+        key = read_menu_key()
+        if key == "up":
+            selected = (selected - 1) % len(items)
+            continue
+        if key == "down":
+            selected = (selected + 1) % len(items)
+            continue
+        if key == "enter":
+            choice = items[selected]["choice"]
+        elif key == "esc":
+            choice = "0"
+        elif key in shortcuts:
+            choice = shortcuts[key]
+        else:
+            continue
+
+        if choice == "0":
+            return
+
+        # Option 9: interactive select → stop server → restore → restart server
+        if choice == "9":
+            restore_path = _db_select_backup(db)
+            if restore_path is None:
+                continue
+
+            server_was_running = status()["running"]
+            stop_msg = None
+            if server_was_running:
+                _, stop_msg = run_with_spinner("Stopping server", stop_server)
+
+            import io
+            buf = io.StringIO()
+            old_stdout = sys.stdout
+            sys.stdout = buf
+            try:
+                db.restore_backup_file(restore_path)
+            except Exception as e:
+                print(f"  {red('✗')} {e}")
+            finally:
+                sys.stdout = old_stdout
+
+            start_msg = None
+            if server_was_running:
+                _, start_msg = run_with_spinner("Restarting server", start_server)
+
+            out_lines = buf.getvalue().splitlines()
+            while out_lines and not out_lines[0].strip():
+                out_lines.pop(0)
+            while out_lines and not out_lines[-1].strip():
+                out_lines.pop()
+            if server_was_running:
+                out_lines.append("")
+                if stop_msg:
+                    out_lines.append(f"  {dim('Stop')}    : {gray(stop_msg)}")
+                if start_msg:
+                    out_lines.append(f"  {dim('Restart')} : {gray(start_msg)}")
+            out_lines.append("")
+            out_lines.append(dim("Press any key to continue..."))
+            render_box("Restore Backup", out_lines)
+            wait_for_any_key()
+            continue
+
+        import io
+        buf = io.StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = buf
+        try:
+            if choice == "1":
+                db.check_integrity()
+            elif choice == "2":
+                db.repair_database()
+            elif choice == "3":
+                db.upgrade_database()
+            elif choice == "4":
+                db.database_stats()
+            elif choice == "5":
+                db.vacuum_database()
+            elif choice == "6":
+                db.reset_sessions()
+            elif choice == "7":
+                db.create_backup()
+                if db.check_schema_needs_update():
+                    print("")
+                    print(f"  {yellow('!')} Schema is outdated — run {bold('Upgrade Schema')} to update.")
+            elif choice == "8":
+                db.list_backups()
+        except Exception as e:
+            print(f"  {red('✗')} {e}")
+        finally:
+            sys.stdout = old_stdout
+
+        out_lines = buf.getvalue().splitlines()
+        while out_lines and not out_lines[0].strip():
+            out_lines.pop(0)
+        while out_lines and not out_lines[-1].strip():
+            out_lines.pop()
+
+        titles = {
+            "1": "Integrity Check",
+            "2": "Repair Database",
+            "3": "Upgrade Schema",
+            "4": "Database Statistics",
+            "5": "Vacuum Database",
+            "6": "Reset All Sessions",
+            "7": "Create Backup",
+            "8": "List Backups",
+        }
+        out_lines.append("")
+        out_lines.append(dim("Press any key to continue..."))
+        render_box(titles.get(choice, "Database Tools"), out_lines)
+        wait_for_any_key()
+
+
 def settings_menu():
     ensure_settings_file()
 
@@ -1540,6 +1772,10 @@ def menu_action(choice):
         settings_menu()
         return
 
+    if c0 in ("d", "7"):
+        database_menu()
+        return
+
     if c0 in ("b", "0", "q"):
         return "back"
 
@@ -1559,6 +1795,7 @@ def show_menu_once():
         {"key": "C", "num": "4", "choice": "c", "label": "Check for updates", "enabled": True, "note": ""},
         {"key": "U", "num": "5", "choice": "u", "label": "Update from GitHub", "enabled": can_update, "note": "(stop server first)"},
         {"key": "G", "num": "6", "choice": "g", "label": "Settings", "enabled": True, "note": ""},
+        {"key": "D", "num": "7", "choice": "d", "label": "Database tools", "enabled": True, "note": ""},
         {"key": "B", "num": "0", "choice": "b", "label": "Back to main screen", "enabled": True, "note": ""},
     ]
 
@@ -1586,7 +1823,7 @@ def show_menu_once():
             lines.append(line)
         lines.append("")
         lines.append(dim("Use ↑/↓ + Enter, or press shortcut keys directly."))
-        lines.append(dim("Shortcuts: 1=S, 2=T, 3=L, 4=C, 5=U, 6=G, 0=B"))
+        lines.append(dim("Shortcuts: 1=S, 2=T, 3=L, 4=C, 5=U, 6=G, 7=D, 0=B"))
 
         render_box("Menu", lines, "Esc also goes back.")
         key = read_menu_key()
@@ -1606,8 +1843,8 @@ def show_menu_once():
 
 def main():
     ensure_settings_file()
-    start_boot_update_check()
     while True:
+        maybe_trigger_update_check()
         draw_header()
         wait_seconds = 5.0
         with BOOT_UPDATE_LOCK:
