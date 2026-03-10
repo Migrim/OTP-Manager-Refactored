@@ -517,7 +517,6 @@
     background: #c62828;
     border-color: #b71c1c;
     color: #fff;
-    box-shadow: 0 8px 20px rgba(198, 40, 40, 0.2);
 }
 
 .otp-delete-primary .material-icons {
@@ -666,7 +665,6 @@ body:not(.dark-mode) #confirmDeleteOtpModal {
     background: #d14343;
     border-color: #e06464;
     color: #fff;
-    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
 }
 
 .dark-mode .confirm-delete-button:hover {
