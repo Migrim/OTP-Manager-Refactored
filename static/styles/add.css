@@ -19,6 +19,21 @@
     text-align: left;
 }
 
+.field-label-with-note {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.field-note {
+    font-size: 12px;
+    font-weight: 500;
+    color: #8a8a8a;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
 .form-container input,
 .form-container select {
     padding: 0.5rem 0.75rem;
@@ -40,6 +55,7 @@
     background-color: #efefef;
     color: #777;
     cursor: not-allowed;
+    pointer-events: none;
 }
 
 .form-container button {
@@ -65,6 +81,10 @@
 
 .dark-mode .form-container label {
     color: #ccc;
+}
+
+.dark-mode .field-note {
+    color: #8f8f8f;
 }
 
 .dark-mode .form-container input,

@@ -38,8 +38,11 @@
         <option value="totp">TOTP</option>
     </select>
 
-    <label for="refresh_time">Refresh Time (sec)</label>
-    <input type="number" id="refresh_time" name="refresh_time" value="30" readonly class="readonly-input">
+    <label for="refresh_time" class="field-label-with-note">
+        <span>Refresh Time (sec)</span>
+        <span class="field-note">read only</span>
+    </label>
+    <input type="number" id="refresh_time" name="refresh_time" value="30" readonly tabindex="-1" class="readonly-input">
 
     <label for="company_id">Company</label>
     <select id="company_id" name="company_id">
