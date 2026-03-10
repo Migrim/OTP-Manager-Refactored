@@ -1000,33 +1000,21 @@ def draw_header():
     if upd_state == "checking":
         frames = ["|", "/", "-", "\\"]
         spin = frames[int(time.time() * 6) % len(frames)]
-        update_line = f"{bold('Update')}  : {yellow(f'{spin} Checking on boot...')}"
+        update_line = f"{bold('Update')}  : {yellow(f'{spin} Checking...')}"
     elif upd_state == "done" and isinstance(upd_info, dict):
         if upd_info.get("update_available"):
-            update_text = f"Available {upd_info.get('local')} -> {upd_info.get('remote')}"
+            update_text = f"Available {upd_info.get('local')} → {upd_info.get('remote')}"
             update_line = f"{bold('Update')}  : {yellow(update_text)}"
         else:
-            update_text = f"Up to date ({upd_info.get('local')})"
-            update_line = f"{bold('Update')}  : {green(update_text)}"
+            update_text = f"Up to date  {gray(upd_info.get('local', ''))}"
+            update_line = f"{bold('Update')}  : {green('✓')}  {update_text}"
     elif upd_state == "error":
-        err_short = shorten_middle(upd_error or "Unknown error", 52)
-        update_line = f"{bold('Update')}  : {red('Check failed')} {gray(err_short)}"
+        err_short = shorten_middle(upd_error or "Unknown error", 48)
+        update_line = f"{bold('Update')}  : {red('✗')}  {gray(err_short)}"
     else:
-        update_line = f"{bold('Update')}  : {gray('Not checked yet')}"
+        update_line = f"{bold('Update')}  : {gray('—')}"
 
-    info_lines = [
-        center_visible(row_one, status_box_width),
-        center_visible(row_two, status_box_width),
-        center_visible(gray("─" * 34), status_box_width),
-        "",
-        update_line,
-        f"{bold('Port')}    : {gray(str(cfg['port']))}",
-        f"{bold('Secret')}  : {gray(mask_secret(cfg['secret_key']))}",
-        f"{bold('Log')}     : {gray(log_display)}",
-    ]
     urls = server_urls()
-    if urls:
-        info_lines.append(f"{bold('URL')}     : {gray('  '.join(urls))}")
     sysm = get_system_metrics()
     cpu_pct = sysm.get("cpu_pct")
     ram_pct = sysm.get("ram_pct")
@@ -1044,19 +1032,35 @@ def draw_header():
         p = int(round(clamp(pct)))
         base = f"{bold(name)} : {progress_bar(p, width=bar_w)}  {p:>3d}%"
         if detail:
-            base += f" {gray(detail)}"
+            base += f"  {gray(detail)}"
         return base
 
-    info_lines.append("")
-    info_lines.append(f"{bold('System')}  : {gray('CPU / RAM / Storage')}")
-    info_lines.append(bar_line("CPU", cpu_pct))
-    info_lines.append(bar_line("RAM", ram_pct, ram_detail))
-    info_lines.append(bar_line("Disk", disk_pct, disk_detail))
+    sep = center_visible(gray("─" * 34), status_box_width)
+
+    info_lines = [
+        center_visible(row_one, status_box_width),
+        center_visible(row_two, status_box_width),
+        sep,
+        "",
+        update_line,
+        f"{bold('Port')}    : {gray(str(cfg['port']))}",
+        f"{bold('Secret')}  : {gray(mask_secret(cfg['secret_key']))}",
+        f"{bold('Log')}     : {gray(log_display)}",
+    ]
+    if urls:
+        info_lines.append(f"{bold('URL')}     : {gray('  '.join(urls))}")
+    info_lines += [
+        "",
+        sep,
+        bar_line("CPU",  cpu_pct),
+        bar_line("RAM",  ram_pct,  ram_detail),
+        bar_line("Disk", disk_pct, disk_detail),
+    ]
 
     clear()
     _, term_h = get_terminal_size()
     ascii_h = len(ASCII_TITLE.splitlines())
-    box_h = len(info_lines) + 6  
+    box_h = len(info_lines) + 6
     total_h = ascii_h + 1 + box_h
     top_pad = max(0, (term_h - total_h) // 2)
     for _ in range(top_pad):
@@ -1066,8 +1070,8 @@ def draw_header():
     print("")
     print_centered_box(
         info_lines,
-        title="Server Status",
-        hint="Auto refresh every 5s. Press Enter to open menu.",
+        title="OTP Manager",
+        hint="↵ Open menu   X Exit",
         width=status_box_width
     )
 
@@ -1714,6 +1718,74 @@ def settings_menu():
 
         toast("Invalid selection.", False)
 
+def _read_dashboard_key(timeout):
+    """Wait up to `timeout` seconds for a single keypress in raw mode. Returns key or None."""
+    if os.name == "nt" and msvcrt:
+        t_end = time.time() + timeout
+        while time.time() < t_end:
+            if msvcrt.kbhit():
+                return read_menu_key()
+            time.sleep(0.05)
+        return None
+
+    if termios and tty and sys.stdin.isatty():
+        import select as _sel
+        fd = sys.stdin.fileno()
+        old = termios.tcgetattr(fd)
+        try:
+            tty.setraw(fd)
+            r, _, _ = _sel.select([fd], [], [], timeout)
+            if not r:
+                return None
+            first = os.read(fd, 1)
+            if not first:
+                return None
+            ch = first.decode("utf-8", errors="ignore")
+            if ch in ("\r", "\n"):
+                return "enter"
+            if ch == "\x1b":
+                seq = b""
+                t_end = time.time() + 0.08
+                while time.time() < t_end:
+                    r2, _, _ = _sel.select([fd], [], [], 0.03)
+                    if not r2:
+                        break
+                    chunk = os.read(fd, 8)
+                    if not chunk:
+                        break
+                    seq += chunk
+                    if b"A" in seq or b"B" in seq:
+                        break
+                if seq.startswith(b"[") and len(seq) >= 2:
+                    code = chr(seq[1])
+                    if code == "A": return "up"
+                    if code == "B": return "down"
+                return "esc"
+            return ch.lower()
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
+    r = select_readable(timeout)
+    if r:
+        return read_menu_key()
+    return None
+
+
+def _confirm_exit():
+    conf_lines = [
+        "",
+        f"  {bold('Exit OTP Manager?')}",
+        "",
+        f"  {dim('The server will keep running in the background.')}",
+        "",
+        dim("Y  confirm     any other key  cancel"),
+    ]
+    render_box("Exit", conf_lines)
+    k = read_menu_key()
+    if k == "y":
+        sys.exit(0)
+
+
 def menu_action(choice):
     c0 = (choice or "").strip().lower()
     s = status()
@@ -1779,6 +1851,10 @@ def menu_action(choice):
     if c0 in ("b", "0", "q"):
         return "back"
 
+    if c0 in ("x", "8"):
+        _confirm_exit()
+        return
+
     toast("Invalid selection.", False)
 
 def show_menu_once():
@@ -1796,7 +1872,8 @@ def show_menu_once():
         {"key": "U", "num": "5", "choice": "u", "label": "Update from GitHub", "enabled": can_update, "note": "(stop server first)"},
         {"key": "G", "num": "6", "choice": "g", "label": "Settings", "enabled": True, "note": ""},
         {"key": "D", "num": "7", "choice": "d", "label": "Database tools", "enabled": True, "note": ""},
-        {"key": "B", "num": "0", "choice": "b", "label": "Back to main screen", "enabled": True, "note": ""},
+        {"key": "B", "num": "0", "choice": "b", "label": "Back to dashboard", "enabled": True, "note": ""},
+        {"key": "X", "num": "8", "choice": "x", "label": "Exit OTP Manager", "enabled": True, "note": ""},
     ]
 
     shortcuts = {}
@@ -1823,7 +1900,7 @@ def show_menu_once():
             lines.append(line)
         lines.append("")
         lines.append(dim("Use ↑/↓ + Enter, or press shortcut keys directly."))
-        lines.append(dim("Shortcuts: 1=S, 2=T, 3=L, 4=C, 5=U, 6=G, 7=D, 0=B"))
+        lines.append(dim("Shortcuts: 1=S, 2=T, 3=L, 4=C, 5=U, 6=G, 7=D, 0=B, X=Exit"))
 
         render_box("Menu", lines, "Esc also goes back.")
         key = read_menu_key()
@@ -1842,6 +1919,7 @@ def show_menu_once():
             return shortcuts[key]
 
 def main():
+    signal.signal(signal.SIGINT, lambda _sig, _frame: None)
     ensure_settings_file()
     while True:
         maybe_trigger_update_check()
@@ -1850,9 +1928,10 @@ def main():
         with BOOT_UPDATE_LOCK:
             if BOOT_UPDATE_STATUS.get("state") == "checking":
                 wait_seconds = 0.12
-        r = select_readable(wait_seconds)
-        if r:
-            _ = sys.stdin.readline()
+        key = _read_dashboard_key(wait_seconds)
+        if key in ("x", "esc"):
+            _confirm_exit()
+        elif key == "enter":
             while True:
                 choice = show_menu_once()
                 result = menu_action(choice)
