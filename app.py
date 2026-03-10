@@ -215,6 +215,14 @@ def load_user():
             row = cursor.fetchone()
 
             if row:
+                db_token = row[4]
+                session_token = session.get("session_token")
+                if db_token and session_token != db_token:
+                    session.clear()
+                    g.logged_in = False
+                    g.user_id = None
+                    return
+
                 g.username = row[1]
                 g.is_admin = bool(row[5])
                 g.can_delete = bool(row[6]) or g.is_admin
