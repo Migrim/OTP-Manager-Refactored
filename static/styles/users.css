@@ -323,6 +323,136 @@
     color: #333;
 }
 
+#resetPasswordModal,
+#confirmDeleteModal {
+    display: flex;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    background: rgba(17, 24, 39, 0.18);
+    backdrop-filter: none;
+    transition: opacity 0.22s ease, visibility 0.22s ease, background-color 0.22s ease;
+}
+
+#resetPasswordModal.is-open,
+#confirmDeleteModal.is-open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+.reset-password-modal-card,
+.users-delete-modal-card {
+    width: min(370px, calc(100vw - 32px));
+    padding: 1rem 1.15rem 1rem;
+    border-radius: 18px;
+    border-color: rgba(224, 224, 224, 0.9);
+    box-shadow: 0 18px 42px rgba(15, 23, 42, 0.16);
+    opacity: 0;
+    transform: translateY(8px) scale(0.95);
+    filter: blur(10px);
+    transition: transform 0.22s ease, opacity 0.22s ease, filter 0.22s ease;
+}
+
+#resetPasswordModal.is-open .reset-password-modal-card,
+#confirmDeleteModal.is-open .users-delete-modal-card {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+}
+
+.reset-password-close {
+    background: transparent;
+    border: 0;
+    padding: 0;
+    line-height: 1;
+    appearance: none;
+}
+
+.users-modal-header {
+    margin-right: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.users-delete-header {
+    margin-right: 0;
+    text-align: center;
+}
+
+.users-modal-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #171717;
+}
+
+.users-modal-copy {
+    margin: 0.42rem 0 0;
+    font-size: 0.84rem;
+    line-height: 1.45;
+    color: #6b7280;
+}
+
+.reset-password-input-wrapper {
+    position: relative;
+}
+
+.reset-password-toggle {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%) scale(0.8);
+    transform-origin: center;
+    cursor: pointer;
+    font-size: 20px;
+    color: #777;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.users-modal-actions {
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.users-modal-secondary {
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    color: #374151;
+    font-size: 0.84rem;
+    font-weight: 600;
+    padding: 0.58rem 0.9rem;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.users-modal-secondary:hover {
+    background: #eaecef;
+    border-color: #d1d5db;
+    color: #111827;
+}
+
+.users-delete-actions {
+    justify-content: center;
+}
+
+.users-delete-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.38rem;
+    background: #d64545;
+    border-color: #bd3838;
+    color: #fff;
+}
+
+.users-delete-primary .material-icons {
+    font-size: 15px;
+    line-height: 1;
+}
+
 .add-user-form label {
     font-weight: 500;
     color: #333;
@@ -390,6 +520,45 @@
     color: #eee;
 }
 
+.dark-mode #resetPasswordModal,
+.dark-mode #confirmDeleteModal {
+    background: rgba(10, 10, 11, 0.52);
+}
+
+.dark-mode .reset-password-modal-card,
+.dark-mode .users-delete-modal-card {
+    border-color: rgba(58, 58, 58, 0.95);
+    box-shadow: 0 22px 48px rgba(0, 0, 0, 0.38);
+}
+
+.dark-mode .reset-password-close:hover {
+    color: #f3f4f6;
+}
+
+.dark-mode .users-modal-title {
+    color: #f5f5f5;
+}
+
+.dark-mode .users-modal-copy {
+    color: #a1a1aa;
+}
+
+.dark-mode .reset-password-toggle {
+    color: #a1a1aa;
+}
+
+.dark-mode .users-modal-secondary {
+    background: #242424;
+    border-color: #3a3a3a;
+    color: #e5e7eb;
+}
+
+.dark-mode .users-modal-secondary:hover {
+    background: #2d2d2d;
+    border-color: #4b5563;
+    color: #ffffff;
+}
+
 .dark-mode .add-user-form label {
     color: #ccc;
     text-align: left;
@@ -448,6 +617,59 @@ body:not(.dark-mode) .add-user-modal {
 .dark-mode .confirm-delete-button:hover {
     background-color: #ba6868;
     border-color: #e48787;
+}
+
+.users-modal-actions button[type="submit"] {
+    padding: 0.6rem 1.05rem;
+    border-radius: 10px;
+    font-size: 0.84rem;
+    font-weight: 600;
+}
+
+.users-modal-actions .users-modal-secondary {
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    color: #374151;
+}
+
+.users-modal-actions .users-modal-secondary:hover {
+    background: #eaecef;
+    border-color: #d1d5db;
+    color: #111827;
+}
+
+.users-modal-actions .users-delete-primary {
+    background: #d64545;
+    border: 1px solid #bd3838;
+    color: #fff;
+}
+
+.users-modal-actions .users-delete-primary:hover {
+    background: #c43d3d;
+    border-color: #ab3131;
+}
+
+.dark-mode .users-modal-actions .users-modal-secondary {
+    background: #242424;
+    border-color: #3a3a3a;
+    color: #e5e7eb;
+}
+
+.dark-mode .users-modal-actions .users-modal-secondary:hover {
+    background: #2d2d2d;
+    border-color: #4b5563;
+    color: #ffffff;
+}
+
+.dark-mode .users-modal-actions .users-delete-primary {
+    background: #d14343;
+    border-color: #e06464;
+    color: #fff;
+}
+
+.dark-mode .users-modal-actions .users-delete-primary:hover {
+    background: #bf3a3a;
+    border-color: #d95b5b;
 }
 
 .delete-user-button-row {
@@ -610,23 +832,36 @@ body.home #search-otp-fake,
 body.companies #search-otp-fake {
     display: none;
 }
-@keyframes rightsModalIn {
-    0% {
-        opacity: 0;
-        transform: scale(0.96);
-    }
-    100% {
-        opacity: 1;
-        transform: scale(1);
-    }
+#rightsModal {
+    display: flex;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.22s ease, visibility 0.22s ease, background-color 0.22s ease;
 }
+
+#rightsModal.is-open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
 .rights-modal-content {
     width: 520px;
     max-width: min(92vw, 520px);
     max-height: 88vh;
     overflow-y: auto;
     padding: 1.4rem;
-    animation: rightsModalIn 180ms ease-out;
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+    filter: blur(10px);
+    transition: transform 0.22s ease, opacity 0.22s ease, filter 0.22s ease;
+}
+
+#rightsModal.is-open .rights-modal-content {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
 }
 
 .rights-modal-header {
@@ -730,7 +965,7 @@ body.companies #search-otp-fake {
 .rights-switch-row input:disabled + .slider {
     opacity: 0.7;
     cursor: not-allowed;
-    background-color: #d5bfef;
+    background-color: #d1d1d1;
 }
 
 .rights-switch-row .switch-text {

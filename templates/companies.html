@@ -87,23 +87,33 @@
 </div>
 
 <div id="confirmDeleteCompanyModal" class="add-user-modal">
-    <div class="add-user-modal-content">
-        <span class="add-user-close" id="closeDeleteCompanyModal">&times;</span>
+    <div class="add-user-modal-content company-delete-modal-card">
         <form method="post" action="/api/delete-company" id="deleteCompanyForm">
             <input type="hidden" name="company_id" id="delete-company-id">
-            <p style="margin-bottom: 1rem;">Are you sure you want to delete this company?</p>
-            <div class="delete-user-button-row">
-                <button type="submit" class="confirm-delete-button">Yes, Delete</button>
+            <div class="company-modal-header company-delete-header">
+                <h3 class="company-modal-title">Delete company?</h3>
+                <p class="company-modal-copy">This will permanently remove <span id="delete-company-name-text">this company</span>.</p>
+            </div>
+            <div class="delete-user-button-row company-modal-actions company-delete-actions">
+                <button type="button" id="cancelDeleteCompanyModal" class="company-modal-secondary">Cancel</button>
+                <button type="submit" class="confirm-delete-button company-delete-primary">
+                    <span class="material-icons" aria-hidden="true">close</span>
+                    <span>Delete Company</span>
+                </button>
             </div>
         </form>
     </div>
 </div>
 
 <div id="editCompanyModal" class="add-user-modal">
-    <div class="add-user-modal-content">
-        <span class="add-user-close" id="closeEditCompanyModal">&times;</span>
+    <div class="add-user-modal-content company-edit-modal-card">
+        <button type="button" class="add-user-close company-edit-close" id="closeEditCompanyModal" aria-label="Close edit company dialog">&times;</button>
         <form method="post" action="/api/edit-company" class="add-user-form" id="editCompanyForm">
             <input type="hidden" name="company_id" id="edit-company-id">
+            <div class="company-modal-header">
+                <h3 class="company-modal-title">Edit company</h3>
+                <p class="company-modal-copy">Update <span id="edit-company-name-text">this company</span>.</p>
+            </div>
 
             <label for="edit-company-name">Company Name</label>
             <div class="add-user-input-wrapper">
@@ -116,12 +126,13 @@
             </div>
 
             <label for="edit-company-password">New Password (optional)</label>
-            <div class="add-user-input-wrapper" style="position: relative;">
+            <div class="add-user-input-wrapper company-password-input-wrapper">
                 <input type="password" name="password" id="edit-company-password" placeholder="Optional password">
-                <span id="toggleEditCompanyPassword" class="material-symbols-outlined" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; font-size: 20px; color: #777;">visibility_off</span>
+                <span id="toggleEditCompanyPassword" class="material-symbols-outlined company-password-toggle">visibility_off</span>
             </div>
 
-            <div class="add-user-button-row">
+            <div class="add-user-button-row company-modal-actions">
+                <button type="button" id="cancelEditCompanyModal" class="company-modal-secondary">Cancel</button>
                 <button type="submit">Save Changes</button>
             </div>
         </form>
@@ -151,12 +162,35 @@
         }
     };
 
+    const confirmDeleteCompanyModal = document.getElementById("confirmDeleteCompanyModal");
+    const editCompanyModal = document.getElementById("editCompanyModal");
+    const deleteCompanyNameText = document.getElementById("delete-company-name-text");
+    const editCompanyNameText = document.getElementById("edit-company-name-text");
+
+    function openDeleteCompanyModal() {
+        confirmDeleteCompanyModal.classList.add("is-open");
+    }
+
+    function closeDeleteCompanyModal() {
+        confirmDeleteCompanyModal.classList.remove("is-open");
+    }
+
+    function openEditCompanyModal() {
+        editCompanyModal.classList.add("is-open");
+    }
+
+    function closeEditCompanyModal() {
+        editCompanyModal.classList.remove("is-open");
+    }
+
     document.querySelectorAll(".action-button.delete").forEach(btn => {
         btn.onclick = (e) => {
             const card = e.currentTarget.closest(".user-card");
             const companyId = card.dataset.companyId;
+            const companyName = card.dataset.companyName || "this company";
             document.getElementById("delete-company-id").value = companyId;
-            document.getElementById("confirmDeleteCompanyModal").style.display = "flex";
+            if (deleteCompanyNameText) deleteCompanyNameText.textContent = companyName;
+            openDeleteCompanyModal();
         };
     });
 
@@ -168,15 +202,15 @@
         };
     });
 
-    document.getElementById("closeDeleteCompanyModal").onclick = () => {
-        document.getElementById("confirmDeleteCompanyModal").style.display = "none";
-    };
-
     window.addEventListener("click", (e) => {
         if (e.target.id === "confirmDeleteCompanyModal") {
-            document.getElementById("confirmDeleteCompanyModal").style.display = "none";
+            closeDeleteCompanyModal();
         }
     });
+
+    document.getElementById("cancelDeleteCompanyModal").onclick = () => {
+        closeDeleteCompanyModal();
+    };
 
     document.getElementById("toggleCompanyPassword").addEventListener("click", () => {
         const input = document.getElementById("company_password");
@@ -198,18 +232,23 @@
             document.getElementById("edit-company-name").value = name;
             document.getElementById("edit-company-kundennummer").value = kundennummer;
             document.getElementById("edit-company-password").value = "";
+            if (editCompanyNameText) editCompanyNameText.textContent = name || "this company";
 
-            document.getElementById("editCompanyModal").style.display = "flex";
+            openEditCompanyModal();
         };
     });
 
     document.getElementById("closeEditCompanyModal").onclick = () => {
-        document.getElementById("editCompanyModal").style.display = "none";
+        closeEditCompanyModal();
+    };
+
+    document.getElementById("cancelEditCompanyModal").onclick = () => {
+        closeEditCompanyModal();
     };
 
     window.addEventListener("click", (e) => {
         if (e.target.id === "editCompanyModal") {
-            document.getElementById("editCompanyModal").style.display = "none";
+            closeEditCompanyModal();
         }
     });
 

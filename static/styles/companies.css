@@ -323,6 +323,136 @@
     color: #333;
 }
 
+#confirmDeleteCompanyModal,
+#editCompanyModal {
+    display: flex;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    background: rgba(17, 24, 39, 0.18);
+    backdrop-filter: none;
+    transition: opacity 0.22s ease, visibility 0.22s ease, background-color 0.22s ease;
+}
+
+#confirmDeleteCompanyModal.is-open,
+#editCompanyModal.is-open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+.company-delete-modal-card,
+.company-edit-modal-card {
+    width: min(370px, calc(100vw - 32px));
+    padding: 1rem 1.15rem 1rem;
+    border-radius: 18px;
+    border-color: rgba(224, 224, 224, 0.9);
+    box-shadow: 0 18px 42px rgba(15, 23, 42, 0.16);
+    opacity: 0;
+    transform: translateY(8px) scale(0.95);
+    filter: blur(10px);
+    transition: transform 0.22s ease, opacity 0.22s ease, filter 0.22s ease;
+}
+
+#confirmDeleteCompanyModal.is-open .company-delete-modal-card,
+#editCompanyModal.is-open .company-edit-modal-card {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+}
+
+.company-edit-close {
+    background: transparent;
+    border: 0;
+    padding: 0;
+    line-height: 1;
+    appearance: none;
+}
+
+.company-modal-header {
+    margin-right: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.company-delete-header {
+    margin-right: 0;
+    text-align: center;
+}
+
+.company-modal-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #171717;
+}
+
+.company-modal-copy {
+    margin: 0.42rem 0 0;
+    font-size: 0.84rem;
+    line-height: 1.45;
+    color: #6b7280;
+}
+
+.company-password-input-wrapper {
+    position: relative;
+}
+
+.company-password-toggle {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%) scale(0.8);
+    transform-origin: center;
+    cursor: pointer;
+    font-size: 20px;
+    color: #777;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.company-modal-actions {
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.company-modal-secondary {
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    color: #374151;
+    font-size: 0.84rem;
+    font-weight: 600;
+    padding: 0.58rem 0.9rem;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.company-modal-secondary:hover {
+    background: #eaecef;
+    border-color: #d1d5db;
+    color: #111827;
+}
+
+.company-delete-actions {
+    justify-content: center;
+}
+
+.company-delete-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.38rem;
+    background: #d64545;
+    border: 1px solid #bd3838;
+    color: #fff;
+}
+
+.company-delete-primary .material-icons {
+    font-size: 15px;
+    line-height: 1;
+}
+
 .add-user-form label {
     font-weight: 500;
     color: #333;
@@ -390,6 +520,45 @@
     color: #eee;
 }
 
+.dark-mode #confirmDeleteCompanyModal,
+.dark-mode #editCompanyModal {
+    background: rgba(10, 10, 11, 0.52);
+}
+
+.dark-mode .company-delete-modal-card,
+.dark-mode .company-edit-modal-card {
+    border-color: rgba(58, 58, 58, 0.95);
+    box-shadow: 0 22px 48px rgba(0, 0, 0, 0.38);
+}
+
+.dark-mode .company-edit-close:hover {
+    color: #f3f4f6;
+}
+
+.dark-mode .company-modal-title {
+    color: #f5f5f5;
+}
+
+.dark-mode .company-modal-copy {
+    color: #a1a1aa;
+}
+
+.dark-mode .company-password-toggle {
+    color: #a1a1aa;
+}
+
+.dark-mode .company-modal-secondary {
+    background: #242424;
+    border-color: #3a3a3a;
+    color: #e5e7eb;
+}
+
+.dark-mode .company-modal-secondary:hover {
+    background: #2d2d2d;
+    border-color: #4b5563;
+    color: #ffffff;
+}
+
 .dark-mode .add-user-form label {
     color: #ccc;
     text-align: left;
@@ -448,6 +617,59 @@ body:not(.dark-mode) .add-user-modal {
 .dark-mode .confirm-delete-button:hover {
     background-color: #ba6868;
     border-color: #e48787;
+}
+
+.company-modal-actions button[type="submit"] {
+    padding: 0.6rem 1.05rem;
+    border-radius: 10px;
+    font-size: 0.84rem;
+    font-weight: 600;
+}
+
+.company-modal-actions .company-modal-secondary {
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    color: #374151;
+}
+
+.company-modal-actions .company-modal-secondary:hover {
+    background: #eaecef;
+    border-color: #d1d5db;
+    color: #111827;
+}
+
+.company-modal-actions .company-delete-primary {
+    background: #d64545;
+    border: 1px solid #bd3838;
+    color: #fff;
+}
+
+.company-modal-actions .company-delete-primary:hover {
+    background: #c43d3d;
+    border-color: #ab3131;
+}
+
+.dark-mode .company-modal-actions .company-modal-secondary {
+    background: #242424;
+    border-color: #3a3a3a;
+    color: #e5e7eb;
+}
+
+.dark-mode .company-modal-actions .company-modal-secondary:hover {
+    background: #2d2d2d;
+    border-color: #4b5563;
+    color: #ffffff;
+}
+
+.dark-mode .company-modal-actions .company-delete-primary {
+    background: #d14343;
+    border-color: #e06464;
+    color: #fff;
+}
+
+.dark-mode .company-modal-actions .company-delete-primary:hover {
+    background: #bf3a3a;
+    border-color: #d95b5b;
 }
 
 .delete-user-button-row {

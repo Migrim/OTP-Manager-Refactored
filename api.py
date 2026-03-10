@@ -453,6 +453,9 @@ def update_user_permissions():
     can_add_secrets = 1 if request.form.get("can_add_secrets") == "on" else 0
     can_add_users = 1 if request.form.get("can_add_users") == "on" else 0
 
+    if can_delete_companies:
+        can_add_companies = 1
+
     with sqlite3.connect(DB_PATH) as db:
         cursor = db.cursor()
         cursor.execute("SELECT username, is_admin FROM users WHERE id = ?", (target_id,))

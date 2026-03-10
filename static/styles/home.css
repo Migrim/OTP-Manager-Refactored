@@ -515,8 +515,8 @@
     align-items: center;
     justify-content: center;
     gap: 0.38rem;
-    background: #c62828;
-    border-color: #b71c1c;
+    background: #d64545;
+    border-color: #bd3838;
     color: #fff;
 }
 
@@ -561,8 +561,8 @@
 }
 
 .otp-delete-primary:hover {
-    background: #b71c1c;
-    border-color: #991b1b;
+    background: #c43d3d;
+    border-color: #ab3131;
 }
 .dark-mode .add-user-modal-content {
     background: #1c1c1c;
@@ -673,7 +673,36 @@ body:not(.dark-mode) #confirmDeleteOtpModal {
     border-color: #e48787;
 }
 
+.otp-delete-actions button[type="submit"] {
+    padding: 0.6rem 1.05rem;
+    border-radius: 10px;
+    font-size: 0.84rem;
+    font-weight: 600;
+}
+
+.otp-delete-actions .otp-delete-primary {
+    background: #d64545;
+    border: 1px solid #bd3838;
+    color: #fff;
+}
+
+.otp-delete-actions .otp-delete-primary:hover {
+    background: #c43d3d;
+    border-color: #ab3131;
+}
+
 .dark-mode .otp-delete-primary:hover {
+    background: #bf3a3a;
+    border-color: #d95b5b;
+}
+
+.dark-mode .otp-delete-actions .otp-delete-primary {
+    background: #d14343;
+    border-color: #e06464;
+    color: #fff;
+}
+
+.dark-mode .otp-delete-actions .otp-delete-primary:hover {
     background: #bf3a3a;
     border-color: #d95b5b;
 }
