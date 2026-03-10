@@ -54,7 +54,12 @@
                 </button>
                 {% endif %}
 
-                <button class="action-button delete" title="Delete User">
+                <button
+                    class="action-button delete"
+                    title="{{ 'User admin cannot be deleted' if username|lower == 'admin' else 'Delete User' }}"
+                    type="button"
+                    {% if username|lower == 'admin' %}disabled aria-disabled="true"{% endif %}
+                >
                     <span class="material-icons">delete</span>
                 </button>
             </div>
@@ -287,6 +292,7 @@
 
     document.querySelectorAll(".action-button.delete").forEach(btn => {
         btn.onclick = (e) => {
+            if (btn.disabled) return;
             const userCard = e.currentTarget.closest(".user-card");
             const userId = userCard.dataset.userId;
             document.getElementById("delete-user-id").value = userId;

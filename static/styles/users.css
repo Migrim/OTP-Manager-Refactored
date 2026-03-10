@@ -119,6 +119,22 @@
     border-color: #e46360;
 }
 
+.action-button.delete:disabled {
+    background-color: #ececec;
+    border-color: #d3d3d3;
+    color: #9a9a9a;
+    cursor: not-allowed;
+}
+
+.action-button.delete:disabled .material-icons {
+    color: #9a9a9a;
+}
+
+.action-button.delete:disabled:hover {
+    background-color: #ececec;
+    border-color: #d3d3d3;
+}
+
 .dark-mode .user-card {
     background: #1A1A1A;
     border: 1px solid #323232;
@@ -185,6 +201,22 @@
 .dark-mode .action-button.delete:hover {
     background-color: #ba6868;
     border-color: #e48787;
+}
+
+.dark-mode .action-button.delete:disabled {
+    background-color: #3a3a3a;
+    border-color: #555;
+    color: #7d7d7d;
+    cursor: not-allowed;
+}
+
+.dark-mode .action-button.delete:disabled .material-icons {
+    color: #7d7d7d;
+}
+
+.dark-mode .action-button.delete:disabled:hover {
+    background-color: #3a3a3a;
+    border-color: #555;
 }
 .user-status {
     font-size: 0.85rem;

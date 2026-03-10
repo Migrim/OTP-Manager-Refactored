@@ -416,6 +416,10 @@ def delete_user():
         logger.warning(f"{u(getattr(g, 'user_id', None))} delete_user result=missing_user_id")
         return jsonify({"error": "Missing user_id"}), 400
     target_name = get_username(target_id)
+    if target_name and target_name.lower() == "admin":
+        logger.warning(f"{u(getattr(g, 'user_id', None))} delete_user blocked_protected_user {user_ref(user_id=target_id, username=target_name)}")
+        flash("The admin user cannot be deleted.", "error")
+        return redirect("/users")
     with sqlite3.connect(DB_PATH) as db:
         cursor = db.cursor()
         cursor.execute("DELETE FROM users WHERE id = ?", (target_id,))

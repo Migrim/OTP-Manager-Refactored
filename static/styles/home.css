@@ -429,6 +429,116 @@
 .add-user-close:hover {
     color: #333;
 }
+.otp-delete-modal-card {
+    width: min(370px, calc(100vw - 32px));
+    padding: 0.95rem 1.15rem 1rem;
+    border-radius: 18px;
+    border-color: rgba(224, 224, 224, 0.9);
+    box-shadow: 0 18px 42px rgba(15, 23, 42, 0.16);
+    opacity: 0;
+    transform: translateY(8px) scale(0.94);
+    filter: blur(10px);
+    transition: transform 0.22s ease, opacity 0.22s ease, filter 0.22s ease;
+}
+
+#confirmDeleteOtpModal {
+    display: flex;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    background: rgba(17, 24, 39, 0.18);
+    backdrop-filter: none;
+    transition: opacity 0.22s ease, visibility 0.22s ease, background-color 0.22s ease;
+}
+
+#confirmDeleteOtpModal.is-open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+#confirmDeleteOtpModal.is-open .otp-delete-modal-card {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+}
+
+.otp-delete-close {
+    background: transparent;
+    border: 0;
+    padding: 0;
+    line-height: 1;
+}
+
+.otp-delete-modal-header {
+    display: block;
+}
+
+.otp-delete-title-row {
+    display: block;
+    margin-top: -0.1rem;
+}
+
+.otp-delete-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #171717;
+    text-align: center;
+}
+
+.otp-delete-copy {
+    margin: 0.5rem 0 0;
+    font-size: 0.84rem;
+    line-height: 1.45;
+    color: #6b7280;
+}
+
+.otp-delete-actions {
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.otp-delete-secondary,
+.otp-delete-primary {
+    min-width: 88px;
+    padding: 0.58rem 0.9rem;
+    border-radius: 10px;
+    font-size: 0.84rem;
+    font-weight: 600;
+}
+
+.otp-delete-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.38rem;
+    background: #c62828;
+    border-color: #b71c1c;
+    color: #fff;
+    box-shadow: 0 8px 20px rgba(198, 40, 40, 0.2);
+}
+
+.otp-delete-primary .material-icons {
+    font-size: 15px;
+    line-height: 1;
+}
+
+.otp-delete-secondary {
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    color: #374151;
+    cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.otp-delete-secondary:hover {
+    background: #eaecef;
+    border-color: #d1d5db;
+    color: #111827;
+}
+
 .delete-user-button-row {
     display: flex;
     justify-content: center;
@@ -449,10 +559,48 @@
     background-color: #ffc2bf;
     border-color: #e46360;
 }
+
+.otp-delete-primary:hover {
+    background: #b71c1c;
+    border-color: #991b1b;
+}
 .dark-mode .add-user-modal-content {
     background: #1c1c1c;
     border-color: #333;
     color: #eee;
+}
+
+.dark-mode .otp-delete-modal-card {
+    border-color: rgba(58, 58, 58, 0.95);
+    box-shadow: 0 22px 48px rgba(0, 0, 0, 0.38);
+}
+
+.dark-mode #confirmDeleteOtpModal {
+    background: rgba(10, 10, 11, 0.52);
+}
+
+.dark-mode .otp-delete-close:hover {
+    color: #f3f4f6;
+}
+
+.dark-mode .otp-delete-title {
+    color: #f5f5f5;
+}
+
+.dark-mode .otp-delete-copy {
+    color: #a1a1aa;
+}
+
+.dark-mode .otp-delete-secondary {
+    background: #242424;
+    border-color: #3a3a3a;
+    color: #e5e7eb;
+}
+
+.dark-mode .otp-delete-secondary:hover {
+    background: #2d2d2d;
+    border-color: #4b5563;
+    color: #ffffff;
 }
 
 .dark-mode .add-user-form label {
@@ -487,6 +635,10 @@
 body:not(.dark-mode) .add-user-modal {
     background-color: rgba(255, 255, 255, 0.6);
 }
+
+body:not(.dark-mode) #confirmDeleteOtpModal {
+    background: rgba(248, 250, 252, 0.68);
+}
 .confirm-delete-button {
     background-color: #ffd6d4;
     border: 1px solid #f28b89;
@@ -510,9 +662,21 @@ body:not(.dark-mode) .add-user-modal {
     color: #ffd6d6;
 }
 
+.dark-mode .otp-delete-primary {
+    background: #d14343;
+    border-color: #e06464;
+    color: #fff;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+}
+
 .dark-mode .confirm-delete-button:hover {
     background-color: #ba6868;
     border-color: #e48787;
+}
+
+.dark-mode .otp-delete-primary:hover {
+    background: #bf3a3a;
+    border-color: #d95b5b;
 }
 
 .delete-user-button-row {
@@ -524,30 +688,50 @@ body:not(.dark-mode) .add-user-modal {
 #editOtpModal .add-user-modal-content {
     background: #f9f9f9;
     border: 1px solid #e0e0e0;
-    border-radius: 12px;
+    border-radius: 18px;
     padding: 2rem;
     width: 400px;
-    max-width: 90vw;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+    max-width: min(480px, calc(100vw - 32px));
+    box-shadow: 0 18px 42px rgba(15, 23, 42, 0.16);
     position: relative;
     font-size: 14px;
     font-family: 'Roboto', sans-serif;
     display: flex;
     flex-direction: column;
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+    filter: blur(10px);
+    transition: transform 0.24s ease, opacity 0.24s ease, filter 0.24s ease;
 }
 
 #editOtpModal {
-    display: none;
+    display: flex;
     position: fixed;
     z-index: 99999;
     top: 0;
     left: 0;
     width: 100vw;
     height: 100vh;
-    background: rgba(0, 0, 0, 0.4);
-    backdrop-filter: blur(8px);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    background: rgba(17, 24, 39, 0.18);
+    backdrop-filter: none;
     justify-content: center;
     align-items: center;
+    transition: opacity 0.24s ease, visibility 0.24s ease, background-color 0.24s ease;
+}
+
+#editOtpModal.is-open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+#editOtpModal.is-open .add-user-modal-content {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
 }
 
 #editOtpModal .add-user-close {
@@ -557,11 +741,33 @@ body:not(.dark-mode) .add-user-modal {
     font-size: 1.4rem;
     cursor: pointer;
     color: #999;
+    background: transparent;
+    border: 0;
+    padding: 0;
+    line-height: 1;
+    appearance: none;
     transition: color 0.2s ease;
 }
 
 #editOtpModal .add-user-close:hover {
     color: #333;
+}
+
+.otp-edit-secondary {
+    margin-left: 8px;
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    background: #fff;
+    color: #111;
+    cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.otp-edit-secondary:hover {
+    background: #f3f4f6;
+    border-color: #d1d5db;
+    color: #111827;
 }
 
 #editOtpModal .add-user-form label {
@@ -571,6 +777,30 @@ body:not(.dark-mode) .add-user-modal {
     margin-bottom: 0.4rem;
     text-align: left;
     padding-left: 2px;
+}
+
+#editOtpModal .otp-inline-label {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+#editOtpModal .otp-inline-label > span:first-child {
+    flex: 1 1 auto;
+}
+
+#editOtpModal .otp-inline-note {
+    display: inline-flex;
+    margin-left: auto;
+    flex: 0 0 auto;
+    font-size: 12px;
+    font-weight: 500;
+    color: #6b7280;
+    white-space: nowrap;
+    text-align: right;
 }
 
 #editOtpModal .add-user-input-wrapper {
@@ -592,16 +822,24 @@ body:not(.dark-mode) .add-user-modal {
 }
 
 
-#editOtpModal #edit-refresh-time[readonly] {
+#editOtpModal #edit-refresh-time[readonly],
+#editOtpModal #edit-refresh-time:disabled {
     background-color: #f0f0f0;
     cursor: not-allowed;
     color: #777;
+    pointer-events: none;
 }
 
-.dark-mode #editOtpModal #edit-refresh-time[readonly] {
+.dark-mode #editOtpModal #edit-refresh-time[readonly],
+.dark-mode #editOtpModal #edit-refresh-time:disabled {
     background-color: #1a1a1a;
     cursor: not-allowed;
     color: #999;
+    pointer-events: none;
+}
+
+.dark-mode #editOtpModal .otp-inline-note {
+    color: #9ca3af;
 }
 
 #editOtpModal .add-user-input-wrapper input:focus,
@@ -633,6 +871,17 @@ body:not(.dark-mode) .add-user-modal {
     background-color: #333;
 }
 
+#editOtpModal .add-user-button-row button:disabled {
+    background: #d1d5db;
+    color: #6b7280;
+    cursor: not-allowed;
+    opacity: 1;
+}
+
+#editOtpModal .add-user-button-row button:disabled:hover {
+    background: #d1d5db;
+}
+
 #editOtpModal .add-user-button-row button[type="button"] {
     background: #fff;
     color: #111;
@@ -643,6 +892,7 @@ body:not(.dark-mode) .add-user-modal {
     background: #1c1c1c;
     border-color: #333;
     color: #eee;
+    box-shadow: 0 22px 48px rgba(0, 0, 0, 0.38);
 }
 
 .dark-mode #editOtpModal .add-user-form label {
@@ -672,6 +922,15 @@ body:not(.dark-mode) .add-user-modal {
     background-color: #ddd;
 }
 
+.dark-mode #editOtpModal .add-user-button-row button:disabled {
+    background: #3a3a3a;
+    color: #8d8d8d;
+}
+
+.dark-mode #editOtpModal .add-user-button-row button:disabled:hover {
+    background: #3a3a3a;
+}
+
 .dark-mode #editOtpModal .add-user-button-row button[type="button"] {
     background: #2a2a2a;
     color: #eee;
@@ -679,7 +938,23 @@ body:not(.dark-mode) .add-user-modal {
 }
 
 body:not(.dark-mode) #editOtpModal {
-    background-color: rgba(255, 255, 255, 0.6);
+    background: rgba(248, 250, 252, 0.68);
+}
+
+.dark-mode #editOtpModal {
+    background: rgba(10, 10, 11, 0.52);
+}
+
+.dark-mode .otp-edit-secondary {
+    background: #2a2a2a;
+    color: #eee;
+    border-color: #444;
+}
+
+.dark-mode .otp-edit-secondary:hover {
+    background: #323232;
+    border-color: #525252;
+    color: #fff;
 }
 @keyframes timerDigitFlyUp {
     0% {

@@ -26,22 +26,31 @@
 </a>
 
 <div id="confirmDeleteOtpModal" class="add-user-modal">
-    <div class="add-user-modal-content" style="width: 360px;">
-        <span class="add-user-close" id="closeDeleteOtpModal">&times;</span>
+    <div class="add-user-modal-content otp-delete-modal-card">
         <form method="post" action="/api/delete-secret" id="deleteOtpForm">
             <input type="hidden" name="secret_id" id="delete-secret-id">
-            <p style="margin-bottom: 1rem;">Are you sure you want to delete this OTP entry?</p>
-            <div class="delete-user-button-row">
-                <button type="submit" class="confirm-delete-button">Yes, Delete</button>
-                <button type="button" id="cancelDeleteOtp" style="margin-left:8px; padding:0.6rem 1.2rem; border-radius:8px; border:none; cursor:pointer;">Cancel</button>
+            <div class="otp-delete-modal-header">
+                <div>
+                    <div class="otp-delete-title-row">
+                        <h3 class="otp-delete-title">Delete the stored Secret?</h3>
+                    </div>
+                    <p class="otp-delete-copy">This secret will be removed permanently and cant be recovered!</p>
+                </div>
+            </div>
+            <div class="delete-user-button-row otp-delete-actions">
+                <button type="button" id="cancelDeleteOtp" class="otp-delete-secondary">Cancel</button>
+                <button type="submit" class="confirm-delete-button otp-delete-primary">
+                    <span class="material-icons" aria-hidden="true">close</span>
+                    <span>Delete Secret</span>
+                </button>
             </div>
         </form>
     </div>
 </div>
 
 <div id="editOtpModal" class="add-user-modal">
-    <div class="add-user-modal-content" style="max-width: 480px;">
-        <span class="add-user-close" id="closeEditOtpModal">&times;</span>
+    <div class="add-user-modal-content otp-edit-modal-card">
+        <button type="button" class="add-user-close otp-edit-close" id="closeEditOtpModal" aria-label="Close edit dialog">&times;</button>
         <form id="editOtpForm" class="add-user-form">
             <input type="hidden" name="secret_id" id="edit-secret-id">
             <label for="edit-name">Name</label>
@@ -59,9 +68,12 @@
                 <input type="text" id="edit-secret" name="secret" placeholder="Base32 secret" required>
             </div>
 
-            <label for="edit-refresh-time">Refresh Time (seconds)</label>
+            <label for="edit-refresh-time" class="otp-inline-label">
+                <span>Refresh Time (seconds)</span>
+                <span id="edit-refresh-time-note" class="otp-inline-note">Read only</span>
+            </label>
             <div class="add-user-input-wrapper">
-                <input type="number" id="edit-refresh-time" name="refresh_time" min="10" placeholder="30" required readonly>
+                <input type="number" id="edit-refresh-time" name="refresh_time" min="10" placeholder="30" required readonly disabled tabindex="-1" aria-describedby="edit-refresh-time-note">
             </div>
 
             <label for="edit-company">Company</label>
@@ -70,8 +82,8 @@
             </div>
 
             <div class="add-user-button-row">
-                <button type="submit">Save Changes</button>
-                <button type="button" id="cancelEditOtp" style="margin-left:8px; padding:0.6rem 1.2rem; border-radius:8px; border:none; cursor:pointer;">Cancel</button>
+                <button type="submit" id="saveEditOtpButton" disabled>Save Changes</button>
+                <button type="button" id="cancelEditOtp" class="otp-edit-secondary">Cancel</button>
             </div>
         </form>
     </div>
@@ -668,7 +680,7 @@
                 const card = e.currentTarget.closest(".otp-card");
                 const secretId = card.dataset.id;
                 document.getElementById("delete-secret-id").value = secretId;
-                document.getElementById("confirmDeleteOtpModal").style.display = "flex";
+                openDeleteOtpModal();
             };
         });
     }
@@ -690,11 +702,67 @@
                 document.getElementById("edit-secret").value = entry.secret || "";
                 document.getElementById("edit-refresh-time").value = entry.refresh_time || 30;
                 populateCompanySelect(document.getElementById("edit-company"), entry.company_id);
+                editOtpInitialState = {
+                    name: normalizeEditOtpValue(entry.name || ""),
+                    email: normalizeEditOtpValue(entry.email || "none").toLowerCase(),
+                    secret: normalizeEditOtpValue(entry.secret || ""),
+                    refresh_time: String(parseInt(entry.refresh_time, 10) || 30),
+                    company_id: String(parseInt(entry.company_id, 10) || 1)
+                };
+                updateEditOtpSubmitState();
 
-                document.getElementById("editOtpModal").style.display = "flex";
+                openEditOtpModal();
             };
         });
     }
+
+    const confirmDeleteOtpModal = document.getElementById("confirmDeleteOtpModal");
+    const editOtpModal = document.getElementById("editOtpModal");
+    const editOtpForm = document.getElementById("editOtpForm");
+    const saveEditOtpButton = document.getElementById("saveEditOtpButton");
+    let editOtpInitialState = null;
+
+    function normalizeEditOtpValue(value) {
+        return String(value ?? "").trim();
+    }
+
+    function getEditOtpFormState() {
+        return {
+            name: normalizeEditOtpValue(document.getElementById("edit-name").value),
+            email: normalizeEditOtpValue(document.getElementById("edit-email").value || "none").toLowerCase(),
+            secret: normalizeEditOtpValue(document.getElementById("edit-secret").value),
+            refresh_time: String(parseInt(document.getElementById("edit-refresh-time").value, 10) || 30),
+            company_id: String(parseInt(document.getElementById("edit-company").value, 10) || 1)
+        };
+    }
+
+    function updateEditOtpSubmitState() {
+        if (!saveEditOtpButton || !editOtpInitialState) return;
+
+        const currentState = getEditOtpFormState();
+        const hasChanged = Object.keys(editOtpInitialState).some((key) => currentState[key] !== editOtpInitialState[key]);
+        saveEditOtpButton.disabled = !hasChanged;
+    }
+
+    function openDeleteOtpModal() {
+        confirmDeleteOtpModal.classList.add("is-open");
+    }
+
+    function closeDeleteOtpModal() {
+        confirmDeleteOtpModal.classList.remove("is-open");
+    }
+
+    function openEditOtpModal() {
+        editOtpModal.classList.add("is-open");
+    }
+
+    function closeEditOtpModal() {
+        editOtpModal.classList.remove("is-open");
+    }
+
+    ["input", "change"].forEach((eventName) => {
+        editOtpForm.addEventListener(eventName, updateEditOtpSubmitState);
+    });
 
     document.getElementById("deleteOtpForm").addEventListener("submit", async (e) => {
         e.preventDefault();
@@ -702,34 +770,31 @@
         const formData = new FormData(form);
         const res = await fetch(form.action, { method: "POST", body: formData });
         if (res.ok) {
-            document.getElementById("confirmDeleteOtpModal").style.display = "none";
+            closeDeleteOtpModal();
             loadOTPs();
         } else {
             alert('Failed to delete OTP.');
         }
     });
 
-    document.getElementById("closeDeleteOtpModal").onclick = () => {
-        document.getElementById("confirmDeleteOtpModal").style.display = "none";
-    };
     document.getElementById("cancelDeleteOtp").onclick = () => {
-        document.getElementById("confirmDeleteOtpModal").style.display = "none";
+        closeDeleteOtpModal();
     };
     window.addEventListener("click", (e) => {
         if (e.target.id === "confirmDeleteOtpModal") {
-            document.getElementById("confirmDeleteOtpModal").style.display = "none";
+            closeDeleteOtpModal();
         }
     });
 
     document.getElementById("closeEditOtpModal").onclick = () => {
-        document.getElementById("editOtpModal").style.display = "none";
+        closeEditOtpModal();
     };
     document.getElementById("cancelEditOtp").onclick = () => {
-        document.getElementById("editOtpModal").style.display = "none";
+        closeEditOtpModal();
     };
     window.addEventListener("click", (e) => {
         if (e.target.id === "editOtpModal") {
-            document.getElementById("editOtpModal").style.display = "none";
+            closeEditOtpModal();
         }
     });
 
@@ -756,7 +821,9 @@
             body: JSON.stringify(payload)
         });
         if (res.ok) {
-            document.getElementById("editOtpModal").style.display = "none";
+            editOtpInitialState = getEditOtpFormState();
+            updateEditOtpSubmitState();
+            closeEditOtpModal();
             await loadOTPs();
         } else {
             const err = await res.json();
