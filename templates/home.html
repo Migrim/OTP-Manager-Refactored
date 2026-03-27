@@ -311,6 +311,40 @@
         return companyOptionsCache;
     }
 
+    function updateTextTimer(timerEl, remaining) {
+        const newStr = String(remaining).padStart(2, '0');
+        const slots = timerEl.querySelectorAll('.timer-slot');
+
+        if (slots.length !== newStr.length) {
+            timerEl.innerHTML = '';
+            for (let i = 0; i < newStr.length; i++) {
+                const slot = document.createElement('span');
+                slot.className = 'timer-slot';
+                const digit = document.createElement('span');
+                digit.className = 'timer-digit';
+                digit.textContent = newStr[i];
+                slot.appendChild(digit);
+                timerEl.appendChild(slot);
+            }
+            return;
+        }
+
+        for (let i = 0; i < newStr.length; i++) {
+            const slot = slots[i];
+            const current = slot.querySelector('.timer-digit:not(.timer-exit)');
+            if (!current || current.textContent === newStr[i]) continue;
+
+            current.classList.add('timer-exit');
+            current.addEventListener('animationend', () => current.remove(), { once: true });
+
+            const next = document.createElement('span');
+            next.className = 'timer-digit timer-enter';
+            next.textContent = newStr[i];
+            slot.appendChild(next);
+            next.addEventListener('animationend', () => next.classList.remove('timer-enter'), { once: true });
+        }
+    }
+
     function animateCodeChange(el, next) {
         const n = String(next || '');
         el.innerHTML = '';
@@ -428,7 +462,7 @@
 
         card._updateTimer = function (remaining, currentSlot) {
             if (SHOW_TEXT_TIMER && timerEl) {
-                timerEl.textContent = String(remaining);
+                updateTextTimer(timerEl, remaining);
             } else if (circle) {
                 const percent = (remaining / 30) * 100;
                 circle.style.strokeDashoffset = 100 - percent;

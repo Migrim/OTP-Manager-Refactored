@@ -984,29 +984,45 @@ body:not(.dark-mode) #editOtpModal {
     border-color: #525252;
     color: #fff;
 }
-@keyframes timerDigitFlyUp {
-    0% {
-        transform: translateY(0);
-        opacity: 1;
-    }
-    30% {
-        transform: translateY(-40%);
-        opacity: 0;
-    }
-    70% {
-        transform: translateY(40%);
-        opacity: 0;
-    }
-    100% {
-        transform: translateY(0);
-        opacity: 1;
-    }
+@keyframes timerDigitExit {
+    from { transform: translateY(0); }
+    to   { transform: translateY(-110%); }
+}
+@keyframes timerDigitEnter {
+    from { transform: translateY(110%); }
+    to   { transform: translateY(0); }
 }
 
-.otp-timer span.fly-up {
+.otp-timer {
+    display: inline-flex;
+    align-items: center;
+    font-variant-numeric: tabular-nums;
+}
+
+.timer-slot {
     display: inline-block;
-    animation: timerDigitFlyUp 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-    will-change: transform, opacity;
+    overflow: hidden;
+    position: relative;
+    height: 1.15em;
+    line-height: 1.15;
+}
+
+.timer-digit {
+    display: block;
+}
+
+.timer-digit.timer-exit {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    animation: timerDigitExit 0.38s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    will-change: transform;
+}
+
+.timer-digit.timer-enter {
+    animation: timerDigitEnter 0.38s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    will-change: transform;
 }
 .pin-icon .material-icons {
     color: rgba(0, 0, 0, 0.2); 
