@@ -75,9 +75,9 @@
             <label class="settings-switch">
                 <input type="checkbox" id="show_including_admin_on_top" name="show_including_admin_on_top" {{ 'checked' if user.show_including_admin_on_top else '' }}>
                 <span class="slider"></span>
-                <span class="switch-text">Show Admin entries on top</span>
+                <span class="switch-text">Show "Admin" passwords first</span>
             </label>
-            <div class="setting-description">Show entries including the word "admin" on top inside the stored company.</div>
+            <div class="setting-description">Passwords whose name contains "admin" will appear at the top — both on the home screen and in company search results.</div>
 
             {# 
             <div class="settings-color">

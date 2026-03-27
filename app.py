@@ -562,6 +562,8 @@ def search_page():
     company_raw = request.args.get("company", "")
     company_q = company_raw.strip().lower()
 
+    admin_on_top = g.user_settings.get("show_including_admin_on_top", 0)
+
     with sqlite3.connect(DB_PATH) as db:
         cursor = db.cursor()
 
@@ -570,16 +572,28 @@ def search_page():
             company = cursor.fetchone()
             if company:
                 company_id, company_name = company
-                cursor.execute(
-                    """
-                    SELECT s.name, s.email, c.name
-                    FROM otp_secrets s
-                    LEFT JOIN companies c ON s.company_id = c.company_id
-                    WHERE s.company_id = ?
-                    ORDER BY s.name ASC
-                    """,
-                    (company_id,),
-                )
+                if admin_on_top:
+                    cursor.execute(
+                        """
+                        SELECT s.name, s.email, c.name
+                        FROM otp_secrets s
+                        LEFT JOIN companies c ON s.company_id = c.company_id
+                        WHERE s.company_id = ?
+                        ORDER BY CASE WHEN LOWER(s.name) LIKE '%admin%' THEN 0 ELSE 1 END ASC, s.name ASC
+                        """,
+                        (company_id,),
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        SELECT s.name, s.email, c.name
+                        FROM otp_secrets s
+                        LEFT JOIN companies c ON s.company_id = c.company_id
+                        WHERE s.company_id = ?
+                        ORDER BY s.name ASC
+                        """,
+                        (company_id,),
+                    )
                 results = cursor.fetchall()
                 logger.info(f"{u(g.user_id)} company-search '{company_name}' — {len(results)} results.")
                 return render_template("search.html", query=company_name, results=results)
