@@ -63,6 +63,15 @@
             #}
 
             <label class="settings-switch">
+                <input type="checkbox" id="hide_codes_by_default" name="hide_codes_by_default" {{ 'checked' if user.hide_codes_by_default else '' }}>
+                <span class="slider"></span>
+                <span class="switch-text">
+                    <span class="material-symbols-outlined blur-warning-icon">privacy_tip</span>
+                    Hide OTP codes by default
+            </label>
+            <div class="setting-description">OTP codes are masked as ******. Click any code to reveal it. The copy button always copies the real code.</div>
+
+            <label class="settings-switch">
                 <input type="checkbox" id="blur_on_inactive" name="blur_on_inactive" {{ 'checked' if user.blur_on_inactive else '' }}>
                 <span class="slider"></span>
                 <span class="switch-text">

@@ -163,6 +163,7 @@
   document.addEventListener("DOMContentLoaded", () => {
     const CAN_EDIT = {{ 1 if can_edit else 0 }};
     const CAN_DELETE = {{ 1 if can_delete else 0 }};
+    const HIDE_CODES_BY_DEFAULT = {{ 1 if user_settings.hide_codes_by_default else 0 }};
 
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
@@ -580,29 +581,61 @@
           const editBtn = row.querySelector(".edit-btn");
           const deleteBtn = row.querySelector(".delete-btn");
 
+          row._codeRevealed = !HIDE_CODES_BY_DEFAULT;
+
+          function showMaskedSearchCode() {
+            codeEl.classList.add('code-hidden');
+            codeEl.title = 'Click to reveal';
+            codeEl.innerHTML = '';
+            for (let i = 0; i < 6; i++) {
+              const s = document.createElement('span');
+              s.className = 'digit';
+              s.textContent = '•';
+              codeEl.appendChild(s);
+            }
+          }
+
           async function fetchAndUpdate() {
             try {
               const r = await fetch(`/api/secrets/${match.id}`);
               const data = await r.json();
               if (data.error) return;
 
-              const digits = [...data.current_code].map((d, i) =>
-                `<span class="digit" style="animation-delay: ${i * 40}ms">${d}</span>`
-              ).join('');
-
-              codeEl.innerHTML = digits;
+              const realCode = data.current_code;
+              codeEl.dataset.realCode = realCode;
               codeEl.dataset.remaining = data.seconds_remaining;
               codeEl.dataset.timestamp = performance.now();
 
               const copyOtp = () => {
-                const text = data.current_code;
+                const text = codeEl.dataset.realCode;
                 copySafe(text)
                   .then(() => { alert(`Copied OTP: ${text}`); })
                   .catch(() => { window.prompt('Copy OTP:', text); });
               };
-
-              codeEl.onclick = copyOtp;
               if (copyBtn) copyBtn.onclick = copyOtp;
+
+              if (HIDE_CODES_BY_DEFAULT && !row._codeRevealed) {
+                if (!codeEl.classList.contains('code-hidden')) {
+                  showMaskedSearchCode();
+                  codeEl.onclick = () => {
+                    row._codeRevealed = true;
+                    codeEl.classList.remove('code-hidden');
+                    codeEl.title = '';
+                    const digits = [...(codeEl.dataset.realCode || '')].map((d, i) =>
+                      `<span class="digit" style="animation-delay: ${i * 40}ms">${d}</span>`
+                    ).join('');
+                    codeEl.innerHTML = digits;
+                    codeEl.onclick = copyOtp;
+                  };
+                }
+                // code rotated while hidden — realCode already updated, display stays masked
+              } else {
+                const digits = [...realCode].map((d, i) =>
+                  `<span class="digit" style="animation-delay: ${i * 40}ms">${d}</span>`
+                ).join('');
+                codeEl.innerHTML = digits;
+                codeEl.onclick = copyOtp;
+              }
             } catch (err) {
               console.error("fetchAndUpdate failed", err);
             }

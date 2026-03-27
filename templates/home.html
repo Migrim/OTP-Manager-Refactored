@@ -105,6 +105,7 @@
     const SHOW_TEXT_TIMER = {{ 1 if user_settings.show_timer else 0 }};
     const blur_on_inactive = {{ 1 if user_settings.blur_on_inactive else 0 }};
     const SHOW_INCLUDE_ADMIN_ON_TOP = {{ 1 if user_settings.show_including_admin_on_top else 0 }};
+    const HIDE_CODES_BY_DEFAULT = {{ 1 if user_settings.hide_codes_by_default else 0 }};
     const CAN_EDIT_SECRETS = {{ 1 if can_edit else 0 }};
     const CAN_DELETE_SECRETS = {{ 1 if can_delete else 0 }};
     const visibleCards = new Set();
@@ -292,7 +293,13 @@
             const data = await res.json();
             const codeEl = card.querySelector('.otp-code');
             const next = String(data.current_code || "");
-            if(codeEl && codeEl.textContent.trim() !== next) animateCodeChange(codeEl, next);
+            if (codeEl) {
+                const prev = codeEl.dataset.realCode || "";
+                codeEl.dataset.realCode = next;
+                if ((!HIDE_CODES_BY_DEFAULT || card._codeRevealed) && prev !== next) {
+                    animateCodeChange(codeEl, next);
+                }
+            }
             updateOtpCardWarningState(card);
         }catch(e){}
     }
@@ -342,6 +349,18 @@
             next.textContent = newStr[i];
             slot.appendChild(next);
             next.addEventListener('animationend', () => next.classList.remove('timer-enter'), { once: true });
+        }
+    }
+
+    function showMaskedCode(el) {
+        el.classList.add('code-hidden');
+        el.title = 'Click to reveal';
+        el.innerHTML = '';
+        for (let i = 0; i < 6; i++) {
+            const s = document.createElement('span');
+            s.className = 'digit';
+            s.textContent = '•';
+            el.appendChild(s);
         }
     }
 
@@ -436,12 +455,30 @@
         const circle = SHOW_TEXT_TIMER ? null : card.querySelector('.countdown-circle .circle-fg');
         card._lastSlot = null;
 
-        animateCodeChange(codeText, codeText.textContent.trim());
+        const initialCode = codeText.textContent.trim();
+        codeText.dataset.realCode = initialCode;
+        card._codeRevealed = !HIDE_CODES_BY_DEFAULT;
+
+        if (HIDE_CODES_BY_DEFAULT) {
+            showMaskedCode(codeText);
+            codeText.addEventListener('click', () => {
+                card._codeRevealed = !card._codeRevealed;
+                if (card._codeRevealed) {
+                    codeText.classList.remove('code-hidden');
+                    codeText.title = '';
+                    animateCodeChange(codeText, codeText.dataset.realCode || '');
+                } else {
+                    showMaskedCode(codeText);
+                }
+            });
+        } else {
+            animateCodeChange(codeText, initialCode);
+        }
         updateOtpCardWarningState(card);
 
         copyButton.addEventListener('click', () => {
             if (copyButton.disabled) return;
-            const code = codeText.textContent.trim();
+            const code = codeText.dataset.realCode || codeText.textContent.trim();
             if (!code) return;
             copyText(code).then(() => { alert(`Copied code: ${code}`); }).catch(() => { window.prompt('Copy code:', code); });
         });
@@ -488,8 +525,11 @@
             const codeEl = card.querySelector('.otp-code');
             if (!codeEl || !map.has(id)) return;
             const next = map.get(id);
-            const current = codeEl.textContent.trim();
-            if (current !== next) animateCodeChange(codeEl, next);
+            const prev = codeEl.dataset.realCode || "";
+            codeEl.dataset.realCode = next;
+            if ((!HIDE_CODES_BY_DEFAULT || card._codeRevealed) && prev !== next) {
+                animateCodeChange(codeEl, next);
+            }
             updateOtpCardWarningState(card);
         });
     }

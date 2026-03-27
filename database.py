@@ -126,7 +126,8 @@ def init_db():
                 show_emails INTEGER DEFAULT 0,
                 show_company INTEGER DEFAULT 0,
                 blur_on_inactive INTEGER DEFAULT 1,
-                show_including_admin_on_top INTEGER DEFAULT 0
+                show_including_admin_on_top INTEGER DEFAULT 0,
+                hide_codes_by_default INTEGER DEFAULT 0
             )
         """)
         c.execute("PRAGMA table_info(users)")
@@ -148,6 +149,8 @@ def init_db():
             c.execute("ALTER TABLE users ADD COLUMN blur_on_inactive INTEGER DEFAULT 0")
         if "show_including_admin_on_top" not in cols:
             c.execute("ALTER TABLE users ADD COLUMN show_including_admin_on_top INTEGER DEFAULT 0")
+        if "hide_codes_by_default" not in cols:
+            c.execute("ALTER TABLE users ADD COLUMN hide_codes_by_default INTEGER DEFAULT 0")
         db.commit()
         c.execute("SELECT id FROM users WHERE id = 1")
         if c.fetchone() is None:

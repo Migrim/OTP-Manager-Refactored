@@ -536,6 +536,20 @@ main {
     animation: otpDigitFlyUp 200ms ease-out;
 }
 
+.code-text.code-hidden {
+    cursor: pointer;
+    opacity: 0.45;
+    user-select: none;
+    letter-spacing: 0.1em;
+    transition: opacity 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+}
+
+.code-text.code-hidden:hover {
+    opacity: 0.75;
+}
+
 .countdown-circle {
     transform: rotate(90deg) scaleX(-1);
 }
