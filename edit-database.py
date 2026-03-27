@@ -228,7 +228,8 @@ def upgrade_database():
     required_columns = [
         "pinned", "can_delete", "can_edit", "can_add_companies",
         "can_delete_companies", "can_add_secrets", "can_add_users",
-        "blur_on_inactive", "show_including_admin_on_top"
+        "blur_on_inactive", "show_including_admin_on_top",
+        "hide_codes_by_default", "hide_secret_field"
     ]
 
     if any(col not in columns for col in required_columns):
@@ -260,7 +261,9 @@ def upgrade_database():
                 show_emails INTEGER DEFAULT 0,
                 show_company INTEGER DEFAULT 0,
                 blur_on_inactive INTEGER DEFAULT 1,
-                show_including_admin_on_top INTEGER DEFAULT 0
+                show_including_admin_on_top INTEGER DEFAULT 0,
+                hide_codes_by_default INTEGER DEFAULT 0,
+                hide_secret_field INTEGER DEFAULT 0
             )
         """)
 
@@ -274,9 +277,10 @@ def upgrade_database():
                 can_delete_companies, can_add_secrets, can_add_users,
                 pinned, show_timer, show_otp_type, show_content_titles,
                 alert_color, text_color, show_emails, show_company,
-                blur_on_inactive, show_including_admin_on_top
+                blur_on_inactive, show_including_admin_on_top,
+                hide_codes_by_default, hide_secret_field
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
 
         migrated = 0
@@ -305,7 +309,9 @@ def upgrade_database():
                 int(data.get("show_emails", 0) or 0),
                 int(data.get("show_company", 0) or 0),
                 int(data.get("blur_on_inactive", 1) or 1),
-                int(data.get("show_including_admin_on_top", 0) or 0)
+                int(data.get("show_including_admin_on_top", 0) or 0),
+                int(data.get("hide_codes_by_default", 0) or 0),
+                int(data.get("hide_secret_field", 0) or 0)
             ))
             migrated += 1
 
@@ -324,6 +330,14 @@ def upgrade_database():
     if "show_including_admin_on_top" not in columns:
         cur.execute("ALTER TABLE users ADD COLUMN show_including_admin_on_top INTEGER DEFAULT 0")
         print(f"  {green('✓')} Added column: {gray('show_including_admin_on_top')}")
+        changed = True
+    if "hide_codes_by_default" not in columns:
+        cur.execute("ALTER TABLE users ADD COLUMN hide_codes_by_default INTEGER DEFAULT 0")
+        print(f"  {green('✓')} Added column: {gray('hide_codes_by_default')}")
+        changed = True
+    if "hide_secret_field" not in columns:
+        cur.execute("ALTER TABLE users ADD COLUMN hide_secret_field INTEGER DEFAULT 0")
+        print(f"  {green('✓')} Added column: {gray('hide_secret_field')}")
         changed = True
     if not changed:
         print(f"  {green('✓')} Schema is already up to date")
@@ -479,7 +493,8 @@ def check_schema_needs_update():
     required = [
         "pinned", "can_delete", "can_edit", "can_add_companies",
         "can_delete_companies", "can_add_secrets", "can_add_users",
-        "blur_on_inactive", "show_including_admin_on_top"
+        "blur_on_inactive", "show_including_admin_on_top",
+        "hide_codes_by_default", "hide_secret_field"
     ]
     try:
         conn = sqlite3.connect(INSTANCE_PATH)

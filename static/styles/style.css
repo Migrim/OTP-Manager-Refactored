@@ -540,7 +540,6 @@ main {
     cursor: pointer;
     opacity: 0.45;
     user-select: none;
-    letter-spacing: 0.1em;
     transition: opacity 0.15s ease;
     display: inline-flex;
     align-items: center;

@@ -11,15 +11,8 @@
 <div class="settings-grid">
     <div class="settings-card">
         <form method="post" action="/update-settings" class="settings-form">
-            
-            {# 
-            <label class="settings-switch">
-                <input type="checkbox" id="enable_pagination" name="enable_pagination" {{ 'checked' if user.enable_pagination else '' }}>
-                <span class="slider"></span>
-                <span class="switch-text">Enable Pagination</span>
-            </label>
-            <div class="setting-description">Displays OTP entries across multiple pages instead of one long list.</div>
-            #}
+
+            <div class="settings-section-label">Display</div>
 
             <label class="settings-switch">
                 <input type="checkbox" id="show_timer" name="show_timer" {{ 'checked' if user.show_timer else '' }}>
@@ -28,24 +21,6 @@
             </label>
             <div class="setting-description">Display a simple text timer instead of the circular timer on the OTP Containers on the home screen.</div>
 
-            {# 
-            <label class="settings-switch">
-                <input type="checkbox" id="show_otp_type" name="show_otp_type" {{ 'checked' if user.show_otp_type else '' }}>
-                <span class="slider"></span>
-                <span class="switch-text">Show OTP Type</span>
-            </label>
-            <div class="setting-description">Displays whether the OTP is TOTP or HOTP type.</div>
-            #}
-
-            {# 
-            <label class="settings-switch">
-                <input type="checkbox" id="show_content_titles" name="show_content_titles" {{ 'checked' if user.show_content_titles else '' }}>
-                <span class="slider"></span>
-                <span class="switch-text">Show Content Titles</span>
-            </label>
-            <div class="setting-description">Shows the title labels above each OTP entry for clarity.</div>
-            #}
-
             <label class="settings-switch">
                 <input type="checkbox" id="show_emails" name="show_emails" {{ 'checked' if user.show_emails else '' }}>
                 <span class="slider"></span>
@@ -53,14 +28,14 @@
             </label>
             <div class="setting-description">Displays the email address associated with the OTP.</div>
 
-            {# 
             <label class="settings-switch">
-                <input type="checkbox" id="show_company" name="show_company" {{ 'checked' if user.show_company else '' }}>
+                <input type="checkbox" id="show_including_admin_on_top" name="show_including_admin_on_top" {{ 'checked' if user.show_including_admin_on_top else '' }}>
                 <span class="slider"></span>
-                <span class="switch-text">Show Company</span>
+                <span class="switch-text">Show "Admin" passwords first</span>
             </label>
-            <div class="setting-description">Shows the company name linked to the OTP code.</div>
-            #}
+            <div class="setting-description">Passwords whose name contains "admin" will appear at the top — both on the home screen and in company search results.</div>
+
+            <div class="settings-section-label">Security</div>
 
             <label class="settings-switch">
                 <input type="checkbox" id="hide_codes_by_default" name="hide_codes_by_default" {{ 'checked' if user.hide_codes_by_default else '' }}>
@@ -68,8 +43,19 @@
                 <span class="switch-text">
                     <span class="material-symbols-outlined blur-warning-icon">privacy_tip</span>
                     Hide OTP codes by default
+                </span>
             </label>
-            <div class="setting-description">OTP codes are masked as ******. Click any code to reveal it. The copy button always copies the real code.</div>
+            <div class="setting-description">OTP codes are masked as "hidden". Click any code to reveal it. The copy button always copies the real code.</div>
+
+            <label class="settings-switch">
+                <input type="checkbox" id="hide_secret_field" name="hide_secret_field" {{ 'checked' if user.hide_secret_field else '' }}>
+                <span class="slider"></span>
+                <span class="switch-text">
+                    <span class="material-symbols-outlined blur-warning-icon">privacy_tip</span>
+                    Hide secret keys from cards
+                </span>
+            </label>
+            <div class="setting-description">Removes the secret key field entirely from OTP cards on the home screen.</div>
 
             <label class="settings-switch">
                 <input type="checkbox" id="blur_on_inactive" name="blur_on_inactive" {{ 'checked' if user.blur_on_inactive else '' }}>
@@ -80,27 +66,6 @@
                 </span>
             </label>
             <div class="setting-description">Blur OTP containers when you are inactive for longer than a minute to protect your data from prying eyes.</div>
-
-            <label class="settings-switch">
-                <input type="checkbox" id="show_including_admin_on_top" name="show_including_admin_on_top" {{ 'checked' if user.show_including_admin_on_top else '' }}>
-                <span class="slider"></span>
-                <span class="switch-text">Show "Admin" passwords first</span>
-            </label>
-            <div class="setting-description">Passwords whose name contains "admin" will appear at the top — both on the home screen and in company search results.</div>
-
-            {# 
-            <div class="settings-color">
-                <label for="alert_color">Alert Color</label>
-                <input type="color" id="alert_color" name="alert_color" value="{{ user.alert_color }}">
-            </div>
-            #}
-
-            {# 
-            <div class="settings-color">
-                <label for="text_color">Text Color</label>
-                <input type="color" id="text_color" name="text_color" value="{{ user.text_color }}">
-            </div>
-            #}
 
             <div class="settings-button-row">
                 <button type="submit">Save Settings</button>

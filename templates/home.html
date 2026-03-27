@@ -106,6 +106,7 @@
     const blur_on_inactive = {{ 1 if user_settings.blur_on_inactive else 0 }};
     const SHOW_INCLUDE_ADMIN_ON_TOP = {{ 1 if user_settings.show_including_admin_on_top else 0 }};
     const HIDE_CODES_BY_DEFAULT = {{ 1 if user_settings.hide_codes_by_default else 0 }};
+    const HIDE_SECRET_FIELD = {{ 1 if user_settings.hide_secret_field else 0 }};
     const CAN_EDIT_SECRETS = {{ 1 if can_edit else 0 }};
     const CAN_DELETE_SECRETS = {{ 1 if can_delete else 0 }};
     const visibleCards = new Set();
@@ -355,13 +356,7 @@
     function showMaskedCode(el) {
         el.classList.add('code-hidden');
         el.title = 'Click to reveal';
-        el.innerHTML = '';
-        for (let i = 0; i < 6; i++) {
-            const s = document.createElement('span');
-            s.className = 'digit';
-            s.textContent = '•';
-            el.appendChild(s);
-        }
+        el.innerHTML = '<span class="digit">hidden</span>';
     }
 
     function animateCodeChange(el, next) {
@@ -447,7 +442,7 @@
 
     function setupCard(card) {
         const secretEl = card.querySelector('.otp-secret');
-        if (!secretEl) return;
+        if (!secretEl && !HIDE_SECRET_FIELD) return;
         const pinIcon = card.querySelector(".pin-icon");
         const codeText = card.querySelector('.otp-code');
         const copyButton = card.querySelector('.action-button.copy');
@@ -507,8 +502,10 @@
             card._lastSlot = currentSlot;
         };
 
-        secretEl.addEventListener('mouseenter', () => { secretEl.classList.add('reveal') });
-        secretEl.addEventListener('mouseleave', () => { secretEl.classList.remove('reveal') });
+        if (secretEl) {
+            secretEl.addEventListener('mouseenter', () => { secretEl.classList.add('reveal') });
+            secretEl.addEventListener('mouseleave', () => { secretEl.classList.remove('reveal') });
+        }
 
         const now = Math.floor(Date.now() / 1000);
         const remaining = 30 - (now % 30);
@@ -581,12 +578,10 @@
                         </div>
                         <div class="otp-field"><span class="otp-field-label">Name:</span> <span class="otp-field-value">${entry.name}</span></div>
                         <div class="otp-field"><span class="otp-field-label">Company:</span> <span class="otp-field-value">${entry.company_name || "Unknown Company"}</span></div>
-                        <div class="otp-field"><span class="otp-field-label">Secret:</span> 
-                            ${(() => {
-                                const m = maskSecret(entry.secret);
-                                return `<span class="otp-field-value otp-secret" data-real="${entry.secret}" data-hidden="${m}">${m}</span>`;
-                            })()}
-                        </div>
+                        ${HIDE_SECRET_FIELD ? `` : `
+                        <div class="otp-field"><span class="otp-field-label">Secret:</span>
+                            <span class="otp-field-value otp-secret" data-real="${entry.secret}" data-hidden="${maskSecret(entry.secret)}">${maskSecret(entry.secret)}</span>
+                        </div>`}
                         <div class="otp-field"><span class="otp-field-label">OTP Code:</span> <span class="otp-field-value code-text otp-code">${entry.current_code || ""}</span></div>
                         ${SHOW_EMAIL ? `
                             <div class="otp-field">
@@ -649,12 +644,10 @@
                             <span class="otp-warning-text">cant generate otp code #ERR-004</span>
                         </div>
                         <div class="otp-field"><span class="otp-field-label">Name:</span> <span class="otp-field-value">${entry.name}</span></div>
-                        <div class="otp-field"><span class="otp-field-label">Secret:</span> 
-                            ${(() => {
-                                const m = maskSecret(entry.secret);
-                                return `<span class="otp-field-value otp-secret" data-real="${entry.secret}" data-hidden="${m}">${m}</span>`;
-                            })()}
-                        </div>
+                        ${HIDE_SECRET_FIELD ? `` : `
+                        <div class="otp-field"><span class="otp-field-label">Secret:</span>
+                            <span class="otp-field-value otp-secret" data-real="${entry.secret}" data-hidden="${maskSecret(entry.secret)}">${maskSecret(entry.secret)}</span>
+                        </div>`}
                         <div class="otp-field"><span class="otp-field-label">OTP Code:</span> <span class="otp-field-value code-text otp-code">${entry.current_code || ""}</span></div>
                         ${SHOW_EMAIL ? `
                             <div class="otp-field">

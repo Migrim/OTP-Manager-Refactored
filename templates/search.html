@@ -586,13 +586,7 @@
           function showMaskedSearchCode() {
             codeEl.classList.add('code-hidden');
             codeEl.title = 'Click to reveal';
-            codeEl.innerHTML = '';
-            for (let i = 0; i < 6; i++) {
-              const s = document.createElement('span');
-              s.className = 'digit';
-              s.textContent = '•';
-              codeEl.appendChild(s);
-            }
+            codeEl.innerHTML = '<span class="digit">hidden</span>';
           }
 
           async function fetchAndUpdate() {

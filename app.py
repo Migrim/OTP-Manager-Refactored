@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session, g, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, session, g, jsonify, Response
 import sqlite3
 import json
 import os
@@ -10,7 +10,7 @@ from api import api_bp
 from extensions import bcrypt
 from logger import logger
 import threading
-from database import hourly_maintenance, acquire_lock, release_lock
+from database import hourly_maintenance, acquire_lock, release_lock, get_missing_columns
 
 _LOGIN_MAX_ATTEMPTS = 5
 _LOGIN_LOCKOUT_SECONDS = 900 
@@ -54,6 +54,8 @@ app.register_blueprint(api_bp, url_prefix="/api")
 
 VERSION_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "VERSION")
 INDEX_TEMPLATE_PRESENT = os.path.isfile(os.path.join(app.template_folder or "templates", "index.html"))
+
+_DB_MISSING_COLS = get_missing_columns()
 
 def get_app_version():
     try:
@@ -151,6 +153,7 @@ def row_to_settings(row):
         "blur_on_inactive": int(row[14] or 0),
         "show_including_admin_on_top": int(row[15] or 0),
         "hide_codes_by_default": int(row[16] or 0),
+        "hide_secret_field": int(row[17] or 0),
     }
 
 def _is_rate_limited(ip: str) -> float | None:
@@ -186,6 +189,14 @@ def page_not_found(e):
     return render_template("404.html"), 404
 
 @app.before_request
+def block_on_schema_mismatch():
+    if _DB_MISSING_COLS and request.endpoint != "static":
+        template_path = os.path.join(app.template_folder or "templates", "db_upgrade.html")
+        with open(template_path, "r", encoding="utf-8") as f:
+            html = f.read()
+        return Response(html, status=503, mimetype="text/html")
+
+@app.before_request
 def load_user():
     g.user_id = session.get("user_id")
     g.is_admin = session.get("is_admin", False)
@@ -209,7 +220,7 @@ def load_user():
                     can_delete_companies, can_add_secrets, can_add_users,
                     pinned, show_timer, show_otp_type, show_content_titles,
                     alert_color, text_color, show_emails, show_company,
-                    blur_on_inactive, show_including_admin_on_top, hide_codes_by_default
+                    blur_on_inactive, show_including_admin_on_top, hide_codes_by_default, hide_secret_field
                 FROM users
                 WHERE id = ?
             """, (g.user_id,))
@@ -243,6 +254,7 @@ def load_user():
                     "blur_on_inactive": int(row[20] or 0),
                     "show_including_admin_on_top": int(row[21] or 0),
                     "hide_codes_by_default": int(row[22] or 0),
+                    "hide_secret_field": int(row[23] or 0),
                 }
 
 @app.context_processor
@@ -441,6 +453,7 @@ def update_settings():
         "blur_on_inactive": 1 if request.form.get("blur_on_inactive") in ("on", "true", "1") else 0,
         "show_including_admin_on_top": 1 if request.form.get("show_including_admin_on_top") in ("on", "true", "1") else 0,
         "hide_codes_by_default": 1 if request.form.get("hide_codes_by_default") in ("on", "true", "1") else 0,
+        "hide_secret_field": 1 if request.form.get("hide_secret_field") in ("on", "true", "1") else 0,
     }
     alert_color = request.form.get("alert_color")
     text_color = request.form.get("text_color")
@@ -458,6 +471,7 @@ def update_settings():
                     blur_on_inactive = ?,
                     show_including_admin_on_top = ?,
                     hide_codes_by_default = ?,
+                    hide_secret_field = ?,
                     alert_color = COALESCE(?, alert_color),
                     text_color = COALESCE(?, text_color)
                 WHERE id = ?
@@ -471,6 +485,7 @@ def update_settings():
                     payload["blur_on_inactive"],
                     payload["show_including_admin_on_top"],
                     payload["hide_codes_by_default"],
+                    payload["hide_secret_field"],
                     alert_color,
                     text_color,
                     g.user_id,
