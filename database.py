@@ -16,14 +16,6 @@ DB_PATH = os.path.join(INSTANCE_DIR, DB_NAME)
 LOCK_PATH = os.path.join(INSTANCE_DIR, "db_maint.lock")
 LOCK_STALE_SECONDS = 5400
 
-FORBIDDEN_WORDS = [
-    "INVALID","FORBIDDEN","ERROR","SELECT","DROP","INSERT","DELETE",
-    "CREATE","ALTER","EXEC","EXECUTE","TRIGGER","GRANT","REVOKE","COMMIT",
-    "ROLLBACK","SAVEPOINT","FLUSH","SHUTDOWN","UNION","INTERSECT","EXCEPT",
-    "SCRIPT","SCRIPTING","NULL","TRUE","FALSE","LIMIT","TABLE","VIEW","KEY",
-    "INDEX","DISTINCT","JOIN","WHERE","ORDER BY","GROUP BY","HAVING","DECLARE",
-    "CURSOR","FETCH","LOCK"
-]
 
 def ensure_dirs():
     if not os.path.exists(INSTANCE_DIR):
@@ -194,15 +186,9 @@ def check_names():
             n = (name or "").strip()
             if n == "":
                 issues.append(("empty_name", rid))
-            else:
-                up = n.upper()
-                if any(w in up for w in FORBIDDEN_WORDS):
-                    issues.append(("forbidden_word", rid))
     for kind, rid in issues:
         if kind == "empty_name":
             logger.warning("otp_secrets id=%s has empty name", rid)
-        else:
-            logger.warning("otp_secrets id=%s contains forbidden word in name", rid)
     return len(issues)
 
 def check_orphans():

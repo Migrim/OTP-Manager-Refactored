@@ -190,6 +190,11 @@
         const text = document.getElementById("otpProblemsToastText");
         if (!toast || !text) return;
 
+        if (!CAN_EDIT_SECRETS) {
+            toast.classList.remove("show");
+            return;
+        }
+
         const count = getProblemCards().length;
 
         if (count <= 0) {
@@ -572,10 +577,7 @@
                 card.innerHTML = `
                     <div class="otp-card-inner">
                         <span class="pin-icon"><span class="material-icons">push_pin</span></span>
-                        <div class="otp-warning-overlay" aria-hidden="true">
-                            <span class="material-icons">report_problem</span>
-                            <span class="otp-warning-text">cant generate otp code #ERR-004</span>
-                        </div>
+                        ${CAN_EDIT_SECRETS ? `<div class="otp-warning-overlay" aria-hidden="true"><span class="material-icons">report_problem</span><span class="otp-warning-text">cant generate otp code #ERR-004</span></div>` : ``}
                         <div class="otp-field"><span class="otp-field-label">Name:</span> <span class="otp-field-value">${entry.name}</span></div>
                         <div class="otp-field"><span class="otp-field-label">Company:</span> <span class="otp-field-value">${entry.company_name || "Unknown Company"}</span></div>
                         ${HIDE_SECRET_FIELD ? `` : `
@@ -639,10 +641,7 @@
                 card.innerHTML = `
                     <div class="otp-card-inner">
                         <span class="pin-icon"><span class="material-icons">push_pin</span></span>
-                        <div class="otp-warning-overlay" aria-hidden="true">
-                            <span class="material-icons">report_problem</span>
-                            <span class="otp-warning-text">cant generate otp code #ERR-004</span>
-                        </div>
+                        ${CAN_EDIT_SECRETS ? `<div class="otp-warning-overlay" aria-hidden="true"><span class="material-icons">report_problem</span><span class="otp-warning-text">cant generate otp code #ERR-004</span></div>` : ``}
                         <div class="otp-field"><span class="otp-field-label">Name:</span> <span class="otp-field-value">${entry.name}</span></div>
                         ${HIDE_SECRET_FIELD ? `` : `
                         <div class="otp-field"><span class="otp-field-label">Secret:</span>

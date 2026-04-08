@@ -13,9 +13,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function toggleMenu() {
     if (menu.hasAttribute('hidden')) {
-      const r = moreBtn.getBoundingClientRect();
-      menu.style.top = `${r.bottom + 6 + window.scrollY}px`;
-      menu.style.left = `${r.right - menu.offsetWidth + window.scrollX}px`;
       menu.removeAttribute('hidden');
       document.addEventListener('mousedown', outsideClose, true);
       document.addEventListener('keydown', keyClose, true);

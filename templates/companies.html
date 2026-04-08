@@ -55,9 +55,11 @@
     {% endif %}
 </div>
 
+{% if can_add_companies %}
 <a href="#" class="fab-add-user" id="openAddCompanyModal" title="Add Company">
     <span class="material-icons">add</span>
 </a>
+{% endif %}
 
 <div id="addCompanyModal" class="add-user-modal">
     <div class="add-user-modal-content">

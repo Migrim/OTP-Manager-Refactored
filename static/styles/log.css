@@ -543,12 +543,16 @@ html.dark-mode .chk input[type="checkbox"]:checked {
   background: #2f6feb;
   border-color: #2f6feb;
 }
+.more-menu-wrap {
+    position: relative;
+}
+
 .action-menu {
     position: absolute;
     top: calc(100% + 6px);
-    right: 6px;
-    min-width: 100px;
-    max-width: 130px;
+    right: 0;
+    min-width: 130px;
+    max-width: 160px;
     background: #fff;
     border: 1px solid #e6e6e6;
     border-radius: 10px;
