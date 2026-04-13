@@ -624,7 +624,12 @@
 
             const title = document.createElement("h2");
             title.className = "company-title";
-            title.textContent = company;
+            const companyId = unpinnedEntries[0]?.company_id;
+            if (companyId != null) {
+                title.innerHTML = `${company} <a href="/companies?scroll=${encodeURIComponent(companyId)}" class="company-link-icon" title="Go to company"><span class="material-icons">insert_link</span></a>`;
+            } else {
+                title.textContent = company;
+            }
 
             const grid = document.createElement("div");
             grid.className = "otp-grid";

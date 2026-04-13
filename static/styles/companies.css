@@ -840,3 +840,12 @@ body.home #search-otp-fake,
 body.companies #search-otp-fake {
     display: none;
 }
+
+
+.user-card {
+    transition: box-shadow 0.45s ease;
+}
+
+.user-card.company-scroll-highlight {
+    box-shadow: 0 0 0 2px rgba(149, 97, 226, 0.65);
+}

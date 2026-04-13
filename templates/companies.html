@@ -301,6 +301,18 @@
     }
     document.addEventListener("DOMContentLoaded", () => {
         document.body.classList.add("companies");
+
+        const scrollParam = new URLSearchParams(window.location.search).get("scroll");
+        if (scrollParam) {
+            const target = document.querySelector(`.user-card[data-company-id="${CSS.escape(scrollParam)}"]`);
+            if (target) {
+                setTimeout(() => {
+                    target.scrollIntoView({ behavior: "smooth", block: "center" });
+                    target.classList.add("company-scroll-highlight");
+                    setTimeout(() => target.classList.remove("company-scroll-highlight"), 2000);
+                }, 150);
+            }
+        }
     });
 </script>
 {% endblock %}
