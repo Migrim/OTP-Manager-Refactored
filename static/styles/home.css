@@ -22,17 +22,19 @@
     width: 100%;
     display: flex;
     align-items: center;
-    gap: 0.4rem;
+    gap: 0.7rem;
 }
 
 .company-link-icon {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     color: inherit;
     opacity: 0.35;
     text-decoration: none;
     transition: opacity 0.2s ease;
     line-height: 1;
+    margin-top: 1px;
 }
 
 .company-link-icon:hover {
@@ -41,7 +43,8 @@
 
 .company-link-icon .material-icons {
     font-size: 1rem;
-    vertical-align: middle;
+    display: flex;
+    align-items: center;
 }
 
 .otp-grid {
