@@ -536,8 +536,8 @@
 }
 
 .dark-mode #addCompanyModal .add-user-modal-content,
-.dark-mode .company-delete-modal-card,
-.dark-mode .company-edit-modal-card {
+.dark-mode #confirmDeleteCompanyModal .company-delete-modal-card,
+.dark-mode #editCompanyModal .company-edit-modal-card {
     border-color: rgba(58, 58, 58, 0.95);
     box-shadow: 0 22px 48px rgba(0, 0, 0, 0.38);
 }
