@@ -10,7 +10,7 @@ from api import api_bp
 from extensions import bcrypt
 from logger import logger
 import threading
-from database import hourly_maintenance, acquire_lock, release_lock, get_missing_columns
+from database import hourly_maintenance, acquire_lock, release_lock, get_missing_columns, ensure_dirs, init_db
 
 _LOGIN_MAX_ATTEMPTS = 5
 _LOGIN_LOCKOUT_SECONDS = 900 
@@ -680,6 +680,8 @@ def maintenance_loop():
         time.sleep(3600)
 
 if __name__ == "__main__":
+    ensure_dirs()
+    init_db()
     start_thread = (os.environ.get("WERKZEUG_RUN_MAIN") == "true") or not app.debug
     if start_thread:
         t = threading.Thread(target=maintenance_loop, daemon=True)
