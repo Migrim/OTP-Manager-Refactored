@@ -833,17 +833,15 @@ def update_from_github():
         return True, f"Updated from {info['local']} to {info['remote']}."
 
 ASCII_TITLE = r"""
-  ░██████   ░██████████░█████████     ░██████████                      ░██ 
- ░██   ░██      ░██    ░██     ░██        ░██                          ░██ 
-░██     ░██     ░██    ░██     ░██        ░██     ░███████   ░███████  ░██ 
-░██     ░██     ░██    ░█████████         ░██    ░██    ░██ ░██    ░██ ░██ 
-░██     ░██     ░██    ░██                ░██    ░██    ░██ ░██    ░██ ░██ 
- ░██   ░██      ░██    ░██                ░██    ░██    ░██ ░██    ░██ ░██ 
-  ░██████       ░██    ░██                ░██     ░███████   ░███████  ░██ 
+░░░░░░░░      ░░░        ░░       ░░░░░░░░░        ░░░      ░░░░      ░░░  ░░░░░░░░░░░░░
+▒▒▒▒▒▒▒  ▒▒▒▒  ▒▒▒▒▒  ▒▒▒▒▒  ▒▒▒▒  ▒▒▒▒▒▒▒▒▒▒▒  ▒▒▒▒▒  ▒▒▒▒  ▒▒  ▒▒▒▒  ▒▒  ▒▒▒▒▒▒▒▒▒▒▒▒▒
+▓▓▓▓▓▓▓  ▓▓▓▓  ▓▓▓▓▓  ▓▓▓▓▓       ▓▓▓▓▓▓▓▓▓▓▓▓  ▓▓▓▓▓  ▓▓▓▓  ▓▓  ▓▓▓▓  ▓▓  ▓▓▓▓▓▓▓▓▓▓▓▓▓
+███████  ████  █████  █████  █████████████████  █████  ████  ██  ████  ██  █████████████
+████████      ██████  █████  █████████████████  ██████      ████      ███        ███████
 """.strip("\n")
 
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
-MIN_LINE_WIDTH = 80
+MIN_LINE_WIDTH = 92
 
 def strip_ansi(s):
     return ANSI_RE.sub("", str(s or ""))
@@ -946,7 +944,13 @@ def print_centered_box(lines, title=None, hint=None, width=None):
         print_centered(row, tw)
     if hint:
         print_centered(lavender("├" + ("─" * (inner_w + 2)) + "┤"), tw)
-        row = lavender("│ ") + pad_visible(dim(hint), inner_w) + lavender(" │")
+        if isinstance(hint, tuple):
+            left_h, right_h = hint
+            gap = max(1, inner_w - visible_len(left_h) - visible_len(right_h))
+            hint_row = dim(left_h) + (" " * gap) + dim(right_h)
+        else:
+            hint_row = pad_visible(dim(hint), inner_w)
+        row = lavender("│ ") + hint_row + lavender(" │")
         print_centered(row, tw)
     print_centered(bottom, tw)
 
@@ -976,6 +980,37 @@ def build_dashboard_lines():
         lines.append(f"{bold('URL')}    : {gray('  '.join(urls))}")
     return lines
 
+def get_db_status():
+    try:
+        import importlib.util as _ilu
+        _spec = _ilu.spec_from_file_location("database", os.path.join(BASE_DIR, "database.py"))
+        _db = _ilu.module_from_spec(_spec)
+        _spec.loader.exec_module(_db)
+        missing = _db.get_missing_columns()
+        if missing:
+            return False, f"Schema outdated — missing: {', '.join(missing)}"
+        return True, "Schema up to date"
+    except Exception as e:
+        return None, f"Check failed: {shorten_middle(str(e), 40)}"
+
+def get_db_integrity():
+    db_path = os.path.join(BASE_DIR, "instance", "otp.db")
+    if not os.path.exists(db_path):
+        return None, "Database file not found"
+    try:
+        import sqlite3 as _sql
+        with _sql.connect(db_path, timeout=3) as con:
+            con.execute("PRAGMA journal_mode=WAL")
+            integrity = con.execute("PRAGMA integrity_check").fetchone()
+            fk_issues = con.execute("PRAGMA foreign_key_check").fetchall()
+        if integrity and integrity[0].lower() != "ok":
+            return False, f"integrity_check: {integrity[0]}"
+        if fk_issues:
+            return False, f"{len(fk_issues)} foreign key violation(s)"
+        return True, "Passed"
+    except Exception as e:
+        return None, f"Check failed: {shorten_middle(str(e), 40)}"
+
 def draw_header():
     ensure_settings_file()
     s = status()
@@ -983,43 +1018,58 @@ def draw_header():
     cfg = read_settings()
     started_at = st.get("started_at") if s["running"] else None
     up = fmt_uptime(started_at)
+    _, term_h = get_terminal_size()
     w = term_width()
 
-    stat = green("RUNNING") if s["running"] else red("STOPPED")
-    pid_txt = f"{s['pid']}" if s["running"] else "-"
+    stat        = green("RUNNING") if s["running"] else red("STOPPED")
+    pid_txt     = str(s["pid"]) if s["running"] else "-"
     version_txt = read_local_version()
-    status_box_width = 86
+    box_w       = 86
 
-    row_one = f"{bold('Status')}: {stat}    {bold('PID')}: {pid_txt}"
-    row_two = f"{bold('Uptime')}: {up}    {bold('Version')}: {gray(version_txt)}"
-    log_display = shorten_middle(LOG_PATH, max(24, status_box_width - 12))
+    sep = gray("─" * box_w)
+
+    # ── update status ─────────────────────────────────────────────────
     with BOOT_UPDATE_LOCK:
         upd_state = BOOT_UPDATE_STATUS.get("state")
-        upd_info = BOOT_UPDATE_STATUS.get("info")
+        upd_info  = BOOT_UPDATE_STATUS.get("info")
         upd_error = BOOT_UPDATE_STATUS.get("error")
+
     if upd_state == "checking":
-        frames = ["|", "/", "-", "\\"]
-        spin = frames[int(time.time() * 6) % len(frames)]
-        update_line = f"{bold('Update')}  : {yellow(f'{spin} Checking...')}"
+        spin    = ["|", "/", "-", "\\"][int(time.time() * 6) % 4]
+        upd_val = yellow(f"{spin} Checking...")
     elif upd_state == "done" and isinstance(upd_info, dict):
         if upd_info.get("update_available"):
-            update_text = f"Available {upd_info.get('local')} → {upd_info.get('remote')}"
-            update_line = f"{bold('Update')}  : {yellow(update_text)}"
+            upd_val = yellow(f"● {upd_info.get('local')} → {upd_info.get('remote')}  (update available)")
         else:
-            update_text = f"Up to date  {gray(upd_info.get('local', ''))}"
-            update_line = f"{bold('Update')}  : {green('✓')}  {update_text}"
+            upd_val = green("✓") + f"  Up to date  {gray(upd_info.get('local', ''))}"
     elif upd_state == "error":
-        err_short = shorten_middle(upd_error or "Unknown error", 48)
-        update_line = f"{bold('Update')}  : {red('✗')}  {gray(err_short)}"
+        upd_val = red("✗") + f"  {gray(shorten_middle(upd_error or 'Unknown error', 40))}"
     else:
-        update_line = f"{bold('Update')}  : {gray('—')}"
+        upd_val = gray("—")
 
-    urls = server_urls()
-    sysm = get_system_metrics()
-    cpu_pct = sysm.get("cpu_pct")
-    ram_pct = sysm.get("ram_pct")
-    ram_detail = sysm.get("ram_detail")
-    disk_pct = sysm.get("disk_pct")
+    # ── db schema & integrity ─────────────────────────────────────────
+    db_ok, db_msg = get_db_status()
+    if db_ok is True:
+        db_val = green("✓") + f"  {db_msg}"
+    elif db_ok is False:
+        db_val = red("✗") + f"  {db_msg}"
+    else:
+        db_val = yellow("?") + f"  {db_msg}"
+
+    int_ok, int_msg = get_db_integrity()
+    if int_ok is True:
+        int_val = green("✓") + f"  {int_msg}"
+    elif int_ok is False:
+        int_val = red("✗") + f"  {int_msg}"
+    else:
+        int_val = yellow("?") + f"  {int_msg}"
+
+    # ── system metrics ────────────────────────────────────────────────
+    sysm        = get_system_metrics()
+    cpu_pct     = sysm.get("cpu_pct")
+    ram_pct     = sysm.get("ram_pct")
+    ram_detail  = sysm.get("ram_detail")
+    disk_pct    = sysm.get("disk_pct")
     disk_detail = sysm.get("disk_detail")
 
     def bar_line(label, pct, detail=None):
@@ -1027,52 +1077,56 @@ def draw_header():
         bar_w = 16
         if pct is None:
             empty = gray("░" * bar_w)
-            detail_txt = gray(detail) if detail else ""
-            return f"{bold(name)} : {empty}  n/a  {detail_txt}".rstrip()
-        p = int(round(clamp(pct)))
+            return f"{bold(name)} : {empty}  n/a  {gray(detail) if detail else ''}".rstrip()
+        p    = int(round(clamp(pct)))
         base = f"{bold(name)} : {progress_bar(p, width=bar_w)}  {p:>3d}%"
         if detail:
             base += f"  {gray(detail)}"
         return base
 
-    sep = center_visible(gray("─" * 34), status_box_width)
+    urls    = server_urls()
+
+    status_row = (
+        f"{bold('Status')}: {stat}   "
+        f"{bold('PID')}: {pid_txt}   "
+        f"{bold('Uptime')}: {up}   "
+        f"{bold('Version')}: {gray(version_txt)}"
+    )
 
     info_lines = [
-        center_visible(row_one, status_box_width),
-        center_visible(row_two, status_box_width),
+        center_visible(status_row, box_w),
         sep,
-        "",
-        update_line,
         f"{bold('Port')}    : {gray(str(cfg['port']))}",
         f"{bold('Secret')}  : {gray(mask_secret(cfg['secret_key']))}",
-        f"{bold('Log')}     : {gray(log_display)}",
     ]
     if urls:
         info_lines.append(f"{bold('URL')}     : {gray('  '.join(urls))}")
     info_lines += [
-        "",
         sep,
         bar_line("CPU",  cpu_pct),
         bar_line("RAM",  ram_pct,  ram_detail),
         bar_line("Disk", disk_pct, disk_detail),
+        sep,
+        f"{bold('DB')}        : {db_val}",
+        f"{bold('Integrity')} : {int_val}",
+        f"{bold('Update ')}   : {upd_val}",
     ]
 
     clear()
-    _, term_h = get_terminal_size()
     ascii_h = len(ASCII_TITLE.splitlines())
-    box_h = len(info_lines) + 6
+    box_h   = len(info_lines) + 4
     total_h = ascii_h + 1 + box_h
     top_pad = max(0, (term_h - total_h) // 2)
     for _ in range(top_pad):
         print("")
     for row in ASCII_TITLE.splitlines():
-        print(lavender(row.center(w)))
+        pad = max(0, (w - len(row)) // 2)
+        print(" " * pad + lavender(row))
     print("")
     print_centered_box(
         info_lines,
-        title="OTP Manager",
-        hint="↵ Enter | Open menu   X Exit",
-        width=status_box_width
+        hint=("↵ Enter  Open menu", "X  Exit"),
+        width=box_w
     )
 
 def toast(msg, ok=True):
