@@ -989,6 +989,10 @@ def get_db_status():
         missing = _db.get_missing_columns()
         if missing:
             return False, f"Schema outdated — missing: {', '.join(missing)}"
+        dep_cols, dep_tables = _db.get_deprecated_items()
+        if dep_cols or dep_tables:
+            parts = [f"column: {c}" for c in dep_cols] + [f"table: {t}" for t in dep_tables]
+            return False, f"Schema outdated — deprecated: {', '.join(parts)}"
         return True, "Schema up to date"
     except Exception as e:
         return None, f"Check failed: {shorten_middle(str(e), 40)}"

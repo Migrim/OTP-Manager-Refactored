@@ -143,18 +143,15 @@ def row_to_settings(row):
     if not row:
         return {}
     return {
-        "show_timer": int(row[7] or 0),
-        "show_otp_type": int(row[8] or 0),
-        "show_content_titles": int(row[9] or 0),
-        "alert_color": row[10] or "#333333",
-        "text_color": row[11] or "#FFFFFF",
-        "show_emails": int(row[12] or 0),
-        "show_company": int(row[13] or 0),
-        "blur_on_inactive": int(row[14] or 0),
-        "show_including_admin_on_top": int(row[15] or 0),
-        "hide_codes_by_default": int(row[16] or 0),
-        "hide_secret_field": int(row[17] or 0),
-        "show_search_and_link": int(row[18] or 0),
+        "show_timer": int(row[13] or 0),
+        "show_otp_type": int(row[14] or 0),
+        "show_emails": int(row[15] or 0),
+        "show_company": int(row[16] or 0),
+        "blur_on_inactive": int(row[17] or 0),
+        "show_including_admin_on_top": int(row[18] or 0),
+        "hide_codes_by_default": int(row[19] or 0),
+        "hide_secret_field": int(row[20] or 0),
+        "show_search_and_link": int(row[21] or 0),
     }
 
 def _is_rate_limited(ip: str) -> float | None:
@@ -219,8 +216,7 @@ def load_user():
                     id, username, password, last_login_time, session_token,
                     is_admin, can_delete, can_edit, can_add_companies,
                     can_delete_companies, can_add_secrets, can_add_users,
-                    pinned, show_timer, show_otp_type, show_content_titles,
-                    alert_color, text_color, show_emails, show_company,
+                    pinned, show_timer, show_otp_type, show_emails, show_company,
                     blur_on_inactive, show_including_admin_on_top, hide_codes_by_default, hide_secret_field,
                     show_search_and_link
                 FROM users
@@ -248,16 +244,13 @@ def load_user():
                 g.user_settings = {
                     "show_timer": int(row[13] or 0),
                     "show_otp_type": int(row[14] or 0),
-                    "show_content_titles": int(row[15] or 0),
-                    "alert_color": row[16] or "#333333",
-                    "text_color": row[17] or "#FFFFFF",
-                    "show_emails": int(row[18] or 0),
-                    "show_company": int(row[19] or 0),
-                    "blur_on_inactive": int(row[20] or 0),
-                    "show_including_admin_on_top": int(row[21] or 0),
-                    "hide_codes_by_default": int(row[22] or 0),
-                    "hide_secret_field": int(row[23] or 0),
-                    "show_search_and_link": int(row[24] or 0),
+                    "show_emails": int(row[15] or 0),
+                    "show_company": int(row[16] or 0),
+                    "blur_on_inactive": int(row[17] or 0),
+                    "show_including_admin_on_top": int(row[18] or 0),
+                    "hide_codes_by_default": int(row[19] or 0),
+                    "hide_secret_field": int(row[20] or 0),
+                    "show_search_and_link": int(row[21] or 0),
                 }
 
 @app.context_processor
@@ -334,7 +327,6 @@ def login():
                     with sqlite3.connect(DB_PATH) as db:
                         cursor = db.cursor()
                         cursor.execute("UPDATE users SET session_token = ? WHERE id = ?", (session_token, user_id))
-                        cursor.execute("UPDATE statistics SET logins_today = logins_today + 1")
                         db.commit()
 
                     logger.info(f"{user_ref(user_id=user_id, username=username)} login successful. permanent_session={keep_logged_in}")
@@ -439,7 +431,16 @@ def settings():
         return render_template("settings.html", user=g.user_settings)
     with sqlite3.connect(DB_PATH) as db:
         cursor = db.cursor()
-        cursor.execute("SELECT * FROM users WHERE id = ?", (session["user_id"],))
+        cursor.execute("""
+                SELECT
+                    id, username, password, last_login_time, session_token,
+                    is_admin, can_delete, can_edit, can_add_companies,
+                    can_delete_companies, can_add_secrets, can_add_users,
+                    pinned, show_timer, show_otp_type, show_emails, show_company,
+                    blur_on_inactive, show_including_admin_on_top, hide_codes_by_default,
+                    hide_secret_field, show_search_and_link
+                FROM users WHERE id = ?
+            """, (session["user_id"],))
         row = cursor.fetchone()
         user = row_to_settings(row)
         return render_template("settings.html", user=user)
@@ -450,7 +451,6 @@ def update_settings():
     payload = {
         "show_timer": 1 if request.form.get("show_timer") in ("on", "true", "1") else 0,
         "show_otp_type": 1 if request.form.get("show_otp_type") in ("on", "true", "1") else 0,
-        "show_content_titles": 1 if request.form.get("show_content_titles") in ("on", "true", "1") else 0,
         "show_emails": 1 if request.form.get("show_emails") in ("on", "true", "1") else 0,
         "show_company": 1 if request.form.get("show_company") in ("on", "true", "1") else 0,
         "blur_on_inactive": 1 if request.form.get("blur_on_inactive") in ("on", "true", "1") else 0,
@@ -459,8 +459,6 @@ def update_settings():
         "hide_secret_field": 1 if request.form.get("hide_secret_field") in ("on", "true", "1") else 0,
         "show_search_and_link": 1 if request.form.get("show_search_and_link") in ("on", "true", "1") else 0,
     }
-    alert_color = request.form.get("alert_color")
-    text_color = request.form.get("text_color")
     try:
         with sqlite3.connect(DB_PATH) as db:
             cursor = db.cursor()
@@ -469,22 +467,18 @@ def update_settings():
                 UPDATE users
                 SET show_timer = ?,
                     show_otp_type = ?,
-                    show_content_titles = ?,
                     show_emails = ?,
                     show_company = ?,
                     blur_on_inactive = ?,
                     show_including_admin_on_top = ?,
                     hide_codes_by_default = ?,
                     hide_secret_field = ?,
-                    show_search_and_link = ?,
-                    alert_color = COALESCE(?, alert_color),
-                    text_color = COALESCE(?, text_color)
+                    show_search_and_link = ?
                 WHERE id = ?
                 """,
                 (
                     payload["show_timer"],
                     payload["show_otp_type"],
-                    payload["show_content_titles"],
                     payload["show_emails"],
                     payload["show_company"],
                     payload["blur_on_inactive"],
@@ -492,8 +486,6 @@ def update_settings():
                     payload["hide_codes_by_default"],
                     payload["hide_secret_field"],
                     payload["show_search_and_link"],
-                    alert_color,
-                    text_color,
                     g.user_id,
                 ),
             )

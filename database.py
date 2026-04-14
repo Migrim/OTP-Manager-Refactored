@@ -88,14 +88,6 @@ def init_db():
             )
         """)
         c.execute("""
-            CREATE TABLE IF NOT EXISTS statistics (
-                id INTEGER PRIMARY KEY,
-                logins_today INTEGER NOT NULL,
-                times_refreshed INTEGER NOT NULL,
-                date TEXT NOT NULL
-            )
-        """)
-        c.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY,
                 username TEXT NOT NULL UNIQUE,
@@ -112,9 +104,6 @@ def init_db():
                 pinned TEXT DEFAULT '',
                 show_timer INTEGER DEFAULT 0,
                 show_otp_type INTEGER DEFAULT 1,
-                show_content_titles INTEGER DEFAULT 1,
-                alert_color TEXT DEFAULT '#333333',
-                text_color TEXT DEFAULT '#FFFFFF',
                 show_emails INTEGER DEFAULT 0,
                 show_company INTEGER DEFAULT 0,
                 blur_on_inactive INTEGER DEFAULT 1,
@@ -136,10 +125,6 @@ def init_db():
                 VALUES (1, 'admin', '1234', 1, 1, 1, 1, 1, 1, 1)
             """)
             db.commit()
-        c.execute("SELECT COUNT(*) FROM statistics")
-        if (c.fetchone() or [0])[0] == 0:
-            c.execute("INSERT INTO statistics (id, logins_today, times_refreshed, date) VALUES (1, 0, 0, ?)", (datetime.now().strftime("%Y-%m-%d"),))
-            db.commit()
     if created:
         logger.info("database initialized at %s", DB_PATH)
 
@@ -149,6 +134,9 @@ _REQUIRED_COLUMNS = [
     "show_including_admin_on_top", "hide_codes_by_default", "hide_secret_field",
     "show_search_and_link",
 ]
+
+_DEPRECATED_COLUMNS = ["show_content_titles", "alert_color", "text_color"]
+_DEPRECATED_TABLES  = ["statistics"]
 
 def get_missing_columns():
     """Return a list of column names missing from the users table."""
@@ -160,6 +148,21 @@ def get_missing_columns():
             return [col for col in _REQUIRED_COLUMNS if col not in existing]
     except Exception:
         return []
+
+def get_deprecated_items():
+    """Return (deprecated_columns, deprecated_tables) that still exist in the DB."""
+    try:
+        with connect() as db:
+            c = db.cursor()
+            c.execute("PRAGMA table_info(users)")
+            existing_cols = {row[1] for row in c.fetchall()}
+            c.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            existing_tables = {row[0] for row in c.fetchall()}
+        cols   = [col for col in _DEPRECATED_COLUMNS if col in existing_cols]
+        tables = [tbl for tbl in _DEPRECATED_TABLES  if tbl in existing_tables]
+        return cols, tables
+    except Exception:
+        return [], []
 
 def normalize_secrets():
     updated = 0

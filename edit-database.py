@@ -255,9 +255,6 @@ def upgrade_database():
                 pinned TEXT DEFAULT '',
                 show_timer INTEGER DEFAULT 0,
                 show_otp_type INTEGER DEFAULT 1,
-                show_content_titles INTEGER DEFAULT 1,
-                alert_color TEXT DEFAULT '#333333',
-                text_color TEXT DEFAULT '#FFFFFF',
                 show_emails INTEGER DEFAULT 0,
                 show_company INTEGER DEFAULT 0,
                 blur_on_inactive INTEGER DEFAULT 1,
@@ -276,12 +273,11 @@ def upgrade_database():
                 id, username, password, last_login_time, session_token,
                 is_admin, can_delete, can_edit, can_add_companies,
                 can_delete_companies, can_add_secrets, can_add_users,
-                pinned, show_timer, show_otp_type, show_content_titles,
-                alert_color, text_color, show_emails, show_company,
+                pinned, show_timer, show_otp_type, show_emails, show_company,
                 blur_on_inactive, show_including_admin_on_top,
                 hide_codes_by_default, hide_secret_field, show_search_and_link
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
 
         migrated = 0
@@ -304,9 +300,6 @@ def upgrade_database():
                 data.get("pinned", "") or "",
                 int(data.get("show_timer", 0) or 0),
                 int(data.get("show_otp_type", 1) or 1),
-                int(data.get("show_content_titles", 1) or 1),
-                data.get("alert_color", "#333333") or "#333333",
-                data.get("text_color", "#FFFFFF") or "#FFFFFF",
                 int(data.get("show_emails", 0) or 0),
                 int(data.get("show_company", 0) or 0),
                 int(data.get("blur_on_inactive", 1) or 1),
@@ -345,6 +338,62 @@ def upgrade_database():
         cur.execute("ALTER TABLE users ADD COLUMN show_search_and_link INTEGER DEFAULT 0")
         print(f"  {green('✓')} Added column: {gray('show_search_and_link')}")
         changed = True
+
+    # Remove deprecated columns via full table rebuild
+    deprecated = [c for c in ("show_content_titles", "alert_color", "text_color") if c in columns]
+    if deprecated:
+        print(f"  {yellow('!')} Removing deprecated columns: {', '.join(deprecated)}")
+        cur.execute("ALTER TABLE users RENAME TO users_old")
+        cur.execute("PRAGMA table_info(users_old)")
+        old_columns = [col[1] for col in cur.fetchall()]
+        cur.execute("""
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY,
+                username TEXT NOT NULL UNIQUE,
+                password TEXT NOT NULL,
+                last_login_time INTEGER,
+                session_token TEXT,
+                is_admin INTEGER DEFAULT 0,
+                can_delete INTEGER DEFAULT 0,
+                can_edit INTEGER DEFAULT 0,
+                can_add_companies INTEGER DEFAULT 0,
+                can_delete_companies INTEGER DEFAULT 0,
+                can_add_secrets INTEGER DEFAULT 0,
+                can_add_users INTEGER DEFAULT 0,
+                pinned TEXT DEFAULT '',
+                show_timer INTEGER DEFAULT 0,
+                show_otp_type INTEGER DEFAULT 1,
+                show_emails INTEGER DEFAULT 0,
+                show_company INTEGER DEFAULT 0,
+                blur_on_inactive INTEGER DEFAULT 1,
+                show_including_admin_on_top INTEGER DEFAULT 0,
+                hide_codes_by_default INTEGER DEFAULT 0,
+                hide_secret_field INTEGER DEFAULT 0,
+                show_search_and_link INTEGER DEFAULT 0
+            )
+        """)
+        keep = [
+            "id", "username", "password", "last_login_time", "session_token",
+            "is_admin", "can_delete", "can_edit", "can_add_companies",
+            "can_delete_companies", "can_add_secrets", "can_add_users",
+            "pinned", "show_timer", "show_otp_type", "show_emails", "show_company",
+            "blur_on_inactive", "show_including_admin_on_top",
+            "hide_codes_by_default", "hide_secret_field", "show_search_and_link",
+        ]
+        cols_to_copy = [c for c in keep if c in old_columns]
+        col_list = ", ".join(cols_to_copy)
+        cur.execute(f"INSERT INTO users ({col_list}) SELECT {col_list} FROM users_old")
+        cur.execute("DROP TABLE users_old")
+        print(f"  {green('✓')} Deprecated columns removed")
+        changed = True
+
+    # Drop statistics table if it still exists
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='statistics'")
+    if cur.fetchone():
+        cur.execute("DROP TABLE statistics")
+        print(f"  {green('✓')} Dropped table: {gray('statistics')}")
+        changed = True
+
     if not changed:
         print(f"  {green('✓')} Schema is already up to date")
 
@@ -403,19 +452,6 @@ def database_stats():
     else:
         print(f"  {yellow('!')} Table 'companies' not found")
 
-    print("")
-
-    # Statistics
-    if _table_exists(cur, "statistics"):
-        total_logins = safe_count("SELECT SUM(logins_today) FROM statistics")
-        total_refreshes = safe_count("SELECT SUM(times_refreshed) FROM statistics")
-        days_tracked = safe_count("SELECT COUNT(*) FROM statistics")
-        print(f"  {bold('Usage Statistics')}")
-        print(f"    Days tracked  : {gray(str(days_tracked))}")
-        print(f"    Total logins  : {gray(str(total_logins))}")
-        print(f"    Total refreshes: {gray(str(total_refreshes))}")
-    else:
-        print(f"  {yellow('!')} Table 'statistics' not found")
 
     print("")
 
@@ -493,7 +529,7 @@ def reset_sessions():
 
 
 def check_schema_needs_update():
-    """Returns True if the users table is missing any required columns."""
+    """Returns True if the schema is missing required columns or still has deprecated ones."""
     if not os.path.exists(INSTANCE_PATH):
         return False
     required = [
@@ -502,13 +538,23 @@ def check_schema_needs_update():
         "blur_on_inactive", "show_including_admin_on_top",
         "hide_codes_by_default", "hide_secret_field", "show_search_and_link"
     ]
+    deprecated_cols   = ["show_content_titles", "alert_color", "text_color"]
+    deprecated_tables = ["statistics"]
     try:
         conn = sqlite3.connect(INSTANCE_PATH)
         cur = conn.cursor()
         cur.execute("PRAGMA table_info(users)")
         columns = [col[1] for col in cur.fetchall()]
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = [row[0] for row in cur.fetchall()]
         conn.close()
-        return any(col not in columns for col in required)
+        if any(col not in columns for col in required):
+            return True
+        if any(col in columns for col in deprecated_cols):
+            return True
+        if any(tbl in tables for tbl in deprecated_tables):
+            return True
+        return False
     except Exception:
         return False
 
