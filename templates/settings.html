@@ -35,6 +35,13 @@
             </label>
             <div class="setting-description">Passwords whose name contains "admin" will appear at the top — both on the home screen and in company search results.</div>
 
+            <label class="settings-switch">
+                <input type="checkbox" id="show_search_and_link" name="show_search_and_link" {{ 'checked' if user.show_search_and_link else '' }}>
+                <span class="slider"></span>
+                <span class="switch-text">Show company link &amp; search icons</span>
+            </label>
+            <div class="setting-description">Shows a link icon and a search icon next to each company section title on the home screen for quick navigation.</div>
+
             <div class="settings-section-label">Security</div>
 
             <label class="settings-switch">

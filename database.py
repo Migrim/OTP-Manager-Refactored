@@ -120,7 +120,8 @@ def init_db():
                 blur_on_inactive INTEGER DEFAULT 1,
                 show_including_admin_on_top INTEGER DEFAULT 0,
                 hide_codes_by_default INTEGER DEFAULT 0,
-                hide_secret_field INTEGER DEFAULT 0
+                hide_secret_field INTEGER DEFAULT 0,
+                show_search_and_link INTEGER DEFAULT 0
             )
         """)
         db.commit()
@@ -146,6 +147,7 @@ _REQUIRED_COLUMNS = [
     "can_delete", "can_edit", "can_add_companies", "can_delete_companies",
     "can_add_secrets", "can_add_users", "blur_on_inactive",
     "show_including_admin_on_top", "hide_codes_by_default", "hide_secret_field",
+    "show_search_and_link",
 ]
 
 def get_missing_columns():

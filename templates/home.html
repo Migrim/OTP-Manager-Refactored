@@ -107,6 +107,7 @@
     const SHOW_INCLUDE_ADMIN_ON_TOP = {{ 1 if user_settings.show_including_admin_on_top else 0 }};
     const HIDE_CODES_BY_DEFAULT = {{ 1 if user_settings.hide_codes_by_default else 0 }};
     const HIDE_SECRET_FIELD = {{ 1 if user_settings.hide_secret_field else 0 }};
+    const SHOW_SEARCH_AND_LINK = {{ 1 if user_settings.show_search_and_link else 0 }};
     const CAN_EDIT_SECRETS = {{ 1 if can_edit else 0 }};
     const CAN_DELETE_SECRETS = {{ 1 if can_delete else 0 }};
     const visibleCards = new Set();
@@ -624,9 +625,10 @@
 
             const title = document.createElement("h2");
             title.className = "company-title";
+            title.style.animationDelay = `${Math.floor(Math.random() * 40) + 20}ms`;
             const companyId = unpinnedEntries[0]?.company_id;
-            if (companyId != null) {
-                title.innerHTML = `${company} <a href="/companies?scroll=${encodeURIComponent(companyId)}" class="company-link-icon" title="Go to company"><span class="material-icons">insert_link</span></a>`;
+            if (companyId != null && SHOW_SEARCH_AND_LINK) {
+                title.innerHTML = `${company} <a href="/companies?scroll=${encodeURIComponent(companyId)}" class="company-link-icon" title="Go to company"><span class="material-icons">insert_link</span></a><a href="/search.html?company=${encodeURIComponent(company)}" class="company-link-icon" title="Search company"><span class="material-icons">search</span></a>`;
             } else {
                 title.textContent = company;
             }

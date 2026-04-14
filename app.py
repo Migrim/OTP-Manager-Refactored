@@ -154,6 +154,7 @@ def row_to_settings(row):
         "show_including_admin_on_top": int(row[15] or 0),
         "hide_codes_by_default": int(row[16] or 0),
         "hide_secret_field": int(row[17] or 0),
+        "show_search_and_link": int(row[18] or 0),
     }
 
 def _is_rate_limited(ip: str) -> float | None:
@@ -220,7 +221,8 @@ def load_user():
                     can_delete_companies, can_add_secrets, can_add_users,
                     pinned, show_timer, show_otp_type, show_content_titles,
                     alert_color, text_color, show_emails, show_company,
-                    blur_on_inactive, show_including_admin_on_top, hide_codes_by_default, hide_secret_field
+                    blur_on_inactive, show_including_admin_on_top, hide_codes_by_default, hide_secret_field,
+                    show_search_and_link
                 FROM users
                 WHERE id = ?
             """, (g.user_id,))
@@ -255,6 +257,7 @@ def load_user():
                     "show_including_admin_on_top": int(row[21] or 0),
                     "hide_codes_by_default": int(row[22] or 0),
                     "hide_secret_field": int(row[23] or 0),
+                    "show_search_and_link": int(row[24] or 0),
                 }
 
 @app.context_processor
@@ -454,6 +457,7 @@ def update_settings():
         "show_including_admin_on_top": 1 if request.form.get("show_including_admin_on_top") in ("on", "true", "1") else 0,
         "hide_codes_by_default": 1 if request.form.get("hide_codes_by_default") in ("on", "true", "1") else 0,
         "hide_secret_field": 1 if request.form.get("hide_secret_field") in ("on", "true", "1") else 0,
+        "show_search_and_link": 1 if request.form.get("show_search_and_link") in ("on", "true", "1") else 0,
     }
     alert_color = request.form.get("alert_color")
     text_color = request.form.get("text_color")
@@ -472,6 +476,7 @@ def update_settings():
                     show_including_admin_on_top = ?,
                     hide_codes_by_default = ?,
                     hide_secret_field = ?,
+                    show_search_and_link = ?,
                     alert_color = COALESCE(?, alert_color),
                     text_color = COALESCE(?, text_color)
                 WHERE id = ?
@@ -486,6 +491,7 @@ def update_settings():
                     payload["show_including_admin_on_top"],
                     payload["hide_codes_by_default"],
                     payload["hide_secret_field"],
+                    payload["show_search_and_link"],
                     alert_color,
                     text_color,
                     g.user_id,
