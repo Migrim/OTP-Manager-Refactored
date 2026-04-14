@@ -69,6 +69,16 @@ BOOT_UPDATE_STATUS = {
 UPDATE_CHECK_INTERVAL = 300  # re-check every 5 minutes
 SYSTEM_METRICS_LOCK = threading.Lock()
 SYSTEM_METRICS_CACHE = {"ts": 0.0, "data": None}
+DB_STATUS_LOCK = threading.Lock()
+DB_STATUS_CACHE = {
+    "state": "idle",         # idle | checking | done
+    "schema_ok": None,
+    "schema_msg": "—",
+    "int_ok": None,
+    "int_msg": "—",
+    "last_check_ts": 0.0,
+}
+DB_STATUS_INTERVAL = 10  # re-check every 10 seconds
 CPU_SNAPSHOT = None
 
 def c(s, code):
@@ -722,6 +732,27 @@ def maybe_trigger_update_check():
 
     threading.Thread(target=worker, daemon=True).start()
 
+def maybe_refresh_db_status():
+    with DB_STATUS_LOCK:
+        if DB_STATUS_CACHE.get("state") == "checking":
+            return
+        if time.time() - DB_STATUS_CACHE.get("last_check_ts", 0.0) < DB_STATUS_INTERVAL:
+            return
+        DB_STATUS_CACHE["state"] = "checking"
+
+    def worker():
+        s_ok, s_msg = get_db_status()
+        i_ok, i_msg = get_db_integrity()
+        with DB_STATUS_LOCK:
+            DB_STATUS_CACHE["schema_ok"]  = s_ok
+            DB_STATUS_CACHE["schema_msg"] = s_msg
+            DB_STATUS_CACHE["int_ok"]     = i_ok
+            DB_STATUS_CACHE["int_msg"]    = i_msg
+            DB_STATUS_CACHE["state"]      = "done"
+            DB_STATUS_CACHE["last_check_ts"] = time.time()
+
+    threading.Thread(target=worker, daemon=True).start()
+
 def is_protected_rel_path(rel_path):
     rel_path = rel_path.replace("\\", "/").strip("/")
     if not rel_path:
@@ -1052,21 +1083,31 @@ def draw_header():
         upd_val = gray("—")
 
     # ── db schema & integrity ─────────────────────────────────────────
-    db_ok, db_msg = get_db_status()
-    if db_ok is True:
-        db_val = green("✓") + f"  {db_msg}"
-    elif db_ok is False:
-        db_val = red("✗") + f"  {db_msg}"
-    else:
-        db_val = yellow("?") + f"  {db_msg}"
+    with DB_STATUS_LOCK:
+        db_state = DB_STATUS_CACHE.get("state", "idle")
+        db_ok    = DB_STATUS_CACHE.get("schema_ok")
+        db_msg   = DB_STATUS_CACHE.get("schema_msg", "—")
+        int_ok   = DB_STATUS_CACHE.get("int_ok")
+        int_msg  = DB_STATUS_CACHE.get("int_msg", "—")
 
-    int_ok, int_msg = get_db_integrity()
-    if int_ok is True:
-        int_val = green("✓") + f"  {int_msg}"
-    elif int_ok is False:
-        int_val = red("✗") + f"  {int_msg}"
+    if db_state == "checking" and db_ok is None:
+        spin   = ["|", "/", "-", "\\"][int(time.time() * 6) % 4]
+        db_val = yellow(f"{spin} Checking...")
+        int_val = yellow(f"{spin} Checking...")
     else:
-        int_val = yellow("?") + f"  {int_msg}"
+        if db_ok is True:
+            db_val = green("✓") + f"  {db_msg}"
+        elif db_ok is False:
+            db_val = red("✗") + f"  {db_msg}"
+        else:
+            db_val = yellow("?") + f"  {db_msg}"
+
+        if int_ok is True:
+            int_val = green("✓") + f"  {int_msg}"
+        elif int_ok is False:
+            int_val = red("✗") + f"  {int_msg}"
+        else:
+            int_val = yellow("?") + f"  {int_msg}"
 
     # ── system metrics ────────────────────────────────────────────────
     sysm        = get_system_metrics()
@@ -1981,11 +2022,15 @@ def main():
     ensure_settings_file()
     while True:
         maybe_trigger_update_check()
+        maybe_refresh_db_status()
         draw_header()
         wait_seconds = 5.0
         with BOOT_UPDATE_LOCK:
             if BOOT_UPDATE_STATUS.get("state") == "checking":
                 wait_seconds = 0.12
+        with DB_STATUS_LOCK:
+            if DB_STATUS_CACHE.get("state") == "checking" and DB_STATUS_CACHE.get("schema_ok") is None:
+                wait_seconds = min(wait_seconds, 0.12)
         key = _read_dashboard_key(wait_seconds)
         if key in ("x", "esc"):
             _confirm_exit()
