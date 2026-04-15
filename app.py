@@ -99,7 +99,7 @@ def login_required(f):
     def decorated_function(*args, **kwargs):
         if not g.logged_in:
             logger.warning("Unauthorized access attempt (not logged in).")
-            flash("You first need to Login.", "warning")
+            flash("You need to log in first.", "warning")
             return redirect(url_for("login"))
         return f(*args, **kwargs)
     return decorated_function
@@ -127,7 +127,7 @@ def permission_required(permission_name):
         def decorated_function(*args, **kwargs):
             if not g.logged_in:
                 logger.warning("Unauthorized access attempt (not logged in).")
-                flash("You first need to Login.", "warning")
+                flash("You need to log in first.", "warning")
                 return redirect(url_for("login"))
 
             if not has_permission(permission_name):
@@ -645,7 +645,7 @@ def search_page():
 def view_logs():
     if not g.is_admin:
         flash("Access denied.", "error")
-        logger.warning(f"{u(g.user_id)} tried to access /logs without admin rights.")
+        logger.warning(f"{u(g.user_id)} tried to access /logs without admin permissions.")
         return redirect(url_for("home"))
 
     selected_day = request.args.get("day") or datetime.now().strftime("%Y-%m-%d")

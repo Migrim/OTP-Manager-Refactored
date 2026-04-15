@@ -32,9 +32,9 @@
             <div class="otp-delete-modal-header">
                 <div>
                     <div class="otp-delete-title-row">
-                        <h3 class="otp-delete-title">Delete the stored Secret?</h3>
+                        <h3 class="otp-delete-title">Delete this secret?</h3>
                     </div>
-                    <p class="otp-delete-copy">This secret will be removed permanently and cant be recovered!</p>
+                    <p class="otp-delete-copy">This secret will be removed permanently and can't be recovered!</p>
                 </div>
             </div>
             <div class="delete-user-button-row otp-delete-actions">
@@ -578,7 +578,7 @@
                 card.innerHTML = `
                     <div class="otp-card-inner">
                         <span class="pin-icon"><span class="material-icons">push_pin</span></span>
-                        ${CAN_EDIT_SECRETS ? `<div class="otp-warning-overlay" aria-hidden="true"><span class="material-icons">report_problem</span><span class="otp-warning-text">cant generate otp code #ERR-004</span></div>` : ``}
+                        ${CAN_EDIT_SECRETS ? `<div class="otp-warning-overlay" aria-hidden="true"><span class="material-icons">report_problem</span><span class="otp-warning-text">Can't generate OTP code #ERR-004</span></div>` : ``}
                         <div class="otp-field"><span class="otp-field-label">Name:</span> <span class="otp-field-value">${entry.name}</span></div>
                         <div class="otp-field"><span class="otp-field-label">Company:</span> <span class="otp-field-value">${entry.company_name || "Unknown Company"}</span></div>
                         ${HIDE_SECRET_FIELD ? `` : `
@@ -648,7 +648,7 @@
                 card.innerHTML = `
                     <div class="otp-card-inner">
                         <span class="pin-icon"><span class="material-icons">push_pin</span></span>
-                        ${CAN_EDIT_SECRETS ? `<div class="otp-warning-overlay" aria-hidden="true"><span class="material-icons">report_problem</span><span class="otp-warning-text">cant generate otp code #ERR-004</span></div>` : ``}
+                        ${CAN_EDIT_SECRETS ? `<div class="otp-warning-overlay" aria-hidden="true"><span class="material-icons">report_problem</span><span class="otp-warning-text">Can't generate OTP code #ERR-004</span></div>` : ``}
                         <div class="otp-field"><span class="otp-field-label">Name:</span> <span class="otp-field-value">${entry.name}</span></div>
                         ${HIDE_SECRET_FIELD ? `` : `
                         <div class="otp-field"><span class="otp-field-label">Secret:</span>

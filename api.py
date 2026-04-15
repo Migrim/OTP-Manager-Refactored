@@ -88,7 +88,7 @@ def require_login_for_api():
     if wants_json_response():
         return jsonify({"error": "Authentication required"}), 401
 
-    flash("You first need to Login.", "warning")
+    flash("You need to log in first.", "warning")
     return redirect(url_for("login"))
 
 def _delete_secret_by_id(secret_id):
@@ -436,7 +436,7 @@ def delete_user():
 def update_user_permissions():
     if not current_user_has_permission("can_add_users"):
         logger.warning(f"{u(getattr(g, 'user_id', None))} update_user_permissions result=forbidden_missing_permission")
-        flash("You do not have permission to manage user rights.", "error")
+        flash("You do not have permission to manage user permissions.", "error")
         return redirect("/users")
 
     t0 = time.perf_counter()
