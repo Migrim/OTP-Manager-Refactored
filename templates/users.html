@@ -87,7 +87,7 @@
                 {% if is_admin %}
                 <button
                     class="action-button edit open-rights-modal"
-                    title="{{ 'Permissions for user admin are locked' if username|lower == 'admin' else 'Manage Rights' }}"
+                    title="{{ 'Permissions for user admin are locked' if username|lower == 'admin' else 'Manage Permissions' }}"
                     type="button"
                     {% if username|lower == 'admin' %}disabled aria-disabled="true"{% endif %}
                 >
@@ -144,7 +144,7 @@
         <span class="add-user-close" id="closeRightsModal">&times;</span>
 
         <div class="rights-modal-header">
-            <div class="rights-modal-title">User Rights</div>
+            <div class="rights-modal-title">User Permissions</div>
             <div class="rights-modal-subtitle" id="rights-username-text">Manage permissions for user</div>
         </div>
 
@@ -176,7 +176,7 @@
                 </div>
 
                 <div class="rights-item">
-                    <label class="settthis ings-switch rights-switch-row">
+                    <label class="settings-switch rights-switch-row">
                         <input type="checkbox" id="rights_can_edit" name="can_edit">
                         <span class="slider"></span>
                         <span class="switch-text">Can edit entries</span>
@@ -203,7 +203,7 @@
                         <span class="slider"></span>
                         <span class="switch-text">Can add / view companies</span>
                     </label>
-                    <div class="setting-description rights-description">Allows creating and editing new companies. if disabled the comapny dropdown for the search cant be used!</div>
+                    <div class="setting-description rights-description">Allows creating and editing new companies. if disabled the company dropdown for the search cant be used!</div>
                 </div>
 
                 <div class="rights-item">
@@ -230,7 +230,7 @@
             </div>
 
             <div class="add-user-button-row rights-save-row">
-                <button type="submit">Save Rights</button>
+                <button type="submit">Save Permissions</button>
             </div>
         </form>
     </div>
