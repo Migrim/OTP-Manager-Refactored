@@ -72,7 +72,8 @@ def init_db():
                 company_id INTEGER PRIMARY KEY,
                 name TEXT NOT NULL UNIQUE,
                 kundennummer INTEGER UNIQUE,
-                password TEXT
+                password TEXT,
+                login_enabled INTEGER DEFAULT 0
             )
         """)
         c.execute("""
@@ -128,24 +129,34 @@ def init_db():
     if created:
         logger.info("database initialized at %s", DB_PATH)
 
-_REQUIRED_COLUMNS = [
+_REQUIRED_USER_COLUMNS = [
     "can_delete", "can_edit", "can_add_companies", "can_delete_companies",
     "can_add_secrets", "can_add_users", "blur_on_inactive",
     "show_including_admin_on_top", "hide_codes_by_default", "hide_secret_field",
     "show_search_and_link",
 ]
 
+_REQUIRED_TABLE_COLUMNS = {
+    "users": _REQUIRED_USER_COLUMNS,
+    "companies": ["login_enabled"],
+}
+
 _DEPRECATED_COLUMNS = ["show_content_titles", "alert_color", "text_color"]
 _DEPRECATED_TABLES  = ["statistics"]
 
 def get_missing_columns():
-    """Return a list of column names missing from the users table."""
+    """Return a list of required table columns missing from the database."""
     try:
         with connect() as db:
             c = db.cursor()
-            c.execute("PRAGMA table_info(users)")
-            existing = {row[1] for row in c.fetchall()}
-            return [col for col in _REQUIRED_COLUMNS if col not in existing]
+            missing = []
+            for table, required_columns in _REQUIRED_TABLE_COLUMNS.items():
+                c.execute(f"PRAGMA table_info({table})")
+                existing = {row[1] for row in c.fetchall()}
+                missing.extend(
+                    f"{table}.{col}" for col in required_columns if col not in existing
+                )
+            return missing
     except Exception:
         return []
 

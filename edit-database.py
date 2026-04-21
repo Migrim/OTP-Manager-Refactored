@@ -211,6 +211,19 @@ def upgrade_database():
     conn = get_connection()
     cur = conn.cursor()
 
+    def ensure_companies_schema():
+        print(dim("  Checking companies schema..."))
+        if not _table_exists(cur, "companies"):
+            print(f"  {yellow('!')} Table 'companies' not found")
+            return False
+        cur.execute("PRAGMA table_info(companies)")
+        company_columns = [col[1] for col in cur.fetchall()]
+        if "login_enabled" not in company_columns:
+            cur.execute("ALTER TABLE companies ADD COLUMN login_enabled INTEGER DEFAULT 0")
+            print(f"  {green('✓')} Added column: {gray('login_enabled')}")
+            return True
+        return False
+
     print(dim("  Backing up database..."))
     backup_dir = os.path.join(BASE_DIR, "backup")
     if not os.path.exists(backup_dir):
@@ -311,6 +324,7 @@ def upgrade_database():
             migrated += 1
 
         cur.execute("DROP TABLE users_old")
+        ensure_companies_schema()
         conn.commit()
         conn.close()
         print(f"  {green('✓')} Migrated {migrated} user(s) to new schema")
@@ -392,6 +406,9 @@ def upgrade_database():
     if cur.fetchone():
         cur.execute("DROP TABLE statistics")
         print(f"  {green('✓')} Dropped table: {gray('statistics')}")
+        changed = True
+
+    if ensure_companies_schema():
         changed = True
 
     if not changed:
@@ -545,10 +562,14 @@ def check_schema_needs_update():
         cur = conn.cursor()
         cur.execute("PRAGMA table_info(users)")
         columns = [col[1] for col in cur.fetchall()]
+        cur.execute("PRAGMA table_info(companies)")
+        company_columns = [col[1] for col in cur.fetchall()]
         cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
         tables = [row[0] for row in cur.fetchall()]
         conn.close()
         if any(col not in columns for col in required):
+            return True
+        if "login_enabled" not in company_columns:
             return True
         if any(col in columns for col in deprecated_cols):
             return True
