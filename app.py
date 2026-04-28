@@ -624,16 +624,28 @@ def search_page():
         if company and q:
             return redirect(url_for("search_page", company=search_raw.strip() if isinstance(search_raw, str) else q_raw.strip()))
 
-        cursor.execute(
-            """
-            SELECT s.name, s.email, c.name
-            FROM otp_secrets s
-            LEFT JOIN companies c ON s.company_id = c.company_id
-            WHERE LOWER(s.name) LIKE ? OR LOWER(s.email) LIKE ? OR LOWER(c.name) LIKE ?
-            ORDER BY c.name ASC, s.name ASC
-            """,
-            (f"%{q}%", f"%{q}%", f"%{q}%"),
-        )
+        if admin_on_top:
+            cursor.execute(
+                """
+                SELECT s.name, s.email, c.name
+                FROM otp_secrets s
+                LEFT JOIN companies c ON s.company_id = c.company_id
+                WHERE LOWER(s.name) LIKE ? OR LOWER(s.email) LIKE ? OR LOWER(c.name) LIKE ?
+                ORDER BY CASE WHEN LOWER(s.name) LIKE '%admin%' THEN 0 ELSE 1 END ASC, c.name ASC, s.name ASC
+                """,
+                (f"%{q}%", f"%{q}%", f"%{q}%"),
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT s.name, s.email, c.name
+                FROM otp_secrets s
+                LEFT JOIN companies c ON s.company_id = c.company_id
+                WHERE LOWER(s.name) LIKE ? OR LOWER(s.email) LIKE ? OR LOWER(c.name) LIKE ?
+                ORDER BY c.name ASC, s.name ASC
+                """,
+                (f"%{q}%", f"%{q}%", f"%{q}%"),
+            )
         results = cursor.fetchall()
 
     logger.info(f"{u(g.user_id)} searched for '{search_raw if isinstance(search_raw, str) else q_raw}' — {len(results)} results.")
