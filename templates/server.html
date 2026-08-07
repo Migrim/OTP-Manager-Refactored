@@ -8,7 +8,7 @@
 {% endblock %}
 
 {% block page %}
-<div class="page">
+<div class="page" id="server-page">
   <div class="page-topbar">
     <div style="display:flex;align-items:center;gap:12px;padding-left:14px;overflow:hidden">
       <span style="font-size:12px;font-weight:600;color:var(--text-dim);flex:none;white-space:nowrap">Uptime &mdash; <span id="uptime-label"></span></span>
@@ -104,14 +104,39 @@
           <span id="console-status" style="margin-left:auto;font-size:11.5px;font-weight:600;color:var(--text-faint)">Disconnected</span>
         </div>
         <div style="font-size:12.5px;color:var(--text-dim);line-height:1.5">Drive the terminal dashboard above directly from the browser, without SSH access to the machine. One shared session at a time &mdash; other admins who connect see the same screen.</div>
-        <div id="console-term" style="display:none;height:360px;border-radius:10px;overflow:hidden;background:#111;padding:8px"></div>
-        <div style="display:flex;justify-content:flex-end;gap:8px">
-          <button class="btn-danger" id="console-stop" type="button" style="display:none">End Session</button>
+        <div style="display:flex;justify-content:flex-end">
           <button class="btn-accent" id="console-connect" type="button" style="padding:9px 16px">Connect</button>
         </div>
       </div>
 
     </div>
+  </div>
+</div>
+
+<!-- Remote console: full-page view -->
+<div class="console-fullpage" id="console-fullpage">
+  <div class="console-fp-bar">
+    <span class="console-fp-title">
+      <span style="width:15px;height:15px;display:flex" data-icon="terminal"></span>Remote Console
+    </span>
+    <span class="console-fp-status" id="console-fp-status">Connecting&hellip;</span>
+    <button class="console-fp-end" id="console-fp-end" type="button" title="End Session" aria-label="End Session">
+      <span style="width:15px;height:15px;display:flex" data-icon="power"></span>
+    </button>
+  </div>
+  <div class="console-fp-body">
+    <div class="console-connecting" id="console-connecting">
+      <div class="console-connecting-inner">
+        <div class="console-progress">
+          <div class="console-progress-bar"></div>
+        </div>
+        <div class="console-connecting-label">
+          <span id="console-connecting-text">Opening secure channel</span><span class="console-connecting-dots"><span>.</span><span>.</span><span>.</span></span>
+        </div>
+        <div class="console-connecting-sub">Attaching to the server&rsquo;s shell over a live session</div>
+      </div>
+    </div>
+    <div id="console-term"></div>
   </div>
 </div>
 
@@ -260,13 +285,22 @@
   const termEl = document.getElementById("console-term");
   const statusEl = document.getElementById("console-status");
   const connectBtn = document.getElementById("console-connect");
-  const consoleStopBtn = document.getElementById("console-stop");
-  let term = null, fitAddon = null, socket = null;
+  const pageEl = document.getElementById("server-page");
+  const fullpageEl = document.getElementById("console-fullpage");
+  const fpStatusEl = document.getElementById("console-fp-status");
+  const fpEndBtn = document.getElementById("console-fp-end");
+  const connectingEl = document.getElementById("console-connecting");
+  const connectingTextEl = document.getElementById("console-connecting-text");
+  let term = null, fitAddon = null, socket = null, revealTimer = null, connectStartedAt = 0;
+  const MIN_CONNECTING_MS = 1400;
 
   function setStatus(text, color) {
     statusEl.textContent = text;
     statusEl.style.color = color || "var(--text-faint)";
+    fpStatusEl.textContent = text;
+    fpStatusEl.style.color = color || "var(--text-faint)";
   }
+  function setConnectingText(text) { connectingTextEl.textContent = text; }
 
   function sendResize() {
     if (socket && socket.connected && term) {
@@ -274,11 +308,33 @@
     }
   }
 
+  function openFullpage() {
+    pageEl.style.display = "none";
+    fullpageEl.style.display = "flex";
+    connectingEl.style.display = "grid";
+  }
+  function closeFullpage() {
+    pageEl.style.display = "";
+    fullpageEl.style.display = "none";
+  }
+  function revealTerminal() {
+    if (connectingEl.style.display === "none" || revealTimer) return;
+    const wait = Math.max(0, MIN_CONNECTING_MS - (Date.now() - connectStartedAt));
+    revealTimer = setTimeout(() => {
+      revealTimer = null;
+      connectingEl.style.display = "none";
+      fitAddon.fit();
+      sendResize();
+      setStatus("");
+    }, wait);
+  }
+
   connectBtn.addEventListener("click", () => {
     if (socket) return;
-    termEl.style.display = "block";
     connectBtn.style.display = "none";
-    consoleStopBtn.style.display = "inline-flex";
+    connectStartedAt = Date.now();
+    openFullpage();
+    setConnectingText("Opening secure channel");
     setStatus("Connecting…");
 
     if (!term) {
@@ -291,33 +347,34 @@
       fitAddon = new FitAddon.FitAddon();
       term.loadAddon(fitAddon);
       term.open(termEl);
-      fitAddon.fit();
       term.onData((data) => { if (socket && socket.connected) socket.emit("input", data); });
-    } else {
-      fitAddon.fit();
     }
 
     socket = io("/console");
-    socket.on("connect", () => { setStatus("Connected", "var(--ok)"); sendResize(); });
+    socket.on("connect", () => {
+      setConnectingText("Attaching to shell");
+      revealTerminal();
+    });
     socket.on("disconnect", () => setStatus("Reconnecting…"));
-    socket.on("output", (data) => term.write(data));
+    socket.on("output", (data) => { term.write(data); revealTerminal(); });
     socket.on("exited", () => { setStatus("Session ended"); });
     socket.on("error", (payload) => { A.toast((payload && payload.message) || "Console error"); });
   });
 
-  consoleStopBtn.addEventListener("click", () => {
+  function endSession() {
     if (socket) {
       socket.emit("stop_console");
       socket.disconnect();
       socket = null;
     }
-    termEl.style.display = "none";
-    consoleStopBtn.style.display = "none";
+    if (revealTimer) { clearTimeout(revealTimer); revealTimer = null; }
+    closeFullpage();
     connectBtn.style.display = "inline-flex";
     setStatus("Disconnected");
-  });
+  }
+  fpEndBtn.addEventListener("click", endSession);
 
-  window.addEventListener("resize", () => { if (fitAddon && termEl.style.display !== "none") { fitAddon.fit(); sendResize(); } });
+  window.addEventListener("resize", () => { if (fitAddon && fullpageEl.style.display !== "none") { fitAddon.fit(); sendResize(); } });
 })();
 </script>
 {% endblock %}

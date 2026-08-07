@@ -231,7 +231,7 @@ html.sidebar-closed .sidebar { display: none; }
 html.sidebar-closed .sidebar-expand { display: flex; }
 
 .main {
-  display: flex; flex-direction: column; min-width: 0; height: 100%;
+  display: flex; flex-direction: column; min-width: 0; height: 100%; position: relative;
   margin-left: 244px; margin-right: 10px; transition: margin-left 0.2s ease; background: var(--app-bg);
 }
 html.sidebar-closed .main, .main.no-side { margin-left: 10px; }
@@ -357,9 +357,11 @@ html.sidebar-closed .main, .main.no-side { margin-left: 10px; }
 .btn-outline:disabled { opacity: 0.6; cursor: default; }
 .btn-outline.lg { padding: 10px 18px; font-size: 13.5px; }
 .btn-danger {
+  display: inline-flex; align-items: center; gap: 6px;
   padding: 9px 16px; border-radius: 9px; border: 1px solid var(--danger); background: var(--danger);
   color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit;
 }
+.btn-danger:hover { filter: brightness(1.08); }
 .btn-danger:disabled { opacity: 0.5; cursor: default; }
 .icon-btn {
   width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
@@ -798,6 +800,55 @@ html.blur-active .otp-panel, html.blur-active .otp-cards { filter: blur(9px); tr
 .size-bar .filled { color: #5FD75F; }
 .size-bar .empty { color: #458E45; }
 .size-bar .txt { color: var(--text-dim); }
+
+/* remote console: full-page takeover */
+.console-fullpage {
+  display: none; flex-direction: column; flex: 1; min-height: 0; margin: 10px 0;
+  background: var(--side-bg); border: 1px solid var(--border); border-radius: 14px; overflow: hidden;
+}
+.console-fp-bar {
+  display: flex; align-items: center; gap: 10px; flex: none;
+  padding: 12px 18px; background: var(--header-bg); border-bottom: 1px solid var(--border); color: var(--text);
+}
+.console-fp-title { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 700; color: var(--text); }
+.console-fp-status { margin-left: auto; font-size: 11.5px; font-weight: 600; color: var(--text-faint); }
+.console-fp-end {
+  display: flex; align-items: center; justify-content: center; flex: none;
+  width: 28px; height: 28px; border: none; border-radius: 8px; background: none;
+  color: var(--text-dim); cursor: pointer;
+}
+.console-fp-end:hover { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); }
+.console-fp-body { flex: 1; min-height: 0; position: relative; padding: 0 14px; box-sizing: border-box; }
+.console-fp-body #console-term {
+  height: 100%; width: 100%; box-sizing: border-box;
+  padding: 10px; background: #111;
+}
+
+.console-connecting {
+  position: absolute; inset: 0; display: none; place-items: center; z-index: 2;
+  background-color: var(--side-bg);
+  background-image: radial-gradient(ellipse at 50% 45%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 62%);
+}
+.console-connecting-inner { display: flex; flex-direction: column; align-items: center; gap: 22px; padding: 0 24px; text-align: center; }
+.console-progress {
+  position: relative; width: 220px; height: 6px; border-radius: 999px; overflow: hidden; flex: none;
+  background: color-mix(in srgb, var(--accent) 14%, var(--app-bg));
+}
+.console-progress-bar {
+  position: absolute; top: 0; left: -35%; width: 35%; height: 100%; border-radius: 999px;
+  background: var(--accent);
+  animation: consoleBounce 1.3s ease-in-out infinite alternate;
+}
+@keyframes consoleBounce { from { left: -35%; } to { left: 100%; } }
+.console-connecting-label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 16px; font-weight: 600;
+  color: var(--text); display: flex; align-items: center; gap: 1px;
+}
+.console-connecting-dots span { animation: consoleDotBlink 1.2s infinite; opacity: 0; }
+.console-connecting-dots span:nth-child(2) { animation-delay: 0.2s; }
+.console-connecting-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes consoleDotBlink { 0%, 100% { opacity: 0; } 30%, 60% { opacity: 1; } }
+.console-connecting-sub { font-size: 12.5px; color: var(--text-faint); margin-top: -8px; }
 
 .collapse-card { display: flex; flex-direction: column; background: var(--row-bg); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
 .collapse-head {
