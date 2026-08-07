@@ -2,74 +2,354 @@
 
 {% block title %}Login | OTP-Tool{% endblock %}
 
-{% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='styles/login.css') }}">
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+{% block page %}
+<div class="auth-body">
+  <canvas id="auth-ascii-canvas" class="auth-ascii-canvas"></canvas>
+
+  <div class="auth-loading-overlay" id="auth-loading-overlay">
+    <div class="auth-ascii-logo" id="auth-ascii-logo"></div>
+    <div class="auth-loading-row" id="auth-loading-row">
+      <div class="spinner sm"></div>
+      <span style="font-size:13px;font-weight:600;color:var(--text-dim);letter-spacing:0.02em">Loading</span>
+    </div>
+  </div>
+
+  <div class="auth-topbar left">
+    <div class="brand-icon"><span data-icon="lock"></span></div>
+    <span style="font-weight:700;font-size:17px;letter-spacing:-0.01em">OTP Manager</span>
+  </div>
+
+  <div class="auth-topbar right">
+    <div class="auth-settings-wrap">
+      <button type="button" class="auth-icon-btn" id="auth-settings-btn" title="Settings">
+        <span style="width:16px;height:16px;display:flex" data-icon="settings"></span>
+      </button>
+      <div class="auth-settings-menu" id="auth-settings-menu">
+        <div class="arrow"></div>
+        <div class="heading">Ascii background</div>
+        <label><input type="radio" name="asciiStyle" value="off">Off</label>
+        <label><input type="radio" name="asciiStyle" value="matrix">Matrix rain</label>
+        <label><input type="radio" name="asciiStyle" value="starfield">Starfield warp</label>
+        <label><input type="radio" name="asciiStyle" value="wave">Plasma wave</label>
+        <label><input type="radio" name="asciiStyle" value="ripple">Ripple pulse</label>
+      </div>
+    </div>
+    <button type="button" class="auth-icon-btn" id="auth-theme-toggle" title="Toggle theme"></button>
+  </div>
+
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <div class="auth-title">Sign in</div>
+      <div class="auth-subtitle">Enter your account credentials to continue.</div>
+
+      <form method="POST" id="login-form">
+        <div class="auth-field">
+          <label class="field-label-sm" for="username">Username</label>
+          <input class="text-input" type="text" id="username" name="username" placeholder="username" autocomplete="username" autofocus required>
+        </div>
+
+        <div class="auth-field">
+          <div class="auth-row-between">
+            <label class="field-label-sm" for="password" style="margin-bottom:0">Password</label>
+            <a href="#" class="auth-forgot" id="auth-forgot">Forgot password?</a>
+          </div>
+          <div style="position:relative">
+            <input class="text-input padded" type="password" id="password" name="password" placeholder="••••••••" autocomplete="current-password" required>
+            <button type="button" class="auth-pw-toggle" id="auth-pw-toggle" title="Show password"></button>
+          </div>
+        </div>
+
+        <label class="remember-row">
+          <input type="checkbox" id="keep_logged_in" name="keep_logged_in">
+          Remember me
+        </label>
+
+        <button type="submit" class="btn-accent lg" id="auth-submit" style="width:100%;justify-content:center">Continue</button>
+      </form>
+    </div>
+
+    <div class="auth-error" id="auth-error"></div>
+
+    <div class="auth-footnote">Don't have an account? <a href="#" id="auth-request-access">Request access</a></div>
+  </div>
+</div>
 {% endblock %}
 
-{% block content %}
-<div class="login-container">
-    <div class="version-label">
-        <i class="fa-solid fa-lock"></i> v.{{ app_version }}
-    </div>
-    <h2 class="login-title">Login to OTP-Tool</h2>
-    <form method="POST" class="login-form">
-        <div class="login-field">
-            <label for="username">Username</label>
-            <input type="text" id="username" name="username" placeholder="Enter username" required>
-        </div>
-
-        <div class="login-field password-wrapper">
-            <label for="password">Password</label>
-            <div class="password-field">
-                <input type="password" id="password" name="password" placeholder="Enter password" required>
-                <button type="button" id="togglePassword" class="eye-toggle">
-                    <i class="fa-solid fa-eye-slash"></i>
-                </button>
-            </div>
-        </div>
-
-        <div class="remember-me">
-            <input type="checkbox" id="keep_logged_in" name="keep_logged_in">
-            <label for="keep_logged_in">Remember me</label>
-        </div>
-
-        <div class="login-actions">
-            <button type="submit" class="login-button">Login</button>
-        </div>
-    </form>
-</div>
-
+{% block scripts %}
 <script>
-    const toggleBtn = document.getElementById("togglePassword");
-    const passwordInput = document.getElementById("password");
-    const loginForm = document.querySelector(".login-form");
-    const loginContainer = document.querySelector(".login-container");
-    const usernameInput = document.getElementById("username");
+(function () {
+  "use strict";
 
-    let focusTriggered = false;
+  var ASCII_LOGO = [
+    '░░░░░░░░      ░░░        ░░       ░░░░░░░░░        ░░░      ░░░░      ░░░  ░░░░░░░░░░░░░',
+    '▒▒▒▒▒▒▒  ▒▒▒▒  ▒▒▒▒▒  ▒▒▒▒▒  ▒▒▒▒  ▒▒▒▒▒▒▒▒▒▒▒  ▒▒▒▒▒  ▒▒▒▒  ▒▒  ▒▒▒▒  ▒▒  ▒▒▒▒▒▒▒▒▒▒▒▒▒',
+    '▓▓▓▓▓▓▓  ▓▓▓▓  ▓▓▓▓▓  ▓▓▓▓▓       ▓▓▓▓▓▓▓▓▓▓▓▓  ▓▓▓▓▓  ▓▓▓▓  ▓▓  ▓▓▓▓  ▓▓  ▓▓▓▓▓▓▓▓▓▓▓▓▓',
+    '███████  ████  █████  █████  █████████████████  █████  ████  ██  ████  ██  █████████████',
+    '████████      ██████  █████  █████████████████  ██████      ████      ███        ███████',
+  ];
+  var ASCII_KEY = 'otp-login-ascii-style';
+  var ASCII_RAMP = ' .:-=+*#%@'.split('');
 
-    toggleBtn.addEventListener("click", () => {
-        const isVisible = passwordInput.type === "text";
-        passwordInput.type = isVisible ? "password" : "text";
-        toggleBtn.innerHTML = `<i class="fa-solid fa-${isVisible ? 'eye-slash' : 'eye'}"></i>`;
+  function getAsciiStyle() {
+    try { return localStorage.getItem(ASCII_KEY) || 'starfield'; } catch (e) { return 'starfield'; }
+  }
+  function saveAsciiStyle(style) {
+    try { localStorage.setItem(ASCII_KEY, style); } catch (e) {}
+  }
+  function currentAccent() {
+    return (getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#a15c93').trim();
+  }
+  function currentBg() {
+    return (getComputedStyle(document.documentElement).getPropertyValue('--app-bg') || '#fafafa').trim();
+  }
+
+  /* ---------- ascii canvas background ---------- */
+
+  var canvas = document.getElementById('auth-ascii-canvas');
+  var ctx = canvas.getContext('2d');
+  var fontSize = 16;
+  var cols = 0, rows = 0, lastTick = 0, frame = null;
+  var rain = { chars: '01アイウエオカキクケコサシスセソ$#%&+=<>~*'.split(''), drops: [] };
+  var stars = [];
+
+  function resize() {
+    canvas.width = canvas.offsetWidth;
+    canvas.height = canvas.offsetHeight;
+    cols = Math.floor(canvas.width / fontSize);
+    rows = Math.floor(canvas.height / fontSize);
+    rain.drops = new Array(cols).fill(0).map(function () { return Math.floor(Math.random() * -40); });
+    stars.length = 0;
+    for (var i = 0; i < 90; i++) stars.push({ a: Math.random() * Math.PI * 2, r: Math.random() * 60, speed: 0.6 + Math.random() * 1.4 });
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  function drawMatrix(ts) {
+    if (ts - lastTick < 65) return;
+    lastTick = ts;
+    var accent = currentAccent();
+    ctx.fillStyle = currentBg() + '30';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.font = fontSize + 'px ui-monospace, SFMono-Regular, Menlo, monospace';
+    for (var i = 0; i < cols; i++) {
+      var ch = rain.chars[Math.floor(Math.random() * rain.chars.length)];
+      ctx.fillStyle = accent + (rain.drops[i] < 1 ? 'ff' : '4a');
+      ctx.fillText(ch, i * fontSize, rain.drops[i] * fontSize);
+      if (rain.drops[i] * fontSize > canvas.height && Math.random() > 0.975) rain.drops[i] = 0;
+      rain.drops[i]++;
+    }
+  }
+  function drawStarfield(ts) {
+    if (ts - lastTick < 35) return;
+    lastTick = ts;
+    var accent = currentAccent();
+    ctx.fillStyle = currentBg() + '22';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    var cx = canvas.width / 2, cy = canvas.height / 2;
+    ctx.font = fontSize + 'px ui-monospace, SFMono-Regular, Menlo, monospace';
+    for (var i = 0; i < stars.length; i++) {
+      var s = stars[i];
+      s.r += s.speed * 3;
+      if (s.r > Math.max(cx, cy) * 1.3) { s.r = 10; s.a = Math.random() * Math.PI * 2; }
+      var x = cx + Math.cos(s.a) * s.r;
+      var y = cy + Math.sin(s.a) * s.r * 0.7;
+      var ch = s.r > 220 ? '*' : s.r > 100 ? '+' : '.';
+      var alphaHex = s.r > 220 ? 'ff' : s.r > 100 ? 'aa' : '55';
+      ctx.fillStyle = accent + alphaHex;
+      ctx.fillText(ch, x, y);
+    }
+  }
+  function drawWave(ts) {
+    if (ts - lastTick < 55) return;
+    lastTick = ts;
+    var accent = currentAccent();
+    ctx.fillStyle = currentBg();
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.font = fontSize + 'px ui-monospace, SFMono-Regular, Menlo, monospace';
+    var t = ts / 700;
+    for (var ry = 0; ry < rows; ry++) {
+      for (var rx = 0; rx < cols; rx++) {
+        var v = Math.sin(rx * 0.35 + t) + Math.cos(ry * 0.35 + t * 1.3) + Math.sin((rx + ry) * 0.2 + t * 0.8);
+        var n = Math.max(0, Math.min(ASCII_RAMP.length - 1, Math.floor((v + 3) / 6 * ASCII_RAMP.length)));
+        if (n === 0) continue;
+        ctx.fillStyle = accent + Math.floor(20 + (n / ASCII_RAMP.length) * 60).toString(16).padStart(2, '0');
+        ctx.fillText(ASCII_RAMP[n], rx * fontSize, ry * fontSize + fontSize);
+      }
+    }
+  }
+  function drawRipple(ts) {
+    if (ts - lastTick < 55) return;
+    lastTick = ts;
+    var accent = currentAccent();
+    ctx.fillStyle = currentBg();
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.font = fontSize + 'px ui-monospace, SFMono-Regular, Menlo, monospace';
+    var cx = cols / 2, cy = rows / 2;
+    var maxD = Math.hypot(cx, cy);
+    var t = ts / 900;
+    for (var ry = 0; ry < rows; ry++) {
+      for (var rx = 0; rx < cols; rx++) {
+        var d = Math.hypot(rx - cx, (ry - cy) * 1.6);
+        var wave = Math.sin(d * 0.55 - t * 2.2);
+        var fade = Math.max(0, 1 - d / maxD);
+        var v = (wave * 0.5 + 0.5) * fade;
+        var n = Math.floor(v * (ASCII_RAMP.length - 1));
+        if (n <= 0) continue;
+        ctx.fillStyle = accent + Math.floor(v * 200).toString(16).padStart(2, '0');
+        ctx.fillText(ASCII_RAMP[n], rx * fontSize, ry * fontSize + fontSize);
+      }
+    }
+  }
+
+  function draw(ts) {
+    frame = requestAnimationFrame(draw);
+    var style = getAsciiStyle();
+    if (style === 'matrix') drawMatrix(ts);
+    else if (style === 'starfield') drawStarfield(ts);
+    else if (style === 'wave') drawWave(ts);
+    else if (style === 'ripple') drawRipple(ts);
+  }
+
+  function applyAsciiStyle(style) {
+    canvas.style.display = style === 'off' ? 'none' : 'block';
+    if (style === 'off') {
+      if (frame) cancelAnimationFrame(frame);
+      frame = null;
+    } else if (!frame) {
+      frame = requestAnimationFrame(draw);
+    }
+  }
+
+  var initialAsciiStyle = getAsciiStyle();
+  applyAsciiStyle(initialAsciiStyle);
+  document.querySelectorAll('#auth-settings-menu input[name=asciiStyle]').forEach(function (r) {
+    r.checked = r.value === initialAsciiStyle;
+    r.addEventListener('change', function () {
+      saveAsciiStyle(r.value);
+      applyAsciiStyle(r.value);
     });
+  });
 
-    document.addEventListener("keydown", (e) => {
-        if (!focusTriggered && !["Tab", "Shift", "Alt", "Control", "Meta"].includes(e.key)) {
-            focusTriggered = true;
-            usernameInput.focus();
+  /* ---------- settings dropdown ---------- */
+
+  var settingsBtn = document.getElementById('auth-settings-btn');
+  var settingsMenu = document.getElementById('auth-settings-menu');
+  settingsBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    settingsMenu.classList.toggle('open');
+  });
+  document.addEventListener('click', function (e) {
+    if (settingsMenu.classList.contains('open') && !settingsMenu.contains(e.target) && e.target !== settingsBtn) {
+      settingsMenu.classList.remove('open');
+    }
+  });
+
+  /* ---------- theme toggle ---------- */
+
+  var themeBtn = document.getElementById('auth-theme-toggle');
+  function syncThemeIcon() {
+    var dark = document.documentElement.classList.contains('dark-mode');
+    themeBtn.innerHTML = '<span style="width:16px;height:16px;display:flex">' + (dark ? window.App.ICONS.sun : window.App.ICONS.moon) + '</span>';
+  }
+  syncThemeIcon();
+  themeBtn.addEventListener('click', function () {
+    var dark = !document.documentElement.classList.contains('dark-mode');
+    document.documentElement.classList.toggle('dark-mode', dark);
+    window.App.setCookie('theme', dark ? 'dark' : 'light');
+    syncThemeIcon();
+  });
+
+  /* ---------- password visibility ---------- */
+
+  var pwInput = document.getElementById('password');
+  var pwToggle = document.getElementById('auth-pw-toggle');
+  pwToggle.innerHTML = '<span style="width:15px;height:15px;display:flex">' + window.App.ICONS.eye + '</span>';
+  pwToggle.addEventListener('click', function () {
+    var show = pwInput.type === 'password';
+    pwInput.type = show ? 'text' : 'password';
+    pwToggle.innerHTML = '<span style="width:15px;height:15px;display:flex">' + (show ? window.App.ICONS.eyeOff : window.App.ICONS.eye) + '</span>';
+  });
+
+  /* ---------- cosmetic links ---------- */
+
+  document.getElementById('auth-forgot').addEventListener('click', function (e) { e.preventDefault(); });
+  document.getElementById('auth-request-access').addEventListener('click', function (e) { e.preventDefault(); });
+
+  /* ---------- autofocus username on first keystroke ---------- */
+
+  var usernameInput = document.getElementById('username');
+  var focusTriggered = false;
+  document.addEventListener('keydown', function (e) {
+    if (!focusTriggered && ['Tab', 'Shift', 'Alt', 'Control', 'Meta', 'Escape'].indexOf(e.key) === -1 &&
+        document.activeElement.tagName !== 'INPUT') {
+      focusTriggered = true;
+      usernameInput.focus();
+    }
+  });
+
+  /* ---------- submit + loading animation ---------- */
+
+  var form = document.getElementById('login-form');
+  var errorEl = document.getElementById('auth-error');
+  var overlay = document.getElementById('auth-loading-overlay');
+  var logoWrap = document.getElementById('auth-ascii-logo');
+  var loadingRow = document.getElementById('auth-loading-row');
+  var submitBtn = document.getElementById('auth-submit');
+  var doneTimer1 = null, doneTimer2 = null;
+
+  function buildAsciiLogoRows(closing) {
+    logoWrap.innerHTML = '';
+    ASCII_LOGO.forEach(function (text, i) {
+      var row = document.createElement('div');
+      row.className = 'row';
+      row.textContent = text;
+      row.style.animation = (closing ? 'rowHide 0.4s ease forwards' : 'rowReveal 0.4s ease forwards');
+      row.style.animationDelay = (closing ? i * 0.1 : (ASCII_LOGO.length - 1 - i) * 0.1) + 's';
+      logoWrap.appendChild(row);
+    });
+  }
+
+  function startDoneSequence(destination) {
+    buildAsciiLogoRows(false);
+    loadingRow.style.opacity = '1';
+    overlay.classList.add('open');
+    clearTimeout(doneTimer1); clearTimeout(doneTimer2);
+    doneTimer1 = setTimeout(function () {
+      buildAsciiLogoRows(true);
+      loadingRow.style.opacity = '0';
+    }, 3000);
+    doneTimer2 = setTimeout(function () {
+      window.location.href = destination;
+    }, 3900);
+  }
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    errorEl.textContent = '';
+    submitBtn.disabled = true;
+
+    var formData = new FormData(form);
+    fetch(window.location.href, { method: 'POST', body: formData, credentials: 'same-origin' })
+      .then(function (res) {
+        return res.text().then(function (html) {
+          return { path: new URL(res.url).pathname, html: html };
+        });
+      })
+      .then(function (result) {
+        if (result.path !== '/login') {
+          startDoneSequence(result.path || '/');
+        } else {
+          submitBtn.disabled = false;
+          var doc = new DOMParser().parseFromString(result.html, 'text/html');
+          var flashEl = doc.querySelector('.flash-msg');
+          errorEl.textContent = flashEl ? flashEl.textContent.trim() : 'Invalid credentials!';
         }
-    });
-
-    loginForm.addEventListener("submit", function(e) {
-        loginContainer.classList.add("fade-out");
-
-        setTimeout(() => {
-            loginForm.submit();
-        }, 300); 
-        e.preventDefault(); 
-    });
+      })
+      .catch(function () {
+        submitBtn.disabled = false;
+        errorEl.textContent = 'An error occurred. Please try again.';
+      });
+  });
+})();
 </script>
 {% endblock %}

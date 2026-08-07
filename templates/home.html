@@ -1,989 +1,608 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
+{% set active_page = 'home' %}
 
 {% block title %}Home | OTP-Tool{% endblock %}
 
-{% block head %}
-<link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="{{ url_for('static', filename='styles/home.css') }}">
-<style>
-    .otp-card-inner {
-        transition: filter 0.3s ease, opacity 0.3s ease;
-    }
-    .otp-card.inactive-blur .otp-card-inner {
-        filter: blur(6px);
-        opacity: 0.5;
-    }
-</style>
+{% block page %}
+<div class="page">
+  <div class="page-topbar">
+    <div class="topbar-inner">
+      <div class="topbar-search">
+        <span class="ico" data-icon="search"></span>
+        <input type="text" id="home-search" placeholder="Search name, email, company..." autocomplete="off">
+        <span class="kbd" id="home-search-kbd">&#8984;K</span>
+      </div>
+      <div class="topbar-sep"></div>
+      <div class="topbar-select" style="width:210px">
+        <select id="company-filter">
+          <option value="">All companies</option>
+        </select>
+        <span class="chev" data-icon="chevron"></span>
+      </div>
+      {% if can_add_secrets %}
+      <div class="topbar-sep"></div>
+      <a href="/add" class="topbar-btn accent"><span style="width:14px;height:14px;display:flex" data-icon="plus"></span>Add OTP</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="page-scroll" id="home-scroll" style="padding:6px 22px 40px 22px">
+    <div style="max-width:1100px;margin:0 auto" id="home-content">
+    </div>
+  </div>
+
+  <button class="back-to-top" id="back-to-top" title="Back to top" style="display:none" type="button">
+    <span style="width:16px;height:16px;display:flex" data-icon="arrowUp"></span>
+  </button>
+</div>
+
+<!-- Edit drawer -->
+<div class="overlay drawer-side" id="edit-overlay">
+  <div class="drawer">
+    <div class="drawer-head">
+      <div><div class="drawer-title">Edit OTP</div></div>
+      <button class="drawer-x" data-close-overlay type="button">&#10005;</button>
+    </div>
+    <label class="field-label-sm" style="margin-top:16px">Name</label>
+    <input class="text-input" id="edit-name" placeholder="e.g. Admin 365">
+    <label class="field-label-sm" style="margin-top:14px">E-Mail</label>
+    <input class="text-input" id="edit-email" placeholder="email@example.com or none">
+    <label class="field-label-sm" style="margin-top:14px">Secret</label>
+    <input class="text-input mono" id="edit-secret" placeholder="Base32 secret">
+    <label class="field-label-sm" style="margin-top:14px">Company</label>
+    <select class="text-input" id="edit-company"></select>
+    <div class="drawer-actions">
+      <button class="btn-outline lg" data-close-overlay type="button">Cancel</button>
+      <button class="btn-accent lg" id="edit-save" type="button">Save changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete modal -->
+<div class="overlay center" id="delete-overlay">
+  <div class="modal">
+    <div class="modal-title">Delete this secret?</div>
+    <div class="modal-sub">This will remove the OTP entry permanently. This can't be undone.</div>
+    <div class="modal-actions">
+      <button class="btn-outline" data-close-overlay type="button">Cancel</button>
+      <button class="btn-danger" id="delete-confirm" type="button">Delete</button>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
-{% block content %}
-<div class="otp-wrapper">
-    <div id="otpContainer"></div>
-</div>
-
-<a id="backToTop" href="#" title="Back to top">
-    <i class="fas fa-arrow-up"></i>
-</a>
-
-<div id="confirmDeleteOtpModal" class="add-user-modal">
-    <div class="add-user-modal-content otp-delete-modal-card">
-        <form method="post" action="/api/delete-secret" id="deleteOtpForm">
-            <input type="hidden" name="secret_id" id="delete-secret-id">
-            <div class="otp-delete-modal-header">
-                <div>
-                    <div class="otp-delete-title-row">
-                        <h3 class="otp-delete-title">Delete this secret?</h3>
-                    </div>
-                    <p class="otp-delete-copy">This secret will be removed permanently and can't be recovered!</p>
-                </div>
-            </div>
-            <div class="delete-user-button-row otp-delete-actions">
-                <button type="button" id="cancelDeleteOtp" class="otp-delete-secondary">Cancel</button>
-                <button type="submit" class="confirm-delete-button otp-delete-primary">
-                    <span class="material-icons" aria-hidden="true">close</span>
-                    <span>Delete Secret</span>
-                </button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<div id="editOtpModal" class="add-user-modal">
-    <div class="add-user-modal-content otp-edit-modal-card">
-        <button type="button" class="add-user-close otp-edit-close" id="closeEditOtpModal" aria-label="Close edit dialog">&times;</button>
-        <form id="editOtpForm" class="add-user-form">
-            <input type="hidden" name="secret_id" id="edit-secret-id">
-            <label for="edit-name">Name</label>
-            <div class="add-user-input-wrapper">
-                <input type="text" id="edit-name" name="name" placeholder="Name" required minlength="3" pattern="[A-Za-z0-9 _\-]{3,}" title="At least 3 characters. Letters, numbers, spaces, - and _ allowed.">
-            </div>
-
-            <label for="edit-email">E-Mail</label>
-            <div class="add-user-input-wrapper">
-                <input type="text" id="edit-email" name="email" placeholder="email@example.com or none" pattern="^([A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}|none)$" title="Enter a valid e-mail address or none">
-            </div>
-
-            <label for="edit-secret">Secret</label>
-            <div class="add-user-input-wrapper">
-                <input type="text" id="edit-secret" name="secret" placeholder="Base32 secret" required>
-            </div>
-
-            <label for="edit-refresh-time" class="otp-inline-label">
-                <span>Refresh Time (seconds)</span>
-                <span id="edit-refresh-time-note" class="otp-inline-note">Read only</span>
-            </label>
-            <div class="add-user-input-wrapper">
-                <input type="number" id="edit-refresh-time" name="refresh_time" min="10" placeholder="30" required readonly disabled tabindex="-1" aria-describedby="edit-refresh-time-note">
-            </div>
-
-            <label for="edit-company">Company</label>
-            <div class="add-user-input-wrapper">
-                <select id="edit-company" name="company_id" required></select>
-            </div>
-
-            <div class="add-user-button-row">
-                <button type="submit" id="saveEditOtpButton" disabled>Save Changes</button>
-                <button type="button" id="cancelEditOtp" class="otp-edit-secondary">Cancel</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<div id="otpProblemsToast" class="otp-problems-toast" aria-live="polite">
-    <div class="otp-problems-toast-text" id="otpProblemsToastText">
-        There are problems regarding your stored secrets. Please resolve them.
-    </div>
-    <div class="otp-problems-toast-actions">
-        <button type="button" id="otpProblemsShowBtn" class="otp-problems-btn primary">Show problems</button>
-        <button type="button" id="otpProblemsIgnoreBtn" class="otp-problems-btn">Ignore 24h</button>
-        <button type="button" id="otpProblemsCloseBtn" class="otp-problems-btn icon" aria-label="Close">×</button>
-    </div>
-</div>
-
+{% block scripts %}
 <script>
-    const SHOW_EMAIL = {{ 1 if user_settings.show_emails else 0 }};
-    const SHOW_TEXT_TIMER = {{ 1 if user_settings.show_timer else 0 }};
-    const blur_on_inactive = {{ 1 if user_settings.blur_on_inactive else 0 }};
-    const SHOW_INCLUDE_ADMIN_ON_TOP = {{ 1 if user_settings.show_including_admin_on_top else 0 }};
-    const HIDE_CODES_BY_DEFAULT = {{ 1 if user_settings.hide_codes_by_default else 0 }};
-    const HIDE_SECRET_FIELD = {{ 1 if user_settings.hide_secret_field else 0 }};
-    const SHOW_SEARCH_AND_LINK = {{ 1 if user_settings.show_search_and_link else 0 }};
-    const CAN_EDIT_SECRETS = {{ 1 if can_edit else 0 }};
-    const CAN_DELETE_SECRETS = {{ 1 if can_delete else 0 }};
-    const visibleCards = new Set();
-    let companyOptionsCache = null;
-    let lastSlot = null;
-    let lastActivity = Date.now();
-    let blurApplied = false;
-    const OTP_PROBLEMS_IGNORE_KEY = "otpProblemsIgnoreUntil";
-    let problemCardIds = [];
-    let problemCardCycleIndex = 0;
-
-    function validateNameInput(input) {
-        const value = (input.value || '').trim();
-        const valid = /^[A-Za-z0-9 _-]{3,}$/.test(value);
-        if (!valid) {
-            input.setCustomValidity('At least 3 characters. Letters, numbers, spaces, - and _ allowed.');
-        } else {
-            input.setCustomValidity('');
-        }
-    }
-
-
-    const editNameInputEl = document.getElementById("edit-name");
-    if (editNameInputEl) {
-        editNameInputEl.addEventListener("input", () => validateNameInput(editNameInputEl));
-        editNameInputEl.addEventListener("blur", () => validateNameInput(editNameInputEl));
-        editNameInputEl.addEventListener("invalid", () => validateNameInput(editNameInputEl));
-    }
-
-    function getProblemCards() {
-        return Array.from(document.querySelectorAll(".otp-card.otp-code-missing"));
-    }
-
-    function updateProblemCardList() {
-        problemCardIds = getProblemCards().map(card => String(card.dataset.id));
-        if (problemCardCycleIndex >= problemCardIds.length) {
-            problemCardCycleIndex = 0;
-        }
-    }
-
-    function isProblemsToastIgnored() {
-        const until = parseInt(localStorage.getItem(OTP_PROBLEMS_IGNORE_KEY) || "0", 10);
-        return Number.isFinite(until) && until > Date.now();
-    }
-
-    function ignoreProblemsToastFor24h() {
-        localStorage.setItem(OTP_PROBLEMS_IGNORE_KEY, String(Date.now() + (24 * 60 * 60 * 1000)));
-    }
-
-    function clearProblemsToastIgnore() {
-        localStorage.removeItem(OTP_PROBLEMS_IGNORE_KEY);
-    }
-
-    function getNextProblemCard() {
-        const cards = getProblemCards();
-        if (!cards.length) return null;
-
-        updateProblemCardList();
-
-        if (!problemCardIds.length) return cards[0];
-
-        const nextId = problemCardIds[problemCardCycleIndex % problemCardIds.length];
-        problemCardCycleIndex = (problemCardCycleIndex + 1) % problemCardIds.length;
-
-        return document.querySelector(`.otp-card[data-id="${CSS.escape(nextId)}"]`) || cards[0];
-    }
-
-    function scrollToNextProblemCard() {
-        const card = getNextProblemCard();
-        if (!card) return;
-
-        card.scrollIntoView({ behavior: "smooth", block: "center" });
-        card.classList.remove("otp-problem-highlight");
-        void card.offsetWidth;
-        card.classList.add("otp-problem-highlight");
-        setTimeout(() => card.classList.remove("otp-problem-highlight"), 20000);
-    }
-
-    function updateProblemsToast() {
-        const toast = document.getElementById("otpProblemsToast");
-        const text = document.getElementById("otpProblemsToastText");
-        if (!toast || !text) return;
-
-        if (!CAN_EDIT_SECRETS) {
-            toast.classList.remove("show");
-            return;
-        }
-
-        const count = getProblemCards().length;
-
-        if (count <= 0) {
-            toast.classList.remove("show");
-            return;
-        }
-
-        if (count === 1) {
-            text.textContent = "There is a problem regarding your stored secrets. Please resolve it.";
-        } else {
-            text.textContent = "There are multiple problems regarding your stored secrets. Please resolve them.";
-        }
-
-        updateProblemCardList();
-
-        if (isProblemsToastIgnored()) {
-            toast.classList.remove("show");
-            return;
-        }
-
-        toast.classList.add("show");
-    }
-
-    function setupProblemsToastHandlers() {
-        const showBtn = document.getElementById("otpProblemsShowBtn");
-        const ignoreBtn = document.getElementById("otpProblemsIgnoreBtn");
-        const closeBtn = document.getElementById("otpProblemsCloseBtn");
-        const toast = document.getElementById("otpProblemsToast");
-
-        if (!showBtn || !ignoreBtn || !closeBtn || !toast) return;
-
-        showBtn.addEventListener("click", () => {
-            scrollToNextProblemCard();
-        });
-
-        ignoreBtn.addEventListener("click", () => {
-            ignoreProblemsToastFor24h();
-            toast.classList.remove("show");
-        });
-
-        closeBtn.addEventListener("click", () => {
-            ignoreProblemsToastFor24h();
-            toast.classList.remove("show");
-        });
-    }
-
-    function maskSecret(s) {
-        const n = typeof s === 'string' ? s.length : 0;
-        return '*'.repeat(Math.min(n, 16));
-    }
-
-    function debounce(func, delay) {
-        let timeout;
-        return (...args) => {
-            clearTimeout(timeout);
-            timeout = setTimeout(() => func(...args), delay);
-        };
-    }
-
-    function sortSecretsForDisplay(list) {
-        if (!Array.isArray(list)) return [];
-        if (!SHOW_INCLUDE_ADMIN_ON_TOP) {
-            return list.sort((a, b) => {
-                const aName = typeof a.name === "string" ? a.name : "";
-                const bName = typeof b.name === "string" ? b.name : "";
-                return aName.localeCompare(bName);
-            });
-        }
-        return list.sort((a, b) => {
-            const aName = typeof a.name === "string" ? a.name : "";
-            const bName = typeof b.name === "string" ? b.name : "";
-            const aAdmin = aName.toLowerCase().includes("admin");
-            const bAdmin = bName.toLowerCase().includes("admin");
-            if (aAdmin && !bAdmin) return -1;
-            if (!aAdmin && bAdmin) return 1;
-            return aName.localeCompare(bName);
-        });
-    }
-
-    function markActivity() {
-        lastActivity = Date.now();
-        if (blurApplied) {
-            blurApplied = false;
-            document.querySelectorAll('.otp-card').forEach(card => {
-                card.classList.remove('inactive-blur');
-            });
-        }
-    }
-
-    function applyBlurIfNeeded() {
-        if (!blur_on_inactive || !blurApplied) return;
-        document.querySelectorAll('.otp-card').forEach(card => {
-            card.classList.add('inactive-blur');
-        });
-    }
-
-    async function refreshCardCode(card){
-        try{
-            const id = String(card.dataset.id);
-            const res = await fetch(`/api/secrets/${id}`);
-            if(!res.ok) return;
-            const data = await res.json();
-            const codeEl = card.querySelector('.otp-code');
-            const next = String(data.current_code || "");
-            if (codeEl) {
-                const prev = codeEl.dataset.realCode || "";
-                codeEl.dataset.realCode = next;
-                if ((!HIDE_CODES_BY_DEFAULT || card._codeRevealed) && prev !== next) {
-                    animateCodeChange(codeEl, next);
-                }
-            }
-            updateOtpCardWarningState(card);
-        }catch(e){}
-    }
-
-    async function fetchCompanyOptions() {
-        if (companyOptionsCache) return companyOptionsCache;
-        const res = await fetch('/api/secrets');
-        const secrets = await res.json();
-        const map = {};
-        secrets.forEach(s => {
-            if (s.company_id != null) map[s.company_id] = s.company_name || "Unknown Company";
-        });
-        companyOptionsCache = Object.entries(map)
-            .sort((a, b) => a[1].localeCompare(b[1]))
-            .map(([id, name]) => ({ id, name }));
-        return companyOptionsCache;
-    }
-
-    function updateTextTimer(timerEl, remaining) {
-        const newStr = String(remaining).padStart(2, '0');
-        const slots = timerEl.querySelectorAll('.timer-slot');
-
-        if (slots.length !== newStr.length) {
-            timerEl.innerHTML = '';
-            for (let i = 0; i < newStr.length; i++) {
-                const slot = document.createElement('span');
-                slot.className = 'timer-slot';
-                const digit = document.createElement('span');
-                digit.className = 'timer-digit';
-                digit.textContent = newStr[i];
-                slot.appendChild(digit);
-                timerEl.appendChild(slot);
-            }
-            return;
-        }
-
-        for (let i = 0; i < newStr.length; i++) {
-            const slot = slots[i];
-            const current = slot.querySelector('.timer-digit:not(.timer-exit)');
-            if (!current || current.textContent === newStr[i]) continue;
-
-            current.classList.add('timer-exit');
-            current.addEventListener('animationend', () => current.remove(), { once: true });
-
-            const next = document.createElement('span');
-            next.className = 'timer-digit timer-enter';
-            next.textContent = newStr[i];
-            slot.appendChild(next);
-            next.addEventListener('animationend', () => next.classList.remove('timer-enter'), { once: true });
-        }
-    }
-
-    function showMaskedCode(el) {
-        el.classList.add('code-hidden');
-        el.title = 'Click to reveal';
-        el.innerHTML = '<span class="digit">hidden</span>';
-    }
-
-    function animateCodeChange(el, next) {
-        const n = String(next || '');
-        el.innerHTML = '';
-        for (let i = 0; i < n.length; i++) {
-            const s = document.createElement('span');
-            s.className = 'digit';
-            s.style.animationDelay = (i * 25) + 'ms';
-            s.textContent = n[i];
-            el.appendChild(s);
-        }
-    }
-
-    function updateOtpCardWarningState(card) {
-        const codeEl = card.querySelector('.otp-code');
-        const copyButton = card.querySelector('.action-button.copy');
-        if (!codeEl || !copyButton) return;
-
-        const isEmpty = !codeEl.textContent.trim();
-        card.classList.toggle('otp-code-missing', isEmpty);
-
-        copyButton.disabled = isEmpty;
-        copyButton.setAttribute('aria-disabled', isEmpty ? 'true' : 'false');
-        copyButton.title = isEmpty ? 'OTP code unavailable' : 'Copy';
-
-        updateProblemsToast();
-    }
-
-    function populateCompanySelect(selectEl, selectedId) {
-        fetchCompanyOptions().then(options => {
-            selectEl.innerHTML = '';
-            options.forEach(opt => {
-                const o = document.createElement('option');
-                o.value = opt.id;
-                o.textContent = opt.name;
-                if (String(opt.id) === String(selectedId)) o.selected = true;
-                selectEl.appendChild(o);
-            });
-        });
-    }
-
-    const searchOtpInput = document.getElementById("search-otp-input");
-    if (searchOtpInput) {
-        const filterFn = (q) => {
-            const sections = document.querySelectorAll(".otp-section");
-            sections.forEach(section => {
-                let visibleCount = 0;
-                const cards = section.querySelectorAll(".otp-card");
-                cards.forEach(card => {
-                    const text = card.dataset.search || "";
-                    const match = text.includes(q);
-                    card.style.display = match ? "block" : "none";
-                    if (match) visibleCount++;
-                });
-                section.style.display = visibleCount > 0 ? "block" : "none";
-            });
-        };
-        searchOtpInput.addEventListener("input", e => filterFn(e.target.value.toLowerCase().trim()));
-        searchOtpInput.addEventListener("input", debounce(e => filterFn(e.target.value.toLowerCase().trim()), 100));
-    }
-
-    function copyText(t) {
-        if (window.isSecureContext && navigator.clipboard && navigator.clipboard.writeText) {
-            return navigator.clipboard.writeText(t);
-        }
-        return new Promise((resolve, reject) => {
-            const el = document.createElement('textarea');
-            el.value = t;
-            el.setAttribute('readonly', '');
-            el.style.position = 'fixed';
-            el.style.opacity = '0';
-            document.body.appendChild(el);
-            el.select();
-            try {
-                document.execCommand('copy') ? resolve() : reject();
-            } catch (e) {
-                reject(e);
-            }
-            document.body.removeChild(el);
-        });
-    }
-
-    function setupCard(card) {
-        const secretEl = card.querySelector('.otp-secret');
-        if (!secretEl && !HIDE_SECRET_FIELD) return;
-        const pinIcon = card.querySelector(".pin-icon");
-        const codeText = card.querySelector('.otp-code');
-        const copyButton = card.querySelector('.action-button.copy');
-        const timerEl = SHOW_TEXT_TIMER ? card.querySelector('.otp-timer') : null;
-        const circle = SHOW_TEXT_TIMER ? null : card.querySelector('.countdown-circle .circle-fg');
-        card._lastSlot = null;
-
-        const initialCode = codeText.textContent.trim();
-        codeText.dataset.realCode = initialCode;
-        card._codeRevealed = !HIDE_CODES_BY_DEFAULT;
-
-        if (HIDE_CODES_BY_DEFAULT) {
-            showMaskedCode(codeText);
-            codeText.addEventListener('click', () => {
-                card._codeRevealed = !card._codeRevealed;
-                if (card._codeRevealed) {
-                    codeText.classList.remove('code-hidden');
-                    codeText.title = '';
-                    animateCodeChange(codeText, codeText.dataset.realCode || '');
-                } else {
-                    showMaskedCode(codeText);
-                }
-            });
-        } else {
-            animateCodeChange(codeText, initialCode);
-        }
-        updateOtpCardWarningState(card);
-
-        copyButton.addEventListener('click', () => {
-            if (copyButton.disabled) return;
-            const code = codeText.dataset.realCode || codeText.textContent.trim();
-            if (!code) return;
-            copyText(code).then(() => { alert(`Copied code: ${code}`); }).catch(() => { window.prompt('Copy code:', code); });
-        });
-
-        pinIcon.addEventListener("click", async () => {
-            const secretId = card.dataset.id;
-            const res = await fetch("/toggle-pin", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ secret_id: secretId })
-            });
-            if (res.ok) {
-            const { pinned } = await res.json();
-            pinIcon.classList.toggle("pinned", pinned);
-            loadOTPs();
-            }
-        });
-
-        card._updateTimer = function (remaining, currentSlot) {
-            if (SHOW_TEXT_TIMER && timerEl) {
-                updateTextTimer(timerEl, remaining);
-            } else if (circle) {
-                const percent = (remaining / 30) * 100;
-                circle.style.strokeDashoffset = 100 - percent;
-            }
-            card._lastSlot = currentSlot;
-        };
-
-        if (secretEl) {
-            secretEl.addEventListener('mouseenter', () => { secretEl.classList.add('reveal') });
-            secretEl.addEventListener('mouseleave', () => { secretEl.classList.remove('reveal') });
-        }
-
-        const now = Math.floor(Date.now() / 1000);
-        const remaining = 30 - (now % 30);
-        const slot = Math.floor(now / 30);
-        card._updateTimer(remaining, slot);
-    }
-
-    async function refreshVisibleCodes() {
-        const res = await fetch('/api/secrets');
-        const list = await res.json();
-        const map = new Map(list.map(s => [String(s.id), String(s.current_code || "")]));
-        visibleCards.forEach(card => {
-            const id = String(card.dataset.id);
-            const codeEl = card.querySelector('.otp-code');
-            if (!codeEl || !map.has(id)) return;
-            const next = map.get(id);
-            const prev = codeEl.dataset.realCode || "";
-            codeEl.dataset.realCode = next;
-            if ((!HIDE_CODES_BY_DEFAULT || card._codeRevealed) && prev !== next) {
-                animateCodeChange(codeEl, next);
-            }
-            updateOtpCardWarningState(card);
-        });
-    }
-
-    async function loadOTPs() {
-        visibleCards.clear();
-        
-        const res = await fetch('/api/secrets');
-        const secrets = await res.json();
-        const pinnedRes = await fetch('/api/user-pinned');
-        const pinnedIds = await pinnedRes.json();
-
-        const grouped = {};
-        secrets.forEach(otp => {
-            const company = otp.company_name || "Unknown Company";
-            if (!grouped[company]) grouped[company] = [];
-            grouped[company].push(otp);
-        });
-
-        const container = document.getElementById("otpContainer");
-        container.innerHTML = "";
-
-        const pinned = secrets.filter(s => pinnedIds.includes(String(s.id)));
-        if (pinned.length > 0) {
-            const pinnedSection = document.createElement("div");
-            pinnedSection.className = "otp-section";
-
-            const title = document.createElement("h2");
-            title.className = "company-title";
-            title.innerHTML = `<span class="material-icons" style="font-size:1.05rem; vertical-align:-2px; margin-right:0.45rem;">push_pin</span>Your Pinned OTPs`;
-
-            const grid = document.createElement("div");
-            grid.className = "otp-grid";
-
-            for (const entry of sortSecretsForDisplay(pinned)) {
-                const card = document.createElement("div");
-                const delay = Math.floor(Math.random() * 120) + 30;
-                card.className = "otp-card";
-                card.style.animationDelay = `${delay}ms`;
-                card.dataset.id = entry.id;
-                card.dataset.search = `${entry.name} ${entry.email} ${entry.secret}`.toLowerCase();
-
-                card.innerHTML = `
-                    <div class="otp-card-inner">
-                        <span class="pin-icon"><span class="material-icons">push_pin</span></span>
-                        ${CAN_EDIT_SECRETS ? `<div class="otp-warning-overlay" aria-hidden="true"><span class="material-icons">report_problem</span><span class="otp-warning-text">Can't generate OTP code #ERR-004</span></div>` : ``}
-                        <div class="otp-field"><span class="otp-field-label">Name:</span> <span class="otp-field-value">${entry.name}</span></div>
-                        <div class="otp-field"><span class="otp-field-label">Company:</span> <span class="otp-field-value">${entry.company_name || "Unknown Company"}</span></div>
-                        ${HIDE_SECRET_FIELD ? `` : `
-                        <div class="otp-field"><span class="otp-field-label">Secret:</span>
-                            <span class="otp-field-value otp-secret" data-real="${entry.secret}" data-hidden="${maskSecret(entry.secret)}">${maskSecret(entry.secret)}</span>
-                        </div>`}
-                        <div class="otp-field"><span class="otp-field-label">OTP Code:</span> <span class="otp-field-value code-text otp-code">${entry.current_code || ""}</span></div>
-                        ${SHOW_EMAIL ? `
-                            <div class="otp-field">
-                                <span class="otp-field-label">E-Mail:</span>
-                                <span class="otp-field-value otp-email" title="${entry.email || ""}">${formatEmailDisplay(entry.email)}</span>
-                            </div>
-                        ` : ``}
-                        ${SHOW_TEXT_TIMER ? `
-                            <div class="otp-field"><span class="otp-field-label">Remaining Time:</span> <span class="otp-field-value otp-timer"></span></div>
-                        ` : ``}
-                        <div class="otp-actions">
-                            <button class="action-button copy" title="Copy"><span class="material-icons">content_copy</span></button>
-                            <button class="action-button edit${CAN_EDIT_SECRETS ? '' : ' disabled'}" title="${CAN_EDIT_SECRETS ? 'Edit' : 'No permission to edit'}" ${CAN_EDIT_SECRETS ? '' : 'disabled aria-disabled="true"'}><span class="material-icons">edit</span></button>
-                            <button class="action-button delete${CAN_DELETE_SECRETS ? '' : ' disabled'}" title="${CAN_DELETE_SECRETS ? 'Delete' : 'No permission to delete'}" ${CAN_DELETE_SECRETS ? '' : 'disabled aria-disabled="true"'}><span class="material-icons">delete</span></button>
-                            ${SHOW_TEXT_TIMER ? `` : `
-                                <svg class="countdown-circle" width="26" height="26" viewBox="0 0 36 36">
-                                    <circle class="circle-bg" cx="18" cy="18" r="16"></circle>
-                                    <circle class="circle-fg" cx="18" cy="18" r="16"></circle>
-                                </svg>
-                            `}
-                        </div>
-                    </div>
-                `;
-                setupCard(card);
-                grid.appendChild(card);
-            }
-
-            pinnedSection.appendChild(title);
-            pinnedSection.appendChild(grid);
-            container.appendChild(pinnedSection);
-        }
-
-        for (const company of Object.keys(grouped).sort()) {
-            const unpinnedEntries = grouped[company].filter(entry => !pinnedIds.includes(String(entry.id)));
-            if (unpinnedEntries.length === 0) continue;
-            const section = document.createElement("div");
-            section.className = "otp-section";
-
-            const title = document.createElement("h2");
-            title.className = "company-title";
-            title.style.animationDelay = `${Math.floor(Math.random() * 40) + 20}ms`;
-            const companyId = unpinnedEntries[0]?.company_id;
-            if (companyId != null && SHOW_SEARCH_AND_LINK) {
-                title.innerHTML = `${company} <a href="/companies?scroll=${encodeURIComponent(companyId)}" class="company-link-icon" title="Go to company"><span class="material-icons">insert_link</span></a><a href="/search.html?company=${encodeURIComponent(company)}" class="company-link-icon" title="Search company"><span class="material-icons">search</span></a>`;
-            } else {
-                title.textContent = company;
-            }
-
-            const grid = document.createElement("div");
-            grid.className = "otp-grid";
-
-            for (const entry of sortSecretsForDisplay(unpinnedEntries)) {
-
-                const card = document.createElement("div");
-                const delay = Math.floor(Math.random() * 120) + 30;
-                card.className = "otp-card";
-                card.style.animationDelay = `${delay}ms`;
-                card.dataset.id = entry.id;
-                card.dataset.search = `${entry.name} ${entry.email} ${entry.secret} ${company}`.toLowerCase();
-
-                card.innerHTML = `
-                    <div class="otp-card-inner">
-                        <span class="pin-icon"><span class="material-icons">push_pin</span></span>
-                        ${CAN_EDIT_SECRETS ? `<div class="otp-warning-overlay" aria-hidden="true"><span class="material-icons">report_problem</span><span class="otp-warning-text">Can't generate OTP code #ERR-004</span></div>` : ``}
-                        <div class="otp-field"><span class="otp-field-label">Name:</span> <span class="otp-field-value">${entry.name}</span></div>
-                        ${HIDE_SECRET_FIELD ? `` : `
-                        <div class="otp-field"><span class="otp-field-label">Secret:</span>
-                            <span class="otp-field-value otp-secret" data-real="${entry.secret}" data-hidden="${maskSecret(entry.secret)}">${maskSecret(entry.secret)}</span>
-                        </div>`}
-                        <div class="otp-field"><span class="otp-field-label">OTP Code:</span> <span class="otp-field-value code-text otp-code">${entry.current_code || ""}</span></div>
-                        ${SHOW_EMAIL ? `
-                            <div class="otp-field">
-                                <span class="otp-field-label">E-Mail:</span>
-                                <span class="otp-field-value otp-email" title="${entry.email || ""}">${formatEmailDisplay(entry.email)}</span>
-                            </div>
-                        ` : ``}
-                        ${SHOW_TEXT_TIMER ? `
-                            <div class="otp-field"><span class="otp-field-label">Remaining Time:</span> <span class="otp-field-value otp-timer"></span></div>
-                        ` : ``}
-                        <div class="otp-actions">
-                            <button class="action-button copy" title="Copy"><span class="material-icons">content_copy</span></button>
-                            <button class="action-button edit${CAN_EDIT_SECRETS ? '' : ' disabled'}" title="${CAN_EDIT_SECRETS ? 'Edit' : 'No permission to edit'}" ${CAN_EDIT_SECRETS ? '' : 'disabled aria-disabled="true"'}><span class="material-icons">edit</span></button>
-                            <button class="action-button delete${CAN_DELETE_SECRETS ? '' : ' disabled'}" title="${CAN_DELETE_SECRETS ? 'Delete' : 'No permission to delete'}" ${CAN_DELETE_SECRETS ? '' : 'disabled aria-disabled="true"'}><span class="material-icons">delete</span></button>
-                            ${SHOW_TEXT_TIMER ? `` : `
-                                <svg class="countdown-circle" width="26" height="26" viewBox="0 0 36 36">
-                                    <circle class="circle-bg" cx="18" cy="18" r="16"></circle>
-                                    <circle class="circle-fg" cx="18" cy="18" r="16"></circle>
-                                </svg>
-                            `}
-                        </div>
-                    </div>
-                `;
-                setupCard(card);
-                grid.appendChild(card);
-            }
-
-            section.appendChild(title);
-            section.appendChild(grid);
-            container.appendChild(section);
-        }
-
-        if (!container.querySelector('.otp-card')) {
-            const empty = document.createElement('div');
-            empty.className = 'otp-empty-state';
-            empty.innerHTML = `
-                <span class="material-symbols-outlined otp-empty-icon">key_off</span>
-                <div class="otp-empty-text">No OTPs stored</div>
-            `;
-            container.appendChild(empty);
-        }
-
-        setupObserver();
-        startGlobalUpdater();
-        attachDeleteHandlers();
-        attachEditHandlers();
-        applyBlurIfNeeded();
-    }
-
-    let cardObserver = null;
-
-    function setupObserver() {
-        if (cardObserver) {
-            cardObserver.disconnect();
-        }
-
-        cardObserver = new IntersectionObserver(entries => {
-            for (const entry of entries) {
-                const card = entry.target;
-                if (entry.isIntersecting) {
-                    visibleCards.add(card);
-                    refreshCardCode(card);
-                } else {
-                    visibleCards.delete(card);
-                }
-            }
-        }, { root: null, threshold: 0.1 });
-
-        document.querySelectorAll('.otp-card').forEach(card => cardObserver.observe(card));
-    }
-
-    let globalUpdaterInterval = null;
-
-    function startGlobalUpdater() {
-        if (globalUpdaterInterval) return;
-
-        globalUpdaterInterval = setInterval(async () => {
-            const now = Math.floor(Date.now() / 1000);
-            const currentSlot = Math.floor(now / 30);
-            const remaining = 30 - (now % 30);
-
-            visibleCards.forEach(card => {
-                if (card._updateTimer) card._updateTimer(remaining, currentSlot);
-            });
-
-            if (currentSlot !== lastSlot) {
-                lastSlot = currentSlot;
-                await refreshVisibleCodes();
-            }
-        }, 1000);
-    }
-
-    function attachDeleteHandlers() {
-        document.querySelectorAll('.otp-card .action-button.delete').forEach(btn => {
-            btn.onclick = (e) => {
-                if (!CAN_DELETE_SECRETS || btn.disabled) return;
-                const card = e.currentTarget.closest(".otp-card");
-                const secretId = card.dataset.id;
-                document.getElementById("delete-secret-id").value = secretId;
-                openDeleteOtpModal();
-            };
-        });
-    }
-
-    function attachEditHandlers() {
-        document.querySelectorAll('.otp-card .action-button.edit').forEach(btn => {
-            btn.onclick = async (e) => {
-                if (!CAN_EDIT_SECRETS || btn.disabled) return;
-                const card = e.currentTarget.closest(".otp-card");
-                const secretId = card.dataset.id;
-
-                const res = await fetch('/api/secrets');
-                const list = await res.json();
-                const entry = list.find(s => String(s.id) === String(secretId)) || {};
-
-                document.getElementById("edit-secret-id").value = secretId;
-                document.getElementById("edit-name").value = entry.name || "";
-                document.getElementById("edit-email").value = entry.email || "";
-                document.getElementById("edit-secret").value = entry.secret || "";
-                document.getElementById("edit-refresh-time").value = entry.refresh_time || 30;
-                populateCompanySelect(document.getElementById("edit-company"), entry.company_id);
-                editOtpInitialState = {
-                    name: normalizeEditOtpValue(entry.name || ""),
-                    email: normalizeEditOtpValue(entry.email || "none").toLowerCase(),
-                    secret: normalizeEditOtpValue(entry.secret || ""),
-                    refresh_time: String(parseInt(entry.refresh_time, 10) || 30),
-                    company_id: String(parseInt(entry.company_id, 10) || 1)
-                };
-                updateEditOtpSubmitState();
-
-                openEditOtpModal();
-            };
-        });
-    }
-
-    const confirmDeleteOtpModal = document.getElementById("confirmDeleteOtpModal");
-    const editOtpModal = document.getElementById("editOtpModal");
-    const editOtpForm = document.getElementById("editOtpForm");
-    const saveEditOtpButton = document.getElementById("saveEditOtpButton");
-    let editOtpInitialState = null;
-
-    function normalizeEditOtpValue(value) {
-        return String(value ?? "").trim();
-    }
-
-    function getEditOtpFormState() {
-        return {
-            name: normalizeEditOtpValue(document.getElementById("edit-name").value),
-            email: normalizeEditOtpValue(document.getElementById("edit-email").value || "none").toLowerCase(),
-            secret: normalizeEditOtpValue(document.getElementById("edit-secret").value),
-            refresh_time: String(parseInt(document.getElementById("edit-refresh-time").value, 10) || 30),
-            company_id: String(parseInt(document.getElementById("edit-company").value, 10) || 1)
-        };
-    }
-
-    function updateEditOtpSubmitState() {
-        if (!saveEditOtpButton || !editOtpInitialState) return;
-
-        const currentState = getEditOtpFormState();
-        const hasChanged = Object.keys(editOtpInitialState).some((key) => currentState[key] !== editOtpInitialState[key]);
-        saveEditOtpButton.disabled = !hasChanged;
-    }
-
-    function openDeleteOtpModal() {
-        confirmDeleteOtpModal.classList.add("is-open");
-    }
-
-    function closeDeleteOtpModal() {
-        confirmDeleteOtpModal.classList.remove("is-open");
-    }
-
-    function openEditOtpModal() {
-        editOtpModal.classList.add("is-open");
-    }
-
-    function closeEditOtpModal() {
-        editOtpModal.classList.remove("is-open");
-    }
-
-    ["input", "change"].forEach((eventName) => {
-        editOtpForm.addEventListener(eventName, updateEditOtpSubmitState);
+(function () {
+  const A = window.App;
+  const PERMS = {
+    canEdit: {{ can_edit|tojson }},
+    canDelete: {{ can_delete|tojson }},
+  };
+  const SETTINGS = {{ user_settings|tojson }};
+  const LAYOUT = (A.getCookie("layout") === "cards") ? "cards" : "list";
+  const SHOW_SECRET = !SETTINGS.hide_secret_field;
+  const SHOW_EMAILS = !!SETTINGS.show_emails;
+  const HIDE_CODES = !!SETTINGS.hide_codes_by_default;
+  const SIMPLE_TIMER = !!SETTINGS.show_timer;
+  const ADMIN_FIRST = !!SETTINGS.show_including_admin_on_top;
+  const PERIOD = 30;
+
+  let secrets = [];
+  let pinned = new Set();
+  let cycleEndAt = Date.now() + PERIOD * 1000;
+  let remaining = PERIOD;
+  let refillStart = null;
+  const REFILL_MS = 900;
+  let revealed = new Set();
+  let shownCodes = new Set();
+  let selected = new Set();
+  let selectMode = false;
+  let query = "";
+  let companyFilter = "";
+  let deleteId = null;
+  let editEntry = null;
+  let fetching = false;
+  let sectionsKey = null;
+  let animateDigits = true;
+
+  const content = document.getElementById("home-content");
+  const scroller = document.getElementById("home-scroll");
+  const searchInput = document.getElementById("home-search");
+  const filterSelect = document.getElementById("company-filter");
+
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("q")) { query = params.get("q"); searchInput.value = query; }
+  if (params.get("company")) companyFilter = params.get("company");
+
+  function gridCols() {
+    const parts = ["1.7fr", "1fr"];
+    if (SHOW_EMAILS) parts.push("1.3fr");
+    if (SHOW_SECRET) parts.push("0.9fr");
+    parts.push("118px");
+    return parts.join(" ");
+  }
+
+  function matches(e) {
+    if (companyFilter && (e.company_name || "") !== companyFilter) return false;
+    if (!query.trim()) return true;
+    const q = query.trim().toLowerCase();
+    return ((e.name || "") + " " + (e.email || "") + " " + (e.company_name || "")).toLowerCase().includes(q);
+  }
+
+  function sortEntries(list) {
+    list.sort((a, b) => {
+      if (ADMIN_FIRST) {
+        const aa = (a.name || "").toLowerCase().includes("admin") ? 0 : 1;
+        const bb = (b.name || "").toLowerCase().includes("admin") ? 0 : 1;
+        if (aa !== bb) return aa - bb;
+      }
+      return (a.name || "").localeCompare(b.name || "");
     });
+    return list;
+  }
 
-    document.getElementById("deleteOtpForm").addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const form = e.currentTarget;
-        const formData = new FormData(form);
-        const res = await fetch(form.action, { method: "POST", body: formData });
-        if (res.ok) {
-            closeDeleteOtpModal();
-            loadOTPs();
-        } else {
-            alert('Failed to delete OTP.');
-        }
+  function codeVisible(e) { return !HIDE_CODES || shownCodes.has(e.id); }
+
+  function timerHTML() {
+    if (SIMPLE_TIMER) return '<span class="text-timer">' + Math.ceil(remaining) + "s</span>";
+    return A.ringSVG(22, 15, 3);
+  }
+
+  function codeCellHTML(e, card) {
+    if (!e.current_code) {
+      return '<div class="otp-error" title="Can\'t generate OTP code #ERR-004"><span class="ico">' + A.ICONS.warn + "</span> error</div>";
+    }
+    const digits = codeVisible(e) ? A.digitsHTML(e.current_code, animateDigits) : '<span class="digit" style="letter-spacing:2px">••••••</span>';
+    return '<div class="' + (card ? "card-code-row" : "otp-code-cell") + '">' +
+      '<span class="otp-code" data-code-of="' + e.id + '" data-code="' + (codeVisible(e) ? A.escapeHtml(e.current_code) : "") + '" title="' + (codeVisible(e) ? "Copy code" : "Click to reveal") + '"' +
+      (card ? ' style="font-size:17px"' : "") + ">" + digits + "</span>" + timerHTML() + "</div>";
+  }
+
+  function secretCellHTML(e, card) {
+    if (!SHOW_SECRET) return "";
+    const shown = revealed.has(e.id);
+    return '<div class="otp-secret" data-reveal="' + e.id + '" title="Click to reveal"' +
+      (card ? ' style="font-size:11.5px"' : "") + ">" +
+      (shown ? A.escapeHtml(e.secret) : "••••••••••••") + "</div>";
+  }
+
+  function actionsHTML(e) {
+    let h = '<button class="icon-btn" data-copy="' + e.id + '" title="Copy"' + (!e.current_code ? " disabled" : "") + '><span class="ico">' + A.ICONS.copy + "</span></button>";
+    if (PERMS.canEdit) h += '<button class="icon-btn" data-edit="' + e.id + '" title="Edit"><span class="ico">' + A.ICONS.edit + "</span></button>";
+    if (PERMS.canDelete) h += '<button class="icon-btn danger" data-delete="' + e.id + '" title="Delete"><span class="ico">' + A.ICONS.trash + "</span></button>";
+    return h;
+  }
+
+  function rowHTML(e, isPinnedGroup) {
+    const check = selectMode
+      ? '<div class="otp-row-check"><input type="checkbox" data-select="' + e.id + '"' + (selected.has(e.id) ? " checked" : "") + "></div>"
+      : "";
+    return '<div class="otp-row-wrap">' + check +
+      '<div class="otp-row" data-ctx="' + e.id + '" style="grid-template-columns:' + gridCols() + '">' +
+      '<div class="otp-name"><div class="nm">' + A.escapeHtml(e.name) + "</div>" +
+      (isPinnedGroup ? '<div class="co">' + A.escapeHtml(e.company_name || "") + "</div>" : "") + "</div>" +
+      codeCellHTML(e, false) +
+      (SHOW_EMAILS ? '<div class="otp-email" title="' + A.escapeHtml(e.email) + '">' + A.escapeHtml(!e.email || e.email === "none" ? "None" : e.email) + "</div>" : "") +
+      secretCellHTML(e, false) +
+      '<div class="otp-actions">' + actionsHTML(e) + "</div></div></div>";
+  }
+
+  function cardHTML(e, isPinnedGroup) {
+    const check = selectMode
+      ? '<input type="checkbox" class="card-check" data-select="' + e.id + '"' + (selected.has(e.id) ? " checked" : "") + ">"
+      : "";
+    return '<div class="otp-card" data-ctx="' + e.id + '">' + check +
+      '<div style="min-width:0"><div class="nm">' + A.escapeHtml(e.name) + "</div>" +
+      (isPinnedGroup ? '<div class="co">' + A.escapeHtml(e.company_name || "") + "</div>" : "") +
+      (SHOW_EMAILS ? '<div class="em" title="' + A.escapeHtml(e.email) + '">' + A.escapeHtml(!e.email || e.email === "none" ? "None" : e.email) + "</div>" : "") +
+      "</div>" + codeCellHTML(e, true) + secretCellHTML(e, true) +
+      '<div class="card-btns">' +
+      '<button class="card-copy-btn" data-copy="' + e.id + '"' + (!e.current_code ? " disabled" : "") + '><span style="width:12px;height:12px;display:flex">' + A.ICONS.copy + "</span> Copy code</button>" +
+      (PERMS.canEdit ? '<button class="icon-btn" data-edit="' + e.id + '" title="Edit"><span class="ico">' + A.ICONS.edit + "</span></button>" : "") +
+      (PERMS.canDelete ? '<button class="icon-btn danger" data-delete="' + e.id + '" title="Delete"><span class="ico">' + A.ICONS.trash + "</span></button>" : "") +
+      "</div></div>";
+  }
+
+  function sectionHTML(title, entries, isPinnedGroup) {
+    const ids = entries.map(e => e.id);
+    const allSel = ids.length && ids.every(id => selected.has(id));
+    const head =
+      '<div class="otp-section-head">' +
+      (selectMode ? '<input type="checkbox" data-select-group="' + A.escapeHtml(title) + '"' + (allSel ? " checked" : "") + ">" : "") +
+      (isPinnedGroup ? '<span class="sec-pin">' + A.ICONS.pinFilled + "</span>" : "") +
+      '<span class="sec-title">' + A.escapeHtml(isPinnedGroup ? "Pinned" : title) + "</span>" +
+      '<span class="sec-count">' + entries.length + "</span>" +
+      (!isPinnedGroup
+        ? '<button class="sec-tool" data-co-filter="' + A.escapeHtml(title) + '" title="Show only this company" type="button"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M10 14a5 5 0 007-7l-1.5-1.5a5 5 0 00-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M14 10a5 5 0 00-7 7l1.5 1.5a5 5 0 007-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>' +
+          '<button class="sec-tool" data-co-search="' + A.escapeHtml(title) + '" title="Search this company" type="button">' + A.ICONS.search + "</button>"
+        : "") +
+      "</div>";
+
+    let body;
+    if (LAYOUT === "cards") {
+      body = '<div class="otp-cards">' + entries.map(e => cardHTML(e, isPinnedGroup)).join("") + "</div>";
+    } else {
+      let cols = '<div class="otp-cols" style="grid-template-columns:' + gridCols() + '">' +
+        "<div>Name</div><div>Code</div>" +
+        (SHOW_EMAILS ? "<div>E-Mail</div>" : "") +
+        (SHOW_SECRET ? "<div>Secret</div>" : "") +
+        '<div style="text-align:right">Actions</div></div>';
+      body = '<div class="otp-panel">' + cols + entries.map(e => rowHTML(e, isPinnedGroup)).join("") + "</div>";
+    }
+    return '<section class="otp-section' + (animateDigits ? " enter" : "") + '" data-section="' + A.escapeHtml(title) + '">' + head + body + "</section>";
+  }
+
+  function computeSections(filtered) {
+    const pinnedEntries = sortEntries(filtered.filter(e => pinned.has(String(e.id))));
+    const rest = filtered.filter(e => !pinned.has(String(e.id)));
+    const byCompany = {};
+    rest.forEach(e => {
+      const c = e.company_name || "No company";
+      (byCompany[c] = byCompany[c] || []).push(e);
     });
+    const names = Object.keys(byCompany).sort();
+    return { pinnedEntries, byCompany, names };
+  }
 
-    document.getElementById("cancelDeleteOtp").onclick = () => {
-        closeDeleteOtpModal();
+  function sectionsKeyOf(pinnedEntries, names, byCompany) {
+    const idOf = e => e.id + (e.current_code ? "1" : "0");
+    return JSON.stringify({
+      layout: LAYOUT, selectMode,
+      pinned: pinnedEntries.map(idOf),
+      sections: names.map(n => [n, byCompany[n].map(idOf)]),
+    });
+  }
+
+  function render() {
+    const filtered = secrets.filter(matches);
+    const { pinnedEntries, byCompany, names } = computeSections(filtered);
+
+    let html = "";
+    if (pinnedEntries.length) html += sectionHTML("__pinned__", pinnedEntries, true);
+    names.forEach(n => { html += sectionHTML(n, sortEntries(byCompany[n]), false); });
+    if (!filtered.length) {
+      html += '<div class="empty-state"><span class="ico">' + A.ICONS.searchBig + '</span><div class="txt">No OTPs match your search</div></div>';
+    }
+    content.innerHTML = html;
+    sectionsKey = sectionsKeyOf(pinnedEntries, names, byCompany);
+    animateDigits = false;
+    updateTimers();
+    renderBulkBar();
+  }
+
+  /* only touches the digits that actually changed, instead of rebuilding the table */
+  function patchCodes() {
+    content.querySelectorAll("[data-code-of]").forEach(el => {
+      const entry = entryById(el.getAttribute("data-code-of"));
+      if (!entry || !codeVisible(entry) || el.dataset.code === entry.current_code) return;
+      el.innerHTML = A.digitsHTMLUpdate(entry.current_code);
+      el.dataset.code = entry.current_code;
+    });
+  }
+
+  function updateTimers() {
+    let ringRemaining = remaining;
+    if (refillStart !== null) {
+      const t = (Date.now() - refillStart) / REFILL_MS;
+      if (t >= 1) {
+        refillStart = null;
+      } else {
+        const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+        ringRemaining = eased * remaining;
+      }
+    }
+    content.querySelectorAll(".ring").forEach(svg => A.setRing(svg, ringRemaining, PERIOD));
+    const label = Math.ceil(remaining) + "s";
+    content.querySelectorAll(".text-timer").forEach(el => { if (el.textContent !== label) el.textContent = label; });
+  }
+
+  let companyFilterKey = null;
+  function fillCompanyFilter() {
+    const names = [...new Set(secrets.map(e => e.company_name).filter(Boolean))].sort();
+    const key = names.join("") + "|" + companyFilter;
+    if (key === companyFilterKey) return;
+    companyFilterKey = key;
+    filterSelect.innerHTML = '<option value="">All companies</option>' +
+      names.map(n => '<option value="' + A.escapeHtml(n) + '"' + (n === companyFilter ? " selected" : "") + ">" + A.escapeHtml(n) + "</option>").join("");
+  }
+
+  async function fetchData() {
+    if (fetching) return;
+    fetching = true;
+    try {
+      const [data, pins] = await Promise.all([
+        A.fetchJSON("/api/secrets"),
+        A.fetchJSON("/api/user-pinned"),
+      ]);
+      secrets = data || [];
+      pinned = new Set((pins || []).map(String));
+      const secLeft = secrets.length ? Math.max(0, Math.min(PERIOD, secrets[0].seconds_remaining)) : PERIOD;
+      const newCycleEndAt = Date.now() + secLeft * 1000;
+      if (newCycleEndAt - cycleEndAt > 1000) refillStart = Date.now();
+      cycleEndAt = newCycleEndAt;
+      remaining = secLeft;
+      fillCompanyFilter();
+      const filtered = secrets.filter(matches);
+      const { pinnedEntries, byCompany, names } = computeSections(filtered);
+      const newKey = sectionsKeyOf(pinnedEntries, names, byCompany);
+      if (sectionsKey !== null && newKey === sectionsKey) {
+        patchCodes();
+      } else {
+        render();
+      }
+      if (searchAC) searchAC.refresh();
+    } catch (err) {
+      const isAuthErr = err.message === "Authentication required";
+      content.innerHTML = '<div class="empty-state">' +
+        (isAuthErr ? '<span class="ico">' + A.ICONS.lockBig + "</span>" : "") +
+        '<div class="txt">' + A.escapeHtml(err.message) + "</div></div>";
+    } finally {
+      fetching = false;
+    }
+  }
+
+  function tick() {
+    remaining = Math.max(0, (cycleEndAt - Date.now()) / 1000);
+    if (remaining <= 0) fetchData();
+    updateTimers();
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  /* ---------- interactions ---------- */
+
+  searchInput.addEventListener("input", () => { query = searchInput.value; render(); });
+  filterSelect.addEventListener("change", () => { companyFilter = filterSelect.value; render(); });
+  const searchAC = A.attachAutocomplete(searchInput, () => {
+    const c = [];
+    secrets.forEach(e => {
+      if (e.name) c.push({ text: e.name, code: e.current_code });
+      if (e.email && e.email !== "none") c.push({ text: e.email, code: e.current_code });
+      if (e.company_name) c.push({ text: e.company_name, code: null });
+    });
+    return c;
+  }, document.getElementById("home-search-kbd"));
+
+  function entryById(id) { return secrets.find(e => String(e.id) === String(id)); }
+
+  content.addEventListener("click", e => {
+    const codeEl = e.target.closest("[data-code-of]");
+    if (codeEl) {
+      const entry = entryById(codeEl.getAttribute("data-code-of"));
+      if (!entry) return;
+      if (!codeVisible(entry)) { shownCodes.add(entry.id); render(); }
+      else A.copyText(entry.current_code, "Copied code: " + entry.current_code);
+      return;
+    }
+    const revealEl = e.target.closest("[data-reveal]");
+    if (revealEl) {
+      const id = +revealEl.getAttribute("data-reveal");
+      if (revealed.has(id)) revealed.delete(id); else revealed.add(id);
+      render(); return;
+    }
+    const copyBtn = e.target.closest("[data-copy]");
+    if (copyBtn) {
+      const entry = entryById(copyBtn.getAttribute("data-copy"));
+      if (entry && entry.current_code) A.copyText(entry.current_code, "Copied code: " + entry.current_code);
+      return;
+    }
+    const editBtn = e.target.closest("[data-edit]");
+    if (editBtn) { openEdit(entryById(editBtn.getAttribute("data-edit"))); return; }
+    const delBtn = e.target.closest("[data-delete]");
+    if (delBtn) { openDelete(+delBtn.getAttribute("data-delete")); return; }
+    const coFilter = e.target.closest("[data-co-filter]");
+    if (coFilter) {
+      companyFilter = coFilter.getAttribute("data-co-filter");
+      fillCompanyFilter(); render(); return;
+    }
+    const coSearch = e.target.closest("[data-co-search]");
+    if (coSearch) {
+      query = coSearch.getAttribute("data-co-search");
+      searchInput.value = query; searchInput.focus(); render(); return;
+    }
+  });
+
+  function syncGroupCheckbox(section) {
+    const groupCb = section.querySelector("[data-select-group]");
+    if (!groupCb) return;
+    const ids = [...section.querySelectorAll("[data-select]")].map(el => +el.getAttribute("data-select"));
+    groupCb.checked = ids.length > 0 && ids.every(id => selected.has(id));
+  }
+
+  /* selection is local UI state — toggle it in place instead of rebuilding the table */
+  content.addEventListener("change", e => {
+    const sel = e.target.closest("[data-select]");
+    if (sel) {
+      const id = +sel.getAttribute("data-select");
+      if (selected.has(id)) selected.delete(id); else selected.add(id);
+      const section = sel.closest("[data-section]");
+      if (section) syncGroupCheckbox(section);
+      renderBulkBar();
+      return;
+    }
+    const selGroup = e.target.closest("[data-select-group]");
+    if (selGroup) {
+      const title = selGroup.getAttribute("data-select-group");
+      const section = content.querySelector('[data-section="' + CSS.escape(title) + '"]');
+      const checkNow = selGroup.checked;
+      section.querySelectorAll("[data-select]").forEach(cb => {
+        cb.checked = checkNow;
+        const id = +cb.getAttribute("data-select");
+        if (checkNow) selected.add(id); else selected.delete(id);
+      });
+      renderBulkBar();
+      return;
+    }
+  });
+
+  /* ---------- context menu ---------- */
+
+  let ctxEls = null;
+  function closeCtx() {
+    if (ctxEls) { ctxEls.forEach(el => el.remove()); ctxEls = null; }
+  }
+  content.addEventListener("contextmenu", ev => {
+    const row = ev.target.closest("[data-ctx]");
+    if (!row) return;
+    ev.preventDefault();
+    closeCtx();
+    const entry = entryById(row.getAttribute("data-ctx"));
+    if (!entry) return;
+    const isPinned = pinned.has(String(entry.id));
+    const backdrop = document.createElement("div");
+    backdrop.className = "ctx-backdrop";
+    backdrop.addEventListener("click", closeCtx);
+    backdrop.addEventListener("contextmenu", e2 => { e2.preventDefault(); closeCtx(); });
+    const menu = document.createElement("div");
+    menu.className = "ctx-menu";
+    menu.innerHTML =
+      '<button class="ctx-item" data-act="copy"><span class="ico">' + A.ICONS.copy + "</span>Copy code</button>" +
+      (PERMS.canEdit ? '<button class="ctx-item" data-act="edit"><span class="ico">' + A.ICONS.edit + "</span>Edit</button>" : "") +
+      '<button class="ctx-item" data-act="pin"><span class="ico">' + (isPinned ? A.ICONS.pinFilled : A.ICONS.pin) + "</span>" + (isPinned ? "Unpin" : "Pin") + "</button>" +
+      '<button class="ctx-item" data-act="select"><span class="ico">' + A.ICONS.check + "</span>Select</button>" +
+      '<button class="ctx-item" data-act="export"><span class="ico">' + A.ICONS.exportIco + "</span>Export as PDF</button>" +
+      (PERMS.canDelete ? '<div class="ctx-sep"></div><button class="ctx-item danger" data-act="delete"><span class="ico">' + A.ICONS.trash + "</span>Delete</button>" : "");
+    const menuW = 180, menuH = 220;
+    let x = ev.clientX, y = ev.clientY;
+    if (x + menuW > window.innerWidth) x = window.innerWidth - menuW - 8;
+    if (y + menuH > window.innerHeight) y = window.innerHeight - menuH - 8;
+    menu.style.left = x + "px"; menu.style.top = y + "px";
+    menu.addEventListener("click", e2 => {
+      const btn = e2.target.closest("[data-act]");
+      if (!btn) return;
+      const act = btn.getAttribute("data-act");
+      closeCtx();
+      if (act === "copy") { if (entry.current_code) A.copyText(entry.current_code, "Copied code: " + entry.current_code); }
+      else if (act === "edit") openEdit(entry);
+      else if (act === "pin") togglePin(entry);
+      else if (act === "select") { selectMode = true; selected.add(entry.id); render(); }
+      else if (act === "export") window.location.href = "/api/export-search?secret_id=" + entry.id;
+      else if (act === "delete") openDelete(entry.id);
+    });
+    document.body.appendChild(backdrop);
+    document.body.appendChild(menu);
+    ctxEls = [backdrop, menu];
+  });
+
+  async function togglePin(entry) {
+    try {
+      const res = await A.fetchJSON("/toggle-pin", { method: "POST", body: { secret_id: entry.id } });
+      if (res.pinned) pinned.add(String(entry.id)); else pinned.delete(String(entry.id));
+      A.toast(res.pinned ? "Pinned " + entry.name : "Unpinned " + entry.name);
+      render();
+    } catch (err) { A.toast(err.message); }
+  }
+
+  /* ---------- bulk bar ---------- */
+
+  let bulkBar = null;
+  function renderBulkBar() {
+    if (bulkBar) { bulkBar.remove(); bulkBar = null; }
+    if (!selected.size) return;
+    bulkBar = document.createElement("div");
+    bulkBar.className = "bulk-bar";
+    bulkBar.innerHTML =
+      '<span class="bulk-info"><span class="bulk-count">' + selected.size + '</span><span class="bulk-label">selected</span></span>' +
+      '<div class="bulk-sep"></div>' +
+      '<button class="bulk-btn" data-bulk="export"><span class="ico">' + A.ICONS.exportIco + "</span>Export</button>" +
+      (PERMS.canDelete ? '<button class="bulk-btn danger" data-bulk="delete"><span class="ico">' + A.ICONS.trash + "</span>Delete</button>" : "") +
+      '<button class="bulk-btn ghost" data-bulk="cancel" title="Cancel"><span class="ico">' + A.ICONS.xmark + "</span></button>";
+    bulkBar.addEventListener("click", async e => {
+      const btn = e.target.closest("[data-bulk]");
+      if (!btn) return;
+      const act = btn.getAttribute("data-bulk");
+      if (act === "cancel") { selectMode = false; selected.clear(); render(); }
+      else if (act === "export") {
+        const qs = [...selected].map(id => "secret_id=" + id).join("&");
+        window.location.href = "/api/export-search?" + qs;
+      } else if (act === "delete") {
+        const n = selected.size;
+        for (const id of [...selected]) {
+          const fd = new FormData(); fd.append("secret_id", id);
+          try { await A.fetchJSON("/api/delete-secret", { method: "POST", body: fd }); } catch (err) { A.toast(err.message); }
+        }
+        selected.clear(); selectMode = false;
+        A.toast("Deleted " + n + " OTP" + (n === 1 ? "" : "s"));
+        fetchData();
+      }
+    });
+    document.body.appendChild(bulkBar);
+  }
+
+  /* ---------- edit / delete ---------- */
+
+  function openEdit(entry) {
+    if (!entry) return;
+    editEntry = entry;
+    document.getElementById("edit-name").value = entry.name || "";
+    document.getElementById("edit-email").value = entry.email || "";
+    document.getElementById("edit-secret").value = entry.secret || "";
+    const companies = {};
+    secrets.forEach(s => { if (s.company_id != null) companies[s.company_id] = s.company_name || ("Company " + s.company_id); });
+    const sel = document.getElementById("edit-company");
+    sel.innerHTML = Object.entries(companies)
+      .sort((a, b) => a[1].localeCompare(b[1]))
+      .map(([id, name]) => '<option value="' + id + '"' + (+id === entry.company_id ? " selected" : "") + ">" + A.escapeHtml(name) + "</option>").join("");
+    A.openOverlay("edit-overlay");
+  }
+
+  document.getElementById("edit-save").addEventListener("click", async () => {
+    if (!editEntry) return;
+    try {
+      await A.fetchJSON("/api/secrets/" + editEntry.id, {
+        method: "PUT",
+        body: {
+          name: document.getElementById("edit-name").value.trim(),
+          email: document.getElementById("edit-email").value.trim() || "none",
+          secret: document.getElementById("edit-secret").value.trim(),
+          otp_type: editEntry.otp_type || "totp",
+          refresh_time: editEntry.refresh_time || 30,
+          company_id: +document.getElementById("edit-company").value,
+        },
+      });
+      A.closeOverlay("edit-overlay");
+      A.toast("OTP updated");
+      fetchData();
+    } catch (err) { A.toast(err.message); }
+  });
+
+  function openDelete(id) { deleteId = id; A.openOverlay("delete-overlay"); }
+
+  document.getElementById("delete-confirm").addEventListener("click", async () => {
+    if (deleteId == null) return;
+    const fd = new FormData(); fd.append("secret_id", deleteId);
+    try {
+      await A.fetchJSON("/api/delete-secret", { method: "POST", body: fd });
+      A.closeOverlay("delete-overlay");
+      A.toast("OTP deleted");
+      selected.delete(deleteId);
+      deleteId = null;
+      fetchData();
+    } catch (err) { A.toast(err.message); }
+  });
+
+  /* ---------- back to top + blur on inactive ---------- */
+
+  const backBtn = document.getElementById("back-to-top");
+  scroller.addEventListener("scroll", () => {
+    backBtn.style.display = scroller.scrollTop > 320 ? "flex" : "none";
+  });
+  backBtn.addEventListener("click", () => scroller.scrollTo({ top: 0, behavior: "smooth" }));
+
+  if (SETTINGS.blur_on_inactive) {
+    let idleTimer = null;
+    const arm = () => {
+      document.documentElement.classList.remove("blur-active");
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => document.documentElement.classList.add("blur-active"), 60000);
     };
-    window.addEventListener("click", (e) => {
-        if (e.target.id === "confirmDeleteOtpModal") {
-            closeDeleteOtpModal();
-        }
-    });
+    ["mousemove", "mousedown", "keydown", "scroll", "touchstart"].forEach(ev =>
+      window.addEventListener(ev, arm, { passive: true }));
+    arm();
+  }
 
-    document.getElementById("closeEditOtpModal").onclick = () => {
-        closeEditOtpModal();
-    };
-    document.getElementById("cancelEditOtp").onclick = () => {
-        closeEditOtpModal();
-    };
-    window.addEventListener("click", (e) => {
-        if (e.target.id === "editOtpModal") {
-            closeEditOtpModal();
-        }
-    });
-
-    document.getElementById("editOtpForm").addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const editNameInput = document.getElementById("edit-name");
-        validateNameInput(editNameInput);
-        if (!editNameInput.checkValidity()) {
-            editNameInput.reportValidity();
-            return;
-        }
-        const secretId = document.getElementById("edit-secret-id").value;
-        const payload = {
-            name: document.getElementById("edit-name").value,
-            email: document.getElementById("edit-email").value || "none",
-            secret: document.getElementById("edit-secret").value,
-            refresh_time: parseInt(document.getElementById("edit-refresh-time").value) || 30,
-            otp_type: "totp",
-            company_id: parseInt(document.getElementById("edit-company").value) || 1
-        };
-        const res = await fetch(`/api/secrets/${secretId}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-        });
-        if (res.ok) {
-            editOtpInitialState = getEditOtpFormState();
-            updateEditOtpSubmitState();
-            closeEditOtpModal();
-            await loadOTPs();
-        } else {
-            const err = await res.json();
-            alert("Failed to update OTP: " + (err.error || "unknown error"));
-        }
-    });
-
-    loadOTPs();
-    setupProblemsToastHandlers();
-
-    const backToTop = document.getElementById('backToTop');
-    window.addEventListener('scroll', () => {
-        if (window.scrollY > 200) {
-            backToTop.classList.add('visible');
-        } else {
-            backToTop.classList.remove('visible');
-        }
-    });
-    backToTop.addEventListener('click', (e) => {
-        e.preventDefault();
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    });
-
-    if (blur_on_inactive) {
-        ['mousemove', 'keydown', 'scroll', 'touchstart'].forEach(evt => {
-            window.addEventListener(evt, markActivity, { passive: true });
-        });
-        setInterval(() => {
-            if (!blur_on_inactive) return;
-            const now = Date.now();
-            if (!blurApplied && now - lastActivity >= 60000) {
-                blurApplied = true;
-                applyBlurIfNeeded();
-                alert("You were inactive for a while, your OTPs are temporarily blurred.");
-            }
-        }, 1000);
-    }
-
-    document.addEventListener("DOMContentLoaded", () => {
-        document.body.classList.add("home");
-    });
-
-    function formatEmailDisplay(email, maxLength = 34) {
-        const value = String(email || "").trim();
-
-        if (!value || value.toLowerCase() === "none") return value;
-
-        if (!value.includes("@")) {
-            return value.length > maxLength
-                ? value.slice(0, Math.max(1, maxLength - 3)) + "..."
-                : value;
-        }
-
-        const atIndex = value.lastIndexOf("@");
-        const local = value.slice(0, atIndex);
-        const domain = value.slice(atIndex + 1);
-
-        if (!local || !domain) {
-            return value.length > maxLength
-                ? value.slice(0, Math.max(1, maxLength - 3)) + "..."
-                : value;
-        }
-
-        if (value.length <= maxLength) return value;
-
-        const domainPart = "@" + domain;
-        const minLocalChars = 6;
-        const ellipsis = "...";
-
-        const preferredLocalLength = maxLength - domainPart.length - ellipsis.length;
-
-        if (preferredLocalLength >= minLocalChars) {
-            return local.slice(0, preferredLocalLength) + ellipsis + domainPart;
-        }
-
-        const minDomainVisible = 12;
-        const availableDomain = Math.max(
-            minDomainVisible,
-            maxLength - minLocalChars - ellipsis.length - 1
-        );
-
-        if (availableDomain > 0 && domainPart.length > availableDomain) {
-            const shortenedDomain = domain.slice(0, Math.max(1, availableDomain - 4)) + "...";
-            return local.slice(0, minLocalChars) + ellipsis + "@" + shortenedDomain;
-        }
-
-        return local.slice(0, minLocalChars) + ellipsis + domainPart;
-    }
+  fetchData();
+})();
 </script>
 {% endblock %}

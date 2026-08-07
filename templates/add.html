@@ -1,366 +1,305 @@
 {% extends "base.html" %}
+{% set active_page = 'add' %}
 
 {% block title %}Add Entry | OTP-Tool{% endblock %}
 
-{% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='styles/add.css') }}">
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet" />
-{% endblock %}
-
-{% block content %}
-<form class="form-container" id="otpForm">
-    <label for="name" class="label-with-tooltip">
-        Name
-        <span class="material-symbols-outlined tooltip-icon" data-tooltip="At least 3 characters. Letters, numbers, spaces, - and _ allowed.">info</span>
-    </label>
-    <div class="input-wrapper">
-        <input type="text" id="name" name="name" placeholder="e.g. My OTP Account" required>
-        <span class="checkmark" id="check-name"><i class="fa-solid fa-check"></i></span>
+{% block page %}
+<div class="page">
+  <div class="page-topbar">
+    <div class="page-title">Add new OTP for<span id="add-company-label" style="color:var(--accent)"></span></div>
+    <div class="topbar-spacer"></div>
+    <div class="clear-reveal" id="add-clear-reveal">
+      <div>
+        <div class="topbar-sep"></div>
+        <button class="topbar-btn danger" id="add-clear" type="button">Clear</button>
+      </div>
     </div>
+    <div class="topbar-sep"></div>
+    <a href="/" class="topbar-btn"><span style="width:13px;height:13px;display:flex" data-icon="xmark"></span>Cancel</a>
+  </div>
 
-    <label for="email">Email (optional)</label>
-    <div class="input-wrapper">
-        <input type="email" id="email" name="email" placeholder="e.g. user@example.com">
-        <span class="checkmark" id="check-email"><i class="fa-solid fa-check"></i></span>
-    </div>
-
-    <label for="secret" class="label-with-tooltip">
-        Secret
-        <span class="material-symbols-outlined tooltip-icon" data-tooltip="Base32 A–Z, 2–7. Padding '=' allowed. 16-32 chars.">info</span>
-      </label>
-      <div class="input-wrapper">
-        <input type="text" id="secret" name="secret" placeholder="Paste your OTP secret here" required minlength="16" maxlength="32">
-        <span class="checkmark" id="check-secret"><i class="fa-solid fa-check"></i></span>
+  <div class="form-page-wrap">
+    <div class="form-col">
+      <div>
+        <div class="field-head">
+          <label class="field-label">Name</label>
+          <span class="info-tip">
+            <span style="width:15px;height:15px;display:flex" data-icon="info"></span>
+            <span class="tip-pop">At least 3 characters. Letters, numbers, spaces, - and _ allowed.</span>
+          </span>
+        </div>
+        <div class="input-wrap">
+          <input class="text-input padded" id="add-name" placeholder="e.g. My OTP Account" autocomplete="off">
+          <span class="input-check" id="check-name" style="display:none"></span>
+        </div>
       </div>
 
-    <label for="otp_type">OTP Type</label>
-    <select id="otp_type" name="otp_type">
-        <option value="totp">TOTP</option>
-    </select>
+      <div>
+        <label class="field-label">Email <span style="opacity:0.6;font-style:italic;font-weight:500">(optional)</span></label>
+        <div class="input-wrap">
+          <input class="text-input padded" id="add-email" placeholder="e.g. user@example.com" autocomplete="off">
+          <span class="input-check" id="check-email" style="display:none"></span>
+        </div>
+      </div>
 
-    <label for="refresh_time" class="field-label-with-note">
-        <span>Refresh Time (sec)</span>
-        <span class="field-note">Read only</span>
-    </label>
-    <input type="number" id="refresh_time" name="refresh_time" value="30" readonly tabindex="-1" class="readonly-input">
-
-    <label for="company_id">Company</label>
-    <select id="company_id" name="company_id">
-        <option value="0" selected>Select Company</option>
-        {% for company in companies %}
-            <option value="{{ company[0] }}">{{ company[1] }}</option>
-        {% endfor %}
-    </select>
-
-    <div class="button-row">
-        <button type="submit" id="submitBtn">Add</button>
-        <a href="#" class="secondary-button" id="addViewBtn">Add & Preview</a>
-    </div>
-</form>
-
-<div id="otpCardContainer" class="otp-card-container" style="display: none;"></div>
-
-<script>
-const form = document.getElementById('otpForm');
-const nameInput = document.getElementById('name');
-const emailInput = document.getElementById('email');
-const secretInput = document.getElementById('secret');
-const checkName = document.getElementById('check-name');
-const checkEmail = document.getElementById('check-email');
-const checkSecret = document.getElementById('check-secret');
-const submitBtn = document.getElementById('submitBtn');
-const addViewBtn = document.getElementById('addViewBtn');
-const cardContainer = document.getElementById('otpCardContainer');
-
-let mode = "redirect";
-
-submitBtn.addEventListener("click", () => {
-    mode = "redirect";
-});
-
-addViewBtn.addEventListener("click", (e) => {
-  if (addViewBtn.classList.contains('disabled')) return;
-  e.preventDefault();
-  mode = "view";
-  form.requestSubmit();
-});
-
-function validateName(name) {
-    return name.length >= 3 && /^[A-Za-z0-9 _\-]+$/.test(name);
-}
-
-function validateEmail(email) {
-    if (email.trim() === "") return true;
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
-function validateSecret(secret) {
-  const cleaned = secret.replace(/\s+/g, '').toUpperCase();
-  if (!/^[A-Z2-7=]*$/.test(cleaned)) return false;
-  const noPad = cleaned.replace(/=+$/, '');
-  return noPad.length >= 16 && noPad.length <= 32;
-}
-
-function updateValidation() {
-    const nameValue = nameInput.value.trim();
-    const emailValue = emailInput.value.trim();
-    const secretValue = secretInput.value.trim();
-
-    const nameValid = validateName(nameValue);
-    const emailValid = validateEmail(emailValue);
-    const secretValid = validateSecret(secretValue);
-
-    if (nameValue !== "") {
-        checkName.classList.add("visible");
-        checkName.innerHTML = nameValid
-            ? '<i class="fa-solid fa-check"></i>'
-            : '<i class="fa-solid fa-xmark"></i>';
-        checkName.classList.remove("valid", "invalid");
-        checkName.classList.add(nameValid ? "valid" : "invalid");
-    } else {
-        checkName.classList.remove("visible", "valid", "invalid");
-    }
-
-    if (emailValue !== "") {
-        checkEmail.classList.add("visible");
-        checkEmail.innerHTML = emailValid
-            ? '<i class="fa-solid fa-check"></i>'
-            : '<i class="fa-solid fa-xmark"></i>';
-        checkEmail.classList.remove("valid", "invalid");
-        checkEmail.classList.add(emailValid ? "valid" : "invalid");
-    } else {
-        checkEmail.classList.remove("visible", "valid", "invalid");
-    }
-
-    if (secretValue !== "") {
-        checkSecret.classList.add("visible");
-        checkSecret.innerHTML = secretValid
-            ? '<i class="fa-solid fa-check"></i>'
-            : '<i class="fa-solid fa-xmark"></i>';
-        checkSecret.classList.remove("valid", "invalid");
-        checkSecret.classList.add(secretValid ? "valid" : "invalid");
-    } else {
-        checkSecret.classList.remove("visible", "valid", "invalid");
-    }
-
-    const allValid = nameValid && secretValid && emailValid;
-    submitBtn.disabled = !allValid;
-    addViewBtn.classList.toggle('disabled', !allValid);
-}
-
-nameInput.addEventListener('input', updateValidation);
-emailInput.addEventListener('input', updateValidation);
-secretInput.addEventListener('input', () => {
-  const p = secretInput.selectionStart;
-  secretInput.value = secretInput.value.toUpperCase();
-  secretInput.setSelectionRange(p, p);
-  updateValidation();
-});
-updateValidation();
-
-form.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const formData = new FormData(form);
-  const data = Object.fromEntries(formData.entries());
-
-  if (!data.email || data.email.trim() === "") data.email = "none";
-  data.refresh_time = parseInt(data.refresh_time);
-  data.company_id = parseInt(data.company_id);
-  data.secret = data.secret.replace(/\s+/g, '').toUpperCase().replace(/=+$/, '');
-
-  let res;
-  try {
-    res = await fetch("/api/secrets", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data)
-    });
-  } catch {
-    alert("Network error while adding the entry.");
-    return;
-  }
-
-  if (res.status === 400) {
-    alert("Invalid secret. Please enter a valid Base32 secret (A–Z, 2–7) with sufficient length.");
-    if (cardContainer.style.display === "block") {
-      cardContainer.style.display = "none";
-      cardContainer.innerHTML = "";
-      form.style.display = "";
-    }
-    window.location.href = "/add";
-    return;
-  }
-
-  if (!res.ok) {
-    alert("An error occurred while adding the entry.");
-    return;
-  }
-
-  if (mode === "redirect") {
-    window.location.href = "/";
-  } else {
-    form.style.display = "none";
-    const response = await fetch("/api/secrets");
-    const secrets = await response.json();
-    const latest = secrets[secrets.length - 1];
-    showLiveCard(latest.id, latest);
-  }
-});
-
-function safeCode(c) {
-	return (typeof c === "string" && c.length) ? c : "------"; 
-}
-
-function safeSeconds(s) {
-	return Number.isFinite(s) ? s : 30;
-}
-
-async function showLiveCard(secretId) {
-	let secondsLeft = 0;
-	let lastTimestamp = performance.now();
-
-	async function fetchCode() {
-		let data;
-		try {
-			const res = await fetch(`/api/secrets/${secretId}`);
-			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			data = await res.json();
-		} catch (err) {
-			alert("Failed to refresh/update the OTP code. Please check your connection or try again.");
-			return; 
-		}
-
-		const codeEl = document.getElementById("code");
-		const newCode = safeCode(data.current_code);
-
-		if (codeEl) {
-			const oldCode = codeEl.dataset.code || "";
-			if (oldCode !== newCode) {
-				codeEl.dataset.code = newCode;
-				codeEl.innerHTML = newCode.split("")
-					.map((d, i) => `<span class="digit" style="animation-delay:${i * 40}ms">${d}</span>`)
-					.join("");
-			}
-		} else {
-			updateCard(data);
-		}
-
-		secondsLeft = safeSeconds(data.seconds_remaining);
-		lastTimestamp = performance.now();
-		return secondsLeft;
-	}
-
-    function updateCard(data) {
-        const el = document.createElement("div");
-        el.className = "otp-card loading";
-        el.innerHTML = `
-            <div class="otp-field">
-                <label>Name</label>
-                <div class="otp-value">${data.name}</div>
-            </div>
-            <div class="otp-field">
-                <label>Email</label>
-                <div class="otp-value">${data.email}</div>
-            </div>
-            <div class="otp-field">
-                <label>Company</label>
-                <div class="otp-value">${data.company_name}</div>
-            </div>
-            <div class="otp-field code-field">
-                <label>Code</label>
-                <div class="otp-value code-with-timer">
-                    <span id="code" class="code-text" style="cursor: pointer;">
-                        ${[...data.current_code].map((d, i) => `<span class="digit" style="animation-delay: ${i * 40}ms">${d}</span>`).join('')}
-                    </span>
-                    <svg class="countdown-circle" width="24" height="24" viewBox="0 0 36 36">
-                        <circle class="circle-bg" cx="18" cy="18" r="16" />
-                        <circle class="circle-fg" cx="18" cy="18" r="16" stroke-dasharray="100" stroke-dashoffset="0" />
-                    </svg>
+      <div>
+        <div class="field-head">
+          <label class="field-label">Secret</label>
+          <span class="info-tip">
+            <span style="width:15px;height:15px;display:flex" data-icon="info"></span>
+            <span class="tip-pop">Base32 A&ndash;Z, 2&ndash;7. Padding '=' allowed. 16-32 chars.</span>
+          </span>
+        </div>
+        <div class="input-wrap">
+          <input class="text-input mono padded" id="add-secret" placeholder="Paste your OTP secret here" autocomplete="off" spellcheck="false">
+          <span class="input-check" id="check-secret" style="display:none"></span>
+        </div>
+        <div class="preview-wrap" id="preview-wrap">
+          <div>
+            <div class="preview-inner">
+              <span class="preview-code" id="preview-code"></span>
+              <div class="preview-right">
+                <div class="preview-ring-wrap">
+                  <svg class="ring" width="22" height="22" viewBox="0 0 36 36">
+                    <circle class="ring-bg" cx="18" cy="18" r="15" fill="none" stroke-width="3"></circle>
+                    <circle class="ring-fg" cx="18" cy="18" r="15" fill="none" stroke-width="3" stroke-linecap="round" stroke-dasharray="94.25" stroke-dashoffset="0"></circle>
+                  </svg>
+                  <span class="ring-txt" id="preview-remaining">30</span>
                 </div>
+                <button class="preview-copy" id="preview-copy" title="Copy code" type="button">
+                  <span style="width:13px;height:13px;display:flex" data-icon="copy"></span>
+                </button>
+              </div>
             </div>
-        `;
+          </div>
+        </div>
 
-        const code = data.current_code;
-        const codeEl = el.querySelector(".code-text");
+        <div class="secret-bar-wrap" id="secret-bar-wrap">
+          <div>
+            <div class="secret-bar-inner">
+              <div class="secret-bar-chars" id="secret-bar-chars"></div>
+              <div class="secret-bar-status" id="secret-bar-status"></div>
+            </div>
+          </div>
+        </div>
+      </div>
 
-        function doCopy(t) {
-            if (window.isSecureContext && navigator.clipboard && navigator.clipboard.writeText) {
-                return navigator.clipboard.writeText(t);
-            }
-            return new Promise((resolve, reject) => {
-                const ta = document.createElement('textarea');
-                ta.value = t;
-                ta.setAttribute('readonly', '');
-                ta.style.position = 'fixed';
-                ta.style.opacity = '0';
-                document.body.appendChild(ta);
-                ta.select();
-                try {
-                    document.execCommand('copy') ? resolve() : reject();
-                } catch (e) {
-                    reject(e);
-                }
-                document.body.removeChild(ta);
-            });
-        }
+      <div>
+        <label class="field-label">Company</label>
+        <select class="text-input" id="add-company">
+          <option value="">Select Company</option>
+          {% for company in companies %}
+          <option value="{{ company[0] }}">{{ company[1] }}</option>
+          {% endfor %}
+        </select>
+      </div>
 
-        codeEl.addEventListener("click", () => {
-            doCopy(code).then(() => { alert(`Copied OTP: ${code}`); }).catch(() => { window.prompt('Copy OTP:', code); });
-        });
+      <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:8px">
+        <button class="btn-accent lg" id="add-submit" type="button" disabled>Add</button>
+        <button class="btn-outline lg" id="add-submit-another" type="button" disabled>Add &amp; Add Another</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
 
-        document.removeEventListener("copy", window._otpCopyHandler);
-        window._otpCopyHandler = (e) => {
-            const selection = window.getSelection().toString();
-            if (!selection) {
-                e.preventDefault();
-                doCopy(code).then(() => { alert(`Copied OTP: ${code}`); }).catch(() => { window.prompt('Copy OTP:', code); });
-            }
-        };
-        document.addEventListener("copy", window._otpCopyHandler);
+{% block scripts %}
+<script>
+(function () {
+  const A = window.App;
+  const nameEl = document.getElementById("add-name");
+  const emailEl = document.getElementById("add-email");
+  const secretEl = document.getElementById("add-secret");
+  const companyEl = document.getElementById("add-company");
+  const submitBtn = document.getElementById("add-submit");
+  const submitAnotherBtn = document.getElementById("add-submit-another");
+  const previewWrap = document.getElementById("preview-wrap");
+  const previewCode = document.getElementById("preview-code");
+  const previewRemaining = document.getElementById("preview-remaining");
+  const previewRing = previewWrap.querySelector(".ring");
 
-        cardContainer.innerHTML = "";
-        const buttons = document.createElement("div");
-        buttons.className = "button-row";
-        buttons.style.marginTop = "1.5rem";
-        buttons.innerHTML = `
-            <a href="/" class="secondary-button">Home</a>
-            <a href="/add" class="secondary-button">Add Another</a>
-        `;
+  function validName(v) { return v.length >= 3 && /^[A-Za-z0-9 _-]+$/.test(v); }
+  function validEmail(v) { if (v.trim() === "") return true; return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
+  function validSecret(v) {
+    const cleaned = v.replace(/\s+/g, "").toUpperCase();
+    if (!/^[A-Z2-7=]*$/.test(cleaned)) return false;
+    const noPad = cleaned.replace(/=+$/, "");
+    return noPad.length >= 16 && noPad.length <= 128;
+  }
 
-        el.appendChild(buttons);
-        cardContainer.innerHTML = "";
-        cardContainer.appendChild(el);
-        cardContainer.style.display = "block";
-
-        setTimeout(() => el.classList.remove("loading"), 300);
+  const secretBarWrap = document.getElementById("secret-bar-wrap");
+  const secretBarChars = document.getElementById("secret-bar-chars");
+  const secretBarStatus = document.getElementById("secret-bar-status");
+  function updateSecretBar() {
+    const raw = secretEl.value;
+    const cleaned = raw.replace(/\s+/g, "").toUpperCase().replace(/=+$/, "");
+    const open = raw.trim() !== "" && !validSecret(raw);
+    secretBarWrap.classList.toggle("open", open);
+    if (!open) return;
+    const total = Math.max(16, cleaned.length);
+    const overLen = cleaned.length > 128;
+    let barHtml = "";
+    for (let i = 0; i < total; i++) {
+      if (i >= cleaned.length) { barHtml += '<span style="color:var(--accent)">░</span>'; continue; }
+      const bad = overLen || !/[A-Z2-7]/.test(cleaned[i]);
+      barHtml += '<span style="color:' + (bad ? "#dc2626" : "var(--accent)") + '">█</span>';
     }
-    await fetchCode();
-    requestAnimationFrame(animate);
+    secretBarChars.innerHTML = barHtml;
+    const remaining = Math.max(0, 16 - cleaned.length);
+    const badChars = [...new Set(cleaned.split("").filter(ch => !/[A-Z2-7]/.test(ch)))];
+    const parts = [];
+    if (remaining > 0) parts.push(remaining + " more");
+    if (overLen) parts.push("too long");
+    if (badChars.length) parts.push("invalid char" + (badChars.length > 1 ? "s" : "") + ": " + badChars.join(" "));
+    secretBarStatus.textContent = parts.join(" · ") || "invalid";
+  }
 
-    const now = Date.now();
-    const msUntilNext30s = 30000 - (now % 30000);
+  function setCheck(id, value, valid) {
+    const el = document.getElementById(id);
+    if (value === "") { el.style.display = "none"; return; }
+    el.style.display = "flex";
+    el.className = "input-check " + (valid ? "ok" : "bad");
+    el.innerHTML = valid ? A.ICONS.check : A.ICONS.xmark;
+  }
 
-    setTimeout(() => {
-        fetchCode(); 
-        setInterval(fetchCode, 30000); 
-    }, msUntilNext30s);
-
-    function animate() {
-        const now = performance.now(); 
-        const elapsed = (now - lastTimestamp) / 1000; 
-        const remaining = Math.max(secondsLeft - elapsed, 0);
-        const percent = (remaining / 30) * 100; 
-        const circle = document.querySelector(".circle-fg");
-
-        if (circle) {
-            circle.style.strokeDashoffset = 100 - percent;
-        }
-
-        requestAnimationFrame(animate);
+  /* ---- client-side TOTP for the live preview ---- */
+  function base32ToBytes(s) {
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    const clean = s.replace(/\s+/g, "").toUpperCase().replace(/=+$/, "");
+    let bits = 0, value = 0;
+    const out = [];
+    for (const ch of clean) {
+      const idx = alphabet.indexOf(ch);
+      if (idx === -1) return null;
+      value = (value << 5) | idx;
+      bits += 5;
+      if (bits >= 8) { out.push((value >>> (bits - 8)) & 0xff); bits -= 8; }
     }
-    requestAnimationFrame(animate);
+    return new Uint8Array(out);
+  }
+  async function totp(secret) {
+    if (!window.crypto || !crypto.subtle) return null;
+    const keyBytes = base32ToBytes(secret);
+    if (!keyBytes || !keyBytes.length) return null;
+    const counter = Math.floor(Date.now() / 1000 / 30);
+    const msg = new Uint8Array(8);
+    let c = counter;
+    for (let i = 7; i >= 0; i--) { msg[i] = c & 0xff; c = Math.floor(c / 256); }
+    try {
+      const key = await crypto.subtle.importKey("raw", keyBytes, { name: "HMAC", hash: "SHA-1" }, false, ["sign"]);
+      const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, msg));
+      const off = sig[sig.length - 1] & 0x0f;
+      const bin = ((sig[off] & 0x7f) << 24) | (sig[off + 1] << 16) | (sig[off + 2] << 8) | sig[off + 3];
+      return String(bin % 1000000).padStart(6, "0");
+    } catch (e) { return null; }
+  }
 
-    setInterval(fetchCode, 30000);
-}
+  let currentPreview = null;
+  async function updatePreview(force) {
+    const v = secretEl.value.trim();
+    if (!validSecret(v) || v === "") {
+      previewWrap.classList.remove("open");
+      currentPreview = null;
+      return;
+    }
+    const code = await totp(v);
+    if (!code) { previewWrap.classList.remove("open"); currentPreview = null; return; }
+    if (code !== currentPreview || force) {
+      currentPreview = code;
+      previewCode.innerHTML = A.digitsHTML(code);
+    }
+    previewWrap.classList.add("open");
+  }
+
+  let lastWholeRemaining = null;
+  let prevRemaining = 30;
+  let refillStart = null;
+  const REFILL_MS = 900;
+  function previewTick() {
+    const remaining = 30 - (Date.now() / 1000) % 30;
+    if (remaining > prevRemaining + 0.5) refillStart = Date.now();
+    prevRemaining = remaining;
+    let ringRemaining = remaining;
+    if (refillStart !== null) {
+      const t = (Date.now() - refillStart) / REFILL_MS;
+      if (t >= 1) refillStart = null;
+      else {
+        const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+        ringRemaining = eased * remaining;
+      }
+    }
+    A.setRing(previewRing, ringRemaining, 30);
+    const whole = Math.ceil(remaining) || 30;
+    if (whole !== lastWholeRemaining) {
+      lastWholeRemaining = whole;
+      previewRemaining.textContent = whole;
+      if (currentPreview !== null) updatePreview(false);
+    }
+    requestAnimationFrame(previewTick);
+  }
+  requestAnimationFrame(previewTick);
+
+  document.getElementById("preview-copy").addEventListener("click", () => {
+    if (currentPreview) A.copyText(currentPreview, "Copied code: " + currentPreview);
+  });
+
+  function refresh() {
+    const n = nameEl.value.trim(), e = emailEl.value.trim(), s = secretEl.value.trim();
+    setCheck("check-name", n, validName(n));
+    setCheck("check-email", e, validEmail(e));
+    setCheck("check-secret", s, validSecret(s));
+    const ok = validName(n) && validEmail(e) && validSecret(s) && companyEl.value !== "";
+    submitBtn.disabled = !ok;
+    submitAnotherBtn.disabled = !ok;
+    document.getElementById("add-company-label").textContent =
+      companyEl.value !== "" ? '"' + companyEl.options[companyEl.selectedIndex].text + '"' : "";
+    const hasContent = n !== "" || e !== "" || s !== "" || companyEl.value !== "";
+    document.getElementById("add-clear-reveal").classList.toggle("open", hasContent);
+  }
+
+  document.getElementById("add-clear").addEventListener("click", () => {
+    nameEl.value = ""; emailEl.value = ""; secretEl.value = ""; companyEl.value = "";
+    currentPreview = null;
+    previewWrap.classList.remove("open");
+    updateSecretBar();
+    refresh();
+    nameEl.focus();
+  });
+
+  nameEl.addEventListener("input", refresh);
+  emailEl.addEventListener("input", refresh);
+  companyEl.addEventListener("change", refresh);
+  secretEl.addEventListener("input", () => { refresh(); updatePreview(true); updateSecretBar(); });
+
+  async function submit(addAnother) {
+    try {
+      await A.fetchJSON("/api/secrets", {
+        method: "POST",
+        body: {
+          name: nameEl.value.trim(),
+          email: emailEl.value.trim() || "none",
+          secret: secretEl.value.trim(),
+          otp_type: "totp",
+          refresh_time: 30,
+          company_id: +companyEl.value,
+        },
+      });
+      if (addAnother) {
+        A.toast("OTP created — add another");
+        nameEl.value = ""; emailEl.value = ""; secretEl.value = "";
+        currentPreview = null; previewWrap.classList.remove("open");
+        updateSecretBar();
+        refresh();
+        nameEl.focus();
+      } else {
+        window.location.href = "/";
+      }
+    } catch (err) { A.toast(err.message); }
+  }
+
+  submitBtn.addEventListener("click", () => submit(false));
+  submitAnotherBtn.addEventListener("click", () => submit(true));
+  refresh();
+})();
 </script>
 {% endblock %}

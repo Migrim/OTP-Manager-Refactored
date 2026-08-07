@@ -1,444 +1,319 @@
 {% extends "base.html" %}
+{% set active_page = 'users' %}
 
 {% block title %}Users | OTP-Tool{% endblock %}
 
-{% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='styles/users.css') }}">
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet">
+{% block page %}
+<div class="page">
+  <div class="page-topbar">
+    <div class="topbar-search">
+      <span class="ico" data-icon="search"></span>
+      <input type="text" id="users-search" placeholder="Search users…" autocomplete="off">
+    </div>
+    <div class="topbar-sep"></div>
+    <button class="topbar-btn accent" id="open-add-user" type="button">
+      <span style="width:14px;height:14px;display:flex" data-icon="plus"></span>Add User
+    </button>
+  </div>
+
+  <div class="page-scroll">
+    <div style="max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:10px">
+      <div class="table-head" style="grid-template-columns:1.6fr 1fr 128px">
+        <div>Name</div><div>Role</div><div></div>
+      </div>
+      <div class="table-panel" id="users-table"></div>
+      <div class="empty-state" id="users-empty" style="display:none">
+        <span class="ico" data-icon="users"></span>
+        <div class="txt">No dashboard users yet</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add / edit user drawer -->
+<div class="overlay drawer-side" id="user-overlay">
+  <div class="drawer">
+    <div class="drawer-head">
+      <div>
+        <div class="drawer-title" id="user-drawer-title">Add dashboard user</div>
+        <div class="drawer-sub" id="user-drawer-sub" style="display:none"></div>
+      </div>
+      <button class="drawer-x" data-close-overlay type="button">&#10005;</button>
+    </div>
+
+    <label class="field-label-sm" style="margin-top:16px">Name</label>
+    <input class="text-input" id="user-name" placeholder="e.g. Alex Bennett" autocomplete="off">
+
+    <div id="user-password-row">
+      <label class="field-label-sm" style="margin-top:14px">Password</label>
+      <input class="text-input" type="password" id="user-password" placeholder="Set a password" autocomplete="new-password">
+    </div>
+
+    <div id="perm-sections"></div>
+
+    <div class="drawer-actions">
+      <button class="btn-outline lg" data-close-overlay type="button">Cancel</button>
+      <button class="btn-accent lg" id="user-submit" type="button">Add user</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reset password drawer -->
+<div class="overlay drawer-side" id="resetpw-overlay">
+  <div class="drawer">
+    <div class="drawer-head">
+      <div>
+        <div class="drawer-title">Change Password</div>
+        <div class="drawer-sub" id="resetpw-sub"></div>
+      </div>
+      <button class="drawer-x" data-close-overlay type="button">&#10005;</button>
+    </div>
+    <label class="field-label-sm" style="margin-top:16px">New password</label>
+    <input class="text-input" type="password" id="resetpw-password" placeholder="Enter new password" autocomplete="new-password">
+    <label class="field-label-sm" style="margin-top:14px">Confirm password</label>
+    <input class="text-input" type="password" id="resetpw-confirm" placeholder="Re-enter new password" autocomplete="new-password">
+    <div class="drawer-actions">
+      <button class="btn-outline lg" data-close-overlay type="button">Cancel</button>
+      <button class="btn-accent lg" id="resetpw-submit" type="button" disabled>Save Password</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete user modal -->
+<div class="overlay center" id="delete-user-overlay">
+  <div class="modal">
+    <div class="modal-title lg">Delete this user?</div>
+    <div class="modal-sub" style="margin-bottom:18px">This removes <span id="delete-user-name"></span>'s access permanently. This can't be undone.</div>
+    <div style="margin-bottom:22px">
+      <label class="field-label-sm" style="margin-bottom:6px">Type "confirm" to proceed</label>
+      <input class="text-input" id="delete-user-confirm-text" placeholder="confirm" autocomplete="off">
+    </div>
+    <div class="modal-actions" style="margin-top:0">
+      <button class="btn-outline" data-close-overlay type="button">Cancel</button>
+      <button class="btn-danger" id="delete-user-confirm" type="button" disabled>Delete</button>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
-{% block content %}
-
-<div class="user-grid">
-    {% if users|length == 0 %}
-        <div class="users-empty-state">
-            <span class="material-symbols-outlined users-empty-icon">group_off</span>
-            <div class="users-empty-text">No users stored</div>
-        </div>
-    {% else %}
-        {% for id, username, user_is_admin, can_delete, can_edit, can_add_companies, can_delete_companies, can_add_secrets, can_add_users in users %}
-        {% set delay = range(30, 150)|random %}
-        {% if user_is_admin %}
-        {% set access_label = "Full system access" %}
-        {% else %}
-        {% set access_parts = [] %}
-        {% if can_add_users %}
-        {% set _ = access_parts.append("user management") %}
-        {% endif %}
-        {% if can_add_secrets and can_edit and can_delete %}
-        {% set _ = access_parts.append("full secret management") %}
-        {% elif can_add_secrets and can_edit %}
-        {% set _ = access_parts.append("add and edit secrets") %}
-        {% elif can_add_secrets and can_delete %}
-        {% set _ = access_parts.append("add and delete secrets") %}
-        {% elif can_edit and can_delete %}
-        {% set _ = access_parts.append("edit and delete secrets") %}
-        {% elif can_add_secrets %}
-        {% set _ = access_parts.append("add secrets") %}
-        {% elif can_edit %}
-        {% set _ = access_parts.append("edit secrets") %}
-        {% elif can_delete %}
-        {% set _ = access_parts.append("delete secrets") %}
-        {% endif %}
-        {% if can_add_companies and can_delete_companies %}
-        {% set _ = access_parts.append("company management") %}
-        {% elif can_add_companies %}
-        {% set _ = access_parts.append("add companies") %}
-        {% elif can_delete_companies %}
-        {% set _ = access_parts.append("delete companies") %}
-        {% endif %}
-        {% if access_parts|length > 0 %}
-        {% if access_parts|length == 1 %}
-        {% set access_label = access_parts[0] %}
-        {% elif access_parts|length == 2 %}
-        {% set access_label = access_parts[0] ~ " and " ~ access_parts[1] %}
-        {% else %}
-        {% set access_label = access_parts[:-1]|join(", ") ~ ", and " ~ access_parts[-1] %}
-        {% endif %}
-        {% else %}
-        {% set access_label = "View-only access" %}
-        {% endif %}
-        {% endif %}
-        <div
-            class="user-card"
-            data-user-id="{{ id }}"
-            data-username="{{ username }}"
-            data-is-admin="{{ 1 if user_is_admin else 0 }}"
-            data-can-delete="{{ 1 if can_delete else 0 }}"
-            data-can-edit="{{ 1 if can_edit else 0 }}"
-            data-can-add-companies="{{ 1 if can_add_companies else 0 }}"
-            data-can-delete-companies="{{ 1 if can_delete_companies else 0 }}"
-            data-can-add-secrets="{{ 1 if can_add_secrets else 0 }}"
-            data-can-add-users="{{ 1 if can_add_users else 0 }}"
-            style="animation-delay: {{ delay }}ms;"
-        >
-            {% if id == current_user_id %}
-            <div class="user-you-badge">you</div>
-            {% endif %}
-            <div class="user-name">{{ username }}</div>
-            <div class="user-status">
-                {{ access_label }}
-            </div>
-            <div class="user-actions">
-                <button class="action-button copy" title="Reset Password">
-                    <span class="material-icons">lock_reset</span>
-                </button>
-
-                {% if is_admin %}
-                <button
-                    class="action-button edit open-rights-modal"
-                    title="{{ 'Permissions for user admin are locked' if username|lower == 'admin' else 'Manage Permissions' }}"
-                    type="button"
-                    {% if username|lower == 'admin' %}disabled aria-disabled="true"{% endif %}
-                >
-                    <span class="material-icons">tune</span>
-                </button>
-                {% endif %}
-
-                <button
-                    class="action-button delete"
-                    title="{{ 'User admin cannot be deleted' if username|lower == 'admin' else 'Delete User' }}"
-                    type="button"
-                    {% if username|lower == 'admin' %}disabled aria-disabled="true"{% endif %}
-                >
-                    <span class="material-icons">delete</span>
-                </button>
-            </div>
-        </div>
-        {% endfor %}
-    {% endif %}
-</div>
-
-{% if is_admin %}
-<a href="#" class="fab-add-user" id="openAddUserModal" title="Add User">
-    <span class="material-icons">add</span>
-</a>
-{% endif %}
-
-<div id="addUserModal" class="add-user-modal">
-    <div class="add-user-modal-content">
-        <span class="add-user-close" id="closeAddUserModal">&times;</span>
-        <form class="add-user-form" method="post" action="/api/create-user">
-            <label for="username">Username</label>
-            <div class="add-user-input-wrapper">
-                <input type="text" id="username" name="username" placeholder="e.g. johndoe" required>
-            </div>
-
-            <label for="password">Password</label>
-            <div class="add-user-input-wrapper" style="position: relative;">
-                <input type="password" id="add_password" name="password" placeholder="Enter new password" required>
-                <span id="toggleAddPassword" class="material-symbols-outlined" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; font-size: 20px; color: #777;">
-                    visibility_off
-                </span>
-            </div>
-
-            <div class="add-user-button-row">
-                <button type="submit">Add User</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<div id="rightsModal" class="add-user-modal">
-    <div class="add-user-modal-content rights-modal-content">
-        <span class="add-user-close" id="closeRightsModal">&times;</span>
-
-        <div class="rights-modal-header">
-            <div class="rights-modal-title">User Permissions</div>
-            <div class="rights-modal-subtitle" id="rights-username-text">Manage permissions for user</div>
-        </div>
-
-        <form class="add-user-form rights-form" method="post" action="/api/update-user-permissions" id="rightsForm">
-            <input type="hidden" id="rights-user-id" name="user_id">
-
-            <div class="rights-group">
-                <div class="rights-group-title">Administrator</div>
-                <div class="rights-item rights-item-main">
-                    <label class="settings-switch rights-switch-row">
-                        <input type="checkbox" id="rights_is_admin" name="is_admin">
-                        <span class="slider"></span>
-                        <span class="switch-text">Full access</span>
-                    </label>
-                    <div class="setting-description rights-description">Gives this user full access to all areas and automatically enables every permission below.</div>
-                </div>
-            </div>
-
-            <div class="rights-group">
-                <div class="rights-group-title">Secret Access</div>
-
-                <div class="rights-item">
-                    <label class="settings-switch rights-switch-row">
-                        <input type="checkbox" id="rights_can_add_secrets" name="can_add_secrets">
-                        <span class="slider"></span>
-                        <span class="switch-text">Can add secrets</span>
-                    </label>
-                    <div class="setting-description rights-description">Allows adding new OTP secrets.</div>
-                </div>
-
-                <div class="rights-item">
-                    <label class="settings-switch rights-switch-row">
-                        <input type="checkbox" id="rights_can_edit" name="can_edit">
-                        <span class="slider"></span>
-                        <span class="switch-text">Can edit entries</span>
-                    </label>
-                    <div class="setting-description rights-description">Allows editing secrets and company entries.</div>
-                </div>
-
-                <div class="rights-item">
-                    <label class="settings-switch rights-switch-row">
-                        <input type="checkbox" id="rights_can_delete" name="can_delete">
-                        <span class="slider"></span>
-                        <span class="switch-text">Can delete secrets</span>
-                    </label>
-                    <div class="setting-description rights-description">Allows deleting stored OTP secrets.</div>
-                </div>
-            </div>
-
-            <div class="rights-group">
-                <div class="rights-group-title">Company Access</div>
-
-                <div class="rights-item">
-                    <label class="settings-switch rights-switch-row">
-                        <input type="checkbox" id="rights_can_add_companies" name="can_add_companies">
-                        <span class="slider"></span>
-                        <span class="switch-text">Can add / view companies</span>
-                    </label>
-                    <div class="setting-description rights-description">Allows creating and editing new companies. If disabled, the company dropdown in search can't be used.</div>
-                </div>
-
-                <div class="rights-item">
-                    <label class="settings-switch rights-switch-row">
-                        <input type="checkbox" id="rights_can_delete_companies" name="can_delete_companies">
-                        <span class="slider"></span>
-                        <span class="switch-text">Can delete companies</span>
-                    </label>
-                    <div class="setting-description rights-description">Allows removing stored companies.</div>
-                </div>
-            </div>
-
-            <div class="rights-group">
-                <div class="rights-group-title">User Management</div>
-
-                <div class="rights-item">
-                    <label class="settings-switch rights-switch-row">
-                        <input type="checkbox" id="rights_can_add_users" name="can_add_users">
-                        <span class="slider"></span>
-                        <span class="switch-text">Can manage users</span>
-                    </label>
-                    <div class="setting-description rights-description">Allows creating users, resetting passwords and deleting users.</div>
-                </div>
-            </div>
-
-            <div class="add-user-button-row rights-save-row">
-                <button type="submit">Save Permissions</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<div id="resetPasswordModal" class="add-user-modal">
-    <div class="add-user-modal-content reset-password-modal-card">
-        <button type="button" class="add-user-close reset-password-close" id="closeResetPasswordModal" aria-label="Close reset password dialog">&times;</button>
-        <form class="add-user-form" method="post" action="/api/reset-password" id="resetPasswordForm">
-            <input type="hidden" id="reset-user-id" name="user_id">
-            <div class="users-modal-header">
-                <h3 class="users-modal-title">Reset password</h3>
-                <p class="users-modal-copy">Set a new password for <span id="reset-password-username">this user</span>.</p>
-            </div>
-
-            <label for="new_password">New Password</label>
-            <div class="add-user-input-wrapper reset-password-input-wrapper">
-                <input type="password" id="reset_password" name="new_password" placeholder="Enter new password" required>
-                <span id="toggleResetPassword" class="material-symbols-outlined reset-password-toggle">
-                    visibility_off
-                </span>
-            </div>
-
-            <div class="add-user-button-row users-modal-actions">
-                <button type="button" id="cancelResetPassword" class="users-modal-secondary">Cancel</button>
-                <button type="submit">Reset Password</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<div id="confirmDeleteModal" class="add-user-modal">
-    <div class="add-user-modal-content users-delete-modal-card">
-        <form method="post" action="/api/delete-user" id="deleteUserForm">
-            <input type="hidden" name="user_id" id="delete-user-id">
-            <div class="users-modal-header users-delete-header">
-                <h3 class="users-modal-title users-delete-title">Delete user?</h3>
-                <p class="users-modal-copy">This will permanently remove <span id="delete-user-username">this user</span>.</p>
-            </div>
-            <div class="delete-user-button-row users-modal-actions users-delete-actions">
-                <button type="button" id="cancelDeleteModal" class="users-modal-secondary">Cancel</button>
-                <button type="submit" class="confirm-delete-button users-delete-primary">
-                    <span class="material-icons" aria-hidden="true">close</span>
-                    <span>Delete User</span>
-                </button>
-            </div>
-        </form>
-    </div>
-</div>
-
+{% block scripts %}
 <script>
-    const addUserModal = document.getElementById("addUserModal");
-    const resetPasswordModal = document.getElementById("resetPasswordModal");
-    const confirmDeleteModal = document.getElementById("confirmDeleteModal");
-    const rightsModal = document.getElementById("rightsModal");
+(function () {
+  const A = window.App;
+  const USERS = [
+    {% for u in users %}
+    {
+      id: {{ u[0] }},
+      name: {{ u[1]|tojson }},
+      is_admin: {{ (u[2]|int)|tojson }},
+      can_delete: {{ (u[3]|int)|tojson }},
+      can_edit: {{ (u[4]|int)|tojson }},
+      can_add_companies: {{ (u[5]|int)|tojson }},
+      can_delete_companies: {{ (u[6]|int)|tojson }},
+      can_add_secrets: {{ (u[7]|int)|tojson }},
+      can_add_users: {{ (u[8]|int)|tojson }},
+      avatar_url: {{ u[9]|tojson }}
+    }{{ "," if not loop.last }}
+    {% endfor %}
+  ];
+  const CURRENT_USER_ID = {{ current_user_id|tojson }};
 
-    const openAddUserButton = document.getElementById("openAddUserModal");
-    const closeAddUserButton = document.getElementById("closeAddUserModal");
-    const closeResetPasswordButton = document.getElementById("closeResetPasswordModal");
-    const cancelResetPasswordButton = document.getElementById("cancelResetPassword");
-    const cancelDeleteButton = document.getElementById("cancelDeleteModal");
-    const closeRightsButton = document.getElementById("closeRightsModal");
-    const resetPasswordUsername = document.getElementById("reset-password-username");
-    const deleteUserUsername = document.getElementById("delete-user-username");
+  const PERM_SECTIONS = [
+    { title: "Administrator", rows: [
+      { key: "is_admin", label: "Full access", desc: "Gives this user full access to all areas and automatically enables every permission below." },
+    ]},
+    { title: "Secret access", rows: [
+      { key: "can_add_secrets", label: "Can add secrets", desc: "Allows adding new OTP secrets." },
+      { key: "can_edit", label: "Can edit entries", desc: "Allows editing secrets and company entries." },
+      { key: "can_delete", label: "Can delete secrets", desc: "Allows deleting stored OTP secrets." },
+    ]},
+    { title: "Company access", rows: [
+      { key: "can_add_companies", label: "Can add / view companies", desc: "Allows creating and editing new companies. If disabled, the company dropdown in search can't be used." },
+      { key: "can_delete_companies", label: "Can delete companies", desc: "Allows removing stored companies." },
+    ]},
+    { title: "User management", rows: [
+      { key: "can_add_users", label: "Can manage users", desc: "Allows creating users, resetting passwords and deleting users." },
+    ]},
+  ];
 
-    function usesAnimatedModal(modal) {
-        return modal === addUserModal || modal === resetPasswordModal || modal === confirmDeleteModal || modal === rightsModal;
-    }
+  function roleLabel(u) {
+    if (u.is_admin) return "Administrator";
+    if (u.can_add_users) return "Manager";
+    if (u.can_add_secrets || u.can_edit || u.can_delete || u.can_add_companies || u.can_delete_companies) return "Editor";
+    return "Viewer";
+  }
 
-    function setModal(modal, show) {
-        if (!modal) return;
-        if (usesAnimatedModal(modal)) {
-            modal.classList.toggle("is-open", show);
-            return;
-        }
-        modal.style.display = show ? "flex" : "none";
-    }
+  let search = "";
 
-    if (openAddUserButton) {
-        openAddUserButton.onclick = (e) => {
-            e.preventDefault();
-            setModal(addUserModal, true);
-        };
-    }
+  function renderTable() {
+    const table = document.getElementById("users-table");
+    const q = search.trim().toLowerCase();
+    const filtered = q
+      ? USERS.filter(u => u.name.toLowerCase().includes(q) || roleLabel(u).toLowerCase().includes(q))
+      : USERS;
+    const emptyEl = document.getElementById("users-empty");
+    emptyEl.style.display = filtered.length ? "none" : "flex";
+    emptyEl.querySelector(".txt").textContent = USERS.length ? "No users match your search" : "No dashboard users yet";
+    table.innerHTML = filtered.map(u => {
+      const isBuiltinAdmin = u.name.trim().toLowerCase() === "admin";
+      const initials = u.name.trim().slice(0, 2).toUpperCase();
+      return '<div class="table-row" style="grid-template-columns:1.6fr 1fr 128px">' +
+        '<div class="row-title" style="display:flex;align-items:center;gap:10px">' +
+        '<span class="profile-avatar md">' + (u.avatar_url ? '<img src="' + A.escapeHtml(u.avatar_url) + '" alt="">' : '<span class="profile-avatar-fallback">' + A.escapeHtml(initials) + '</span>') + '</span>' +
+        '<span>' + A.escapeHtml(u.name) + (u.id === CURRENT_USER_ID ? ' <span style="color:var(--text-faint);font-weight:500">(you)</span>' : "") + '</span>' +
+        "</div>" +
+        '<div class="row-dim">' + roleLabel(u) + "</div>" +
+        '<div class="row-actions">' +
+        '<button class="icon-btn" data-resetpw="' + u.id + '" title="Reset Password"><span class="ico">' + A.ICONS.keysm + "</span></button>" +
+        (!isBuiltinAdmin ? '<button class="icon-btn" data-edit-user="' + u.id + '" title="Edit"><span class="ico">' + A.ICONS.settings + "</span></button>" : "") +
+        (!isBuiltinAdmin ? '<button class="icon-btn" data-delete-user="' + u.id + '" title="Remove"><span class="ico">' + A.ICONS.xmark + "</span></button>" : "") +
+        "</div></div>";
+    }).join("");
+  }
 
-    if (closeAddUserButton) {
-        closeAddUserButton.onclick = () => setModal(addUserModal, false);
-    }
+  /* ---------- add / edit drawer ---------- */
 
-    if (closeResetPasswordButton) {
-        closeResetPasswordButton.onclick = () => setModal(resetPasswordModal, false);
-    }
+  let permState = {};
+  let editingId = null;
 
-    if (cancelResetPasswordButton) {
-        cancelResetPasswordButton.onclick = () => setModal(resetPasswordModal, false);
-    }
+  function renderPerms() {
+    const wrap = document.getElementById("perm-sections");
+    wrap.innerHTML = PERM_SECTIONS.map(sec =>
+      '<div class="perm-section-title">' + sec.title + "</div>" +
+      sec.rows.map(row => {
+        const forced = row.key !== "is_admin" && permState.is_admin;
+        const on = forced ? true : !!permState[row.key];
+        return '<div class="perm-row">' +
+          '<button class="perm-switch' + (on ? " on" : "") + '" data-perm="' + row.key + '"' + (forced ? " disabled" : "") + ' type="button"><span class="knob"></span></button>' +
+          '<div><div class="perm-label">' + row.label + '</div><div class="perm-desc">' + row.desc + "</div></div></div>";
+      }).join("")
+    ).join("");
+  }
 
-    if (cancelDeleteButton) {
-        cancelDeleteButton.onclick = () => setModal(confirmDeleteModal, false);
-    }
+  document.getElementById("perm-sections").addEventListener("click", e => {
+    const btn = e.target.closest("[data-perm]");
+    if (!btn || btn.disabled) return;
+    const key = btn.getAttribute("data-perm");
+    permState[key] = !permState[key];
+    renderPerms();
+  });
 
-    if (closeRightsButton) {
-        closeRightsButton.onclick = () => setModal(rightsModal, false);
-    }
+  function openUserDrawer(user) {
+    editingId = user ? user.id : null;
+    document.getElementById("user-drawer-title").textContent = user ? "Edit user" : "Add dashboard user";
+    const sub = document.getElementById("user-drawer-sub");
+    sub.style.display = user ? "block" : "none";
+    if (user) sub.textContent = "Manage permissions for " + user.name;
+    const nameEl = document.getElementById("user-name");
+    nameEl.value = user ? user.name : "";
+    nameEl.disabled = !!user;
+    document.getElementById("user-password-row").style.display = user ? "none" : "block";
+    document.getElementById("user-password").value = "";
+    document.getElementById("user-submit").textContent = user ? "Save changes" : "Add user";
+    permState = user
+      ? { is_admin: !!user.is_admin, can_add_secrets: !!user.can_add_secrets, can_edit: !!user.can_edit,
+          can_delete: !!user.can_delete, can_add_companies: !!user.can_add_companies,
+          can_delete_companies: !!user.can_delete_companies, can_add_users: !!user.can_add_users }
+      : { is_admin: false, can_add_secrets: false, can_edit: false, can_delete: false,
+          can_add_companies: false, can_delete_companies: false, can_add_users: false };
+    renderPerms();
+    A.openOverlay("user-overlay");
+  }
 
-    window.addEventListener("click", (e) => {
-        if (e.target.id === "addUserModal") setModal(addUserModal, false);
-        if (e.target.id === "resetPasswordModal") setModal(resetPasswordModal, false);
-        if (e.target.id === "confirmDeleteModal") setModal(confirmDeleteModal, false);
-        if (e.target.id === "rightsModal") setModal(rightsModal, false);
+  document.getElementById("open-add-user").addEventListener("click", () => openUserDrawer(null));
+
+  function postForm(action, fields) {
+    const form = document.createElement("form");
+    form.method = "POST"; form.action = action;
+    Object.entries(fields).forEach(([k, v]) => {
+      if (v === null || v === undefined || v === false) return;
+      const input = document.createElement("input");
+      input.type = "hidden"; input.name = k; input.value = v === true ? "on" : v;
+      form.appendChild(input);
     });
+    document.body.appendChild(form);
+    form.submit();
+  }
 
-    document.querySelectorAll(".action-button.copy").forEach(btn => {
-        btn.onclick = (e) => {
-            const userCard = e.currentTarget.closest(".user-card");
-            const userId = userCard.dataset.userId;
-            const username = userCard.dataset.username || "this user";
-            document.getElementById("reset-user-id").value = userId;
-            if (resetPasswordUsername) resetPasswordUsername.textContent = username;
-            setModal(resetPasswordModal, true);
-        };
-    });
-
-    document.querySelectorAll(".action-button.delete").forEach(btn => {
-        btn.onclick = (e) => {
-            if (btn.disabled) return;
-            const userCard = e.currentTarget.closest(".user-card");
-            const userId = userCard.dataset.userId;
-            const username = userCard.dataset.username || "this user";
-            document.getElementById("delete-user-id").value = userId;
-            if (deleteUserUsername) deleteUserUsername.textContent = username;
-            setModal(confirmDeleteModal, true);
-        };
-    });
-
-    function syncAdminState() {
-        const isAdmin = document.getElementById("rights_is_admin").checked;
-        const canAddCompanies = document.getElementById("rights_can_add_companies");
-        const canDeleteCompanies = document.getElementById("rights_can_delete_companies");
-        const fields = [
-            document.getElementById("rights_can_delete"),
-            document.getElementById("rights_can_edit"),
-            canAddCompanies,
-            canDeleteCompanies,
-            document.getElementById("rights_can_add_secrets"),
-            document.getElementById("rights_can_add_users")
-        ];
-
-        fields.forEach(field => {
-            field.disabled = isAdmin;
-            if (isAdmin) {
-                field.checked = true;
-            }
-        });
-
-        if (isAdmin) return;
-
-        if (canDeleteCompanies.checked) {
-            canAddCompanies.checked = true;
-        }
-
-        if (!canAddCompanies.checked) {
-            canDeleteCompanies.checked = false;
-        }
-
-        canDeleteCompanies.disabled = !canAddCompanies.checked;
+  document.getElementById("user-submit").addEventListener("click", () => {
+    const name = document.getElementById("user-name").value.trim();
+    const perms = {
+      is_admin: !!permState.is_admin,
+      can_add_secrets: permState.is_admin || !!permState.can_add_secrets,
+      can_edit: permState.is_admin || !!permState.can_edit,
+      can_delete: permState.is_admin || !!permState.can_delete,
+      can_add_companies: permState.is_admin || !!permState.can_add_companies,
+      can_delete_companies: permState.is_admin || !!permState.can_delete_companies,
+      can_add_users: permState.is_admin || !!permState.can_add_users,
+    };
+    if (editingId != null) {
+      postForm("/api/update-user-permissions", Object.assign({ user_id: editingId }, perms));
+    } else {
+      const password = document.getElementById("user-password").value;
+      if (name.length < 3) { A.toast("Name must be at least 3 characters"); return; }
+      if (!password) { A.toast("Please set a password"); return; }
+      postForm("/api/create-user", Object.assign({ username: name, password: password }, perms));
     }
+  });
 
-    document.querySelectorAll(".open-rights-modal").forEach(btn => {
-        btn.onclick = (e) => {
-            if (btn.disabled) return;
-            const userCard = e.currentTarget.closest(".user-card");
+  /* ---------- reset password ---------- */
 
-            document.getElementById("rights-user-id").value = userCard.dataset.userId;
-            document.getElementById("rights-username-text").textContent = `Manage permissions for ${userCard.dataset.username}`;
+  let resetId = null;
+  const pwEl = document.getElementById("resetpw-password");
+  const pwConfirmEl = document.getElementById("resetpw-confirm");
+  const pwSubmit = document.getElementById("resetpw-submit");
+  function pwRefresh() {
+    pwSubmit.disabled = !(pwEl.value.length >= 4 && pwEl.value === pwConfirmEl.value);
+  }
+  pwEl.addEventListener("input", pwRefresh);
+  pwConfirmEl.addEventListener("input", pwRefresh);
+  pwSubmit.addEventListener("click", () => {
+    if (resetId == null) return;
+    postForm("/api/reset-password", { user_id: resetId, new_password: pwEl.value });
+  });
 
-            document.getElementById("rights_is_admin").checked = userCard.dataset.isAdmin === "1";
-            document.getElementById("rights_can_delete").checked = userCard.dataset.canDelete === "1";
-            document.getElementById("rights_can_edit").checked = userCard.dataset.canEdit === "1";
-            document.getElementById("rights_can_add_companies").checked = userCard.dataset.canAddCompanies === "1";
-            document.getElementById("rights_can_delete_companies").checked = userCard.dataset.canDeleteCompanies === "1";
-            document.getElementById("rights_can_add_secrets").checked = userCard.dataset.canAddSecrets === "1";
-            document.getElementById("rights_can_add_users").checked = userCard.dataset.canAddUsers === "1";
+  /* ---------- delete ---------- */
 
-            syncAdminState();
-            setModal(rightsModal, true);
-        };
-    });
+  let deleteUserId = null;
+  const delText = document.getElementById("delete-user-confirm-text");
+  const delBtn = document.getElementById("delete-user-confirm");
+  delText.addEventListener("input", () => {
+    delBtn.disabled = delText.value.trim().toLowerCase() !== "confirm";
+  });
+  delBtn.addEventListener("click", () => {
+    if (deleteUserId == null) return;
+    postForm("/api/delete-user", { user_id: deleteUserId });
+  });
 
-    document.getElementById("rights_is_admin").addEventListener("change", syncAdminState);
-    document.getElementById("rights_can_add_companies").addEventListener("change", syncAdminState);
-    document.getElementById("rights_can_delete_companies").addEventListener("change", syncAdminState);
+  document.getElementById("users-table").addEventListener("click", e => {
+    const reset = e.target.closest("[data-resetpw]");
+    if (reset) {
+      const u = USERS.find(x => x.id === +reset.getAttribute("data-resetpw"));
+      resetId = u.id;
+      document.getElementById("resetpw-sub").textContent = "Set a new password for " + u.name;
+      pwEl.value = ""; pwConfirmEl.value = ""; pwRefresh();
+      A.openOverlay("resetpw-overlay");
+      return;
+    }
+    const edit = e.target.closest("[data-edit-user]");
+    if (edit) {
+      openUserDrawer(USERS.find(x => x.id === +edit.getAttribute("data-edit-user")));
+      return;
+    }
+    const del = e.target.closest("[data-delete-user]");
+    if (del) {
+      const u = USERS.find(x => x.id === +del.getAttribute("data-delete-user"));
+      deleteUserId = u.id;
+      document.getElementById("delete-user-name").textContent = u.name;
+      delText.value = ""; delBtn.disabled = true;
+      A.openOverlay("delete-user-overlay");
+    }
+  });
 
-    document.getElementById("toggleResetPassword").addEventListener("click", () => {
-        const input = document.getElementById("reset_password");
-        const icon = document.getElementById("toggleResetPassword");
-        const isVisible = input.type === "text";
-        input.type = isVisible ? "password" : "text";
-        icon.textContent = isVisible ? "visibility_off" : "visibility";
-    });
+  document.getElementById("users-search").addEventListener("input", e => { search = e.target.value; renderTable(); });
+  A.attachAutocomplete(document.getElementById("users-search"), () => USERS.map(u => u.name));
 
-    document.getElementById("toggleAddPassword").addEventListener("click", () => {
-        const input = document.getElementById("add_password");
-        const icon = document.getElementById("toggleAddPassword");
-        const isVisible = input.type === "text";
-        input.type = isVisible ? "password" : "text";
-        icon.textContent = isVisible ? "visibility_off" : "visibility";
-    });
+  renderTable();
+})();
 </script>
-
 {% endblock %}

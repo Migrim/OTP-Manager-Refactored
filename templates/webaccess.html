@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% set active_page = 'webaccess' %}
+
+{% block title %}Web Access | OTP-Tool{% endblock %}
+
+{% block page %}
+<div class="page">
+  <div class="page-topbar">
+    <div class="page-title">Web Access</div>
+    <div class="topbar-spacer"></div>
+    <div class="topbar-note">{{ companies|length }} companies</div>
+  </div>
+
+  <div class="page-scroll">
+    <div class="table-panel" style="max-width:800px;margin:0 auto" id="webaccess-list"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const A = window.App;
+  const COMPANIES = [
+    {% for c in companies %}
+    { id: {{ c[0] }}, name: {{ c[1]|tojson }}, enabled: {{ (c[2]|int if c[2] is not none else 0)|tojson }} }{{ "," if not loop.last }}
+    {% endfor %}
+  ];
+
+  const list = document.getElementById("webaccess-list");
+
+  function render() {
+    list.innerHTML = COMPANIES.map(c =>
+      '<div class="table-row" style="display:flex;align-items:center;gap:12px">' +
+      '<div class="row-title" style="flex:1;min-width:0">' + A.escapeHtml(c.name) + "</div>" +
+      '<div class="row-dim" style="font-size:12px;margin-right:8px">' + (c.enabled ? "Enabled" : "Disabled") + "</div>" +
+      '<button class="switch' + (c.enabled ? " on" : "") + '" data-toggle="' + c.id + '" type="button"><span class="knob"></span></button>' +
+      "</div>"
+    ).join("");
+  }
+
+  list.addEventListener("click", async e => {
+    const btn = e.target.closest("[data-toggle]");
+    if (!btn) return;
+    const c = COMPANIES.find(x => x.id === +btn.getAttribute("data-toggle"));
+    try {
+      const res = await A.fetchJSON("/api/toggle-web-access", {
+        method: "POST",
+        body: { company_id: c.id, enabled: !c.enabled },
+      });
+      c.enabled = res.enabled ? 1 : 0;
+      A.toast((c.enabled ? "Enabled" : "Disabled") + " web access for " + c.name);
+      render();
+    } catch (err) { A.toast(err.message); }
+  });
+
+  render();
+})();
+</script>
+{% endblock %}

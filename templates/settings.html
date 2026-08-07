@@ -1,83 +1,203 @@
 {% extends "base.html" %}
+{% set active_page = 'settings' %}
 
 {% block title %}Settings | OTP-Tool{% endblock %}
 
-{% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='styles/settings.css') }}">
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet">
+{% block page %}
+<div class="page">
+  <div class="page-topbar">
+    <div class="page-title">Settings</div>
+    <div class="topbar-spacer"></div>
+    <div class="topbar-sep"></div>
+    <button class="topbar-btn accent" id="save-settings" type="button">Save Settings</button>
+  </div>
+
+  <div class="page-scroll" style="padding:26px 30px 50px 30px">
+    <div style="max-width:780px;margin:0 auto">
+
+      <div class="settings-section-title">Display</div>
+
+      <div class="setting-card" style="margin-bottom:14px">
+        <div style="flex:1">
+          <div class="set-label">Home menu layout</div>
+          <div class="set-desc">Choose how OTP entries are displayed on the home screen.</div>
+        </div>
+        <div class="seg-control">
+          <button id="layout-list" type="button">List</button>
+          <button id="layout-cards" type="button">Cards</button>
+        </div>
+      </div>
+
+      <div class="setting-card" style="margin-bottom:14px;align-items:center">
+        <div style="flex:1">
+          <div class="set-label">Accent color</div>
+          <div class="set-desc">Sets the highlight color used across buttons, toggles, and progress indicators.</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex:none">
+          <div style="display:flex;gap:8px" id="swatches"></div>
+          <input type="color" id="accent-custom" style="width:32px;height:32px;padding:0;border:1px solid var(--border);border-radius:8px;background:none;cursor:pointer">
+        </div>
+      </div>
+
+      <div class="settings-grid" style="margin-bottom:32px" id="display-settings"></div>
+
+      <div class="settings-section-title" id="security-title"></div>
+      <div class="settings-grid" id="security-settings"></div>
+
+      <div class="settings-section-title" style="margin:32px 0 14px 0">Account</div>
+      <div class="avatar-card">
+        <div class="avatar-drop" id="avatar-drop" title="Drop an image or click to upload">
+          <input type="file" id="avatar-input" accept="image/png,image/jpeg,image/webp">
+          {% if avatar_url %}
+          <img src="{{ avatar_url }}" alt="" id="avatar-preview-img">
+          {% else %}
+          <div class="avatar-drop-fallback" id="avatar-preview-fallback">{{ (username or '?')[:2]|upper }}</div>
+          {% endif %}
+        </div>
+        <div style="flex:1">
+          <div class="set-label">Profile photo</div>
+          <div class="set-desc">Drop an image or click to upload. Shown next to your name in the sidebar.</div>
+        </div>
+        <button class="avatar-remove" id="avatar-remove" type="button" style="{{ '' if avatar_url else 'display:none' }}">Remove</button>
+      </div>
+
+    </div>
+  </div>
+</div>
 {% endblock %}
 
-{% block content %}
-<div class="settings-grid">
-    <div class="settings-card">
-        <form method="post" action="/update-settings" class="settings-form">
+{% block scripts %}
+<script>
+(function () {
+  const A = window.App;
+  const SERVER = {{ user|tojson }};
+  const state = {
+    show_timer: !!SERVER.show_timer,
+    show_emails: !!SERVER.show_emails,
+    show_including_admin_on_top: !!SERVER.show_including_admin_on_top,
+    show_search_and_link: !!SERVER.show_search_and_link,
+    hide_codes_by_default: !!SERVER.hide_codes_by_default,
+    hide_secret_field: !!SERVER.hide_secret_field,
+    blur_on_inactive: !!SERVER.blur_on_inactive,
+  };
 
-            <div class="settings-section-label">Display</div>
+  const DISPLAY = [
+    { key: "show_timer", label: "Simple Text-Timer", desc: "Display a simple text timer instead of the circular timer on the OTP Containers on the home screen." },
+    { key: "show_emails", label: "Show Emails", desc: "Displays the email address associated with the OTP." },
+    { key: "show_including_admin_on_top", label: 'Show "admin" entries first', desc: 'Entries whose name contains "admin" will appear at the top — both on the home screen and in company search results.' },
+    { key: "show_search_and_link", label: "Show company link & search icons", desc: "Shows a link icon and a search icon next to each company section title on the home screen for quick navigation." },
+  ];
+  const SECURITY = [
+    { key: "hide_codes_by_default", label: "Hide OTP codes by default", desc: 'OTP codes are masked as "hidden". Click any code to reveal it. The copy button always copies the real code.' },
+    { key: "hide_secret_field", label: "Hide secret keys from cards", desc: "Removes the secret key field entirely from OTP cards on the home screen." },
+    { key: "blur_on_inactive", label: "Blur Secret-Cards when inactive", desc: "Blur OTP containers when you are inactive for longer than a minute to protect your data from prying eyes." },
+  ];
 
-            <label class="settings-switch">
-                <input type="checkbox" id="show_timer" name="show_timer" {{ 'checked' if user.show_timer else '' }}>
-                <span class="slider"></span>
-                <span class="switch-text">Simple Text-Timer</span>
-            </label>
-            <div class="setting-description">Display a simple text timer instead of the circular timer on the OTP Containers on the home screen.</div>
+  function cardHTML(item) {
+    return '<div class="setting-card toggle-card">' +
+      '<button class="switch' + (state[item.key] ? " on" : "") + '" data-key="' + item.key + '" type="button"><span class="knob"></span></button>' +
+      "<div><div class='set-label'>" + A.escapeHtml(item.label) +
+      "</div><div class='set-desc'>" + item.desc + "</div></div></div>";
+  }
 
-            <label class="settings-switch">
-                <input type="checkbox" id="show_emails" name="show_emails" {{ 'checked' if user.show_emails else '' }}>
-                <span class="slider"></span>
-                <span class="switch-text">Show Emails</span>
-            </label>
-            <div class="setting-description">Displays the email address associated with the OTP.</div>
+  function renderToggles() {
+    document.getElementById("display-settings").innerHTML = DISPLAY.map(cardHTML).join("");
+    document.getElementById("security-settings").innerHTML = SECURITY.map(cardHTML).join("");
+  }
 
-            <label class="settings-switch">
-                <input type="checkbox" id="show_including_admin_on_top" name="show_including_admin_on_top" {{ 'checked' if user.show_including_admin_on_top else '' }}>
-                <span class="slider"></span>
-                <span class="switch-text">Show "admin" entries first</span>
-            </label>
-            <div class="setting-description">Entries whose name contains "admin" will appear at the top — both on the home screen and in company search results.</div>
+  document.getElementById("security-title").innerHTML =
+    '<span style="color:var(--accent)">' + A.ICONS.shield + "</span>Security";
 
-            <label class="settings-switch">
-                <input type="checkbox" id="show_search_and_link" name="show_search_and_link" {{ 'checked' if user.show_search_and_link else '' }}>
-                <span class="slider"></span>
-                <span class="switch-text">Show company link &amp; search icons</span>
-            </label>
-            <div class="setting-description">Shows a link icon and a search icon next to each company section title on the home screen for quick navigation.</div>
+  document.addEventListener("click", e => {
+    const sw = e.target.closest(".switch[data-key]");
+    if (!sw) return;
+    const key = sw.getAttribute("data-key");
+    state[key] = !state[key];
+    renderToggles();
+  });
 
-            <div class="settings-section-label">Security</div>
+  /* layout */
+  function currentLayout() { return A.getCookie("layout") === "cards" ? "cards" : "list"; }
+  function renderLayout() {
+    const l = currentLayout();
+    document.getElementById("layout-list").classList.toggle("active", l === "list");
+    document.getElementById("layout-cards").classList.toggle("active", l === "cards");
+  }
+  document.getElementById("layout-list").addEventListener("click", () => { A.setCookie("layout", "list"); renderLayout(); });
+  document.getElementById("layout-cards").addEventListener("click", () => { A.setCookie("layout", "cards"); renderLayout(); });
 
-            <label class="settings-switch">
-                <input type="checkbox" id="hide_codes_by_default" name="hide_codes_by_default" {{ 'checked' if user.hide_codes_by_default else '' }}>
-                <span class="slider"></span>
-                <span class="switch-text">
-                    <span class="material-symbols-outlined blur-warning-icon">privacy_tip</span>
-                    Hide OTP codes by default
-                </span>
-            </label>
-            <div class="setting-description">OTP codes are masked as "hidden". Click any code to reveal it. The copy button always copies the real code.</div>
+  /* accent */
+  const SWATCH_COLORS = ["#a15c93", "#5b6fd8", "#3b8fca", "#2f9e7a", "#c47f2b", "#c05a5a"];
+  function currentAccent() { return A.getCookie("accent") || "#a15c93"; }
+  function renderSwatches() {
+    const cur = currentAccent().toLowerCase();
+    document.getElementById("swatches").innerHTML = SWATCH_COLORS.map(c =>
+      '<button class="swatch' + (cur === c ? " active" : "") + '" data-color="' + c + '" title="' + c + '" type="button" style="background:' + c +
+      (cur === c ? ";outline:2px solid " + c : "") + '"></button>'
+    ).join("");
+    document.getElementById("accent-custom").value = cur;
+  }
+  document.getElementById("swatches").addEventListener("click", e => {
+    const sw = e.target.closest("[data-color]");
+    if (!sw) return;
+    A.applyAccent(sw.getAttribute("data-color"));
+    renderSwatches();
+  });
+  document.getElementById("accent-custom").addEventListener("input", e => {
+    A.applyAccent(e.target.value);
+    renderSwatches();
+  });
 
-            <label class="settings-switch">
-                <input type="checkbox" id="hide_secret_field" name="hide_secret_field" {{ 'checked' if user.hide_secret_field else '' }}>
-                <span class="slider"></span>
-                <span class="switch-text">
-                    <span class="material-symbols-outlined blur-warning-icon">privacy_tip</span>
-                    Hide secret keys from cards
-                </span>
-            </label>
-            <div class="setting-description">Removes the secret key field entirely from OTP cards on the home screen.</div>
+  /* save */
+  document.getElementById("save-settings").addEventListener("click", () => {
+    const form = document.createElement("form");
+    form.method = "POST"; form.action = "/update-settings";
+    Object.entries(state).forEach(([k, v]) => {
+      if (!v) return;
+      const input = document.createElement("input");
+      input.type = "hidden"; input.name = k; input.value = "on";
+      form.appendChild(input);
+    });
+    document.body.appendChild(form);
+    form.submit();
+  });
 
-            <label class="settings-switch">
-                <input type="checkbox" id="blur_on_inactive" name="blur_on_inactive" {{ 'checked' if user.blur_on_inactive else '' }}>
-                <span class="slider"></span>
-                <span class="switch-text">
-                    <span class="material-symbols-outlined blur-warning-icon">privacy_tip</span>
-                    Blur Secret-Cards when inactive
-                </span>
-            </label>
-            <div class="setting-description">Blur OTP containers when you are inactive for longer than a minute to protect your data from prying eyes.</div>
+  /* avatar */
+  const avatarDrop = document.getElementById("avatar-drop");
+  const avatarInput = document.getElementById("avatar-input");
+  const avatarRemove = document.getElementById("avatar-remove");
 
-            <div class="settings-button-row">
-                <button type="submit">Save Settings</button>
-            </div>
-        </form>
-    </div>
-</div>
+  async function uploadAvatar(file) {
+    if (!file) return;
+    const fd = new FormData();
+    fd.append("avatar", file);
+    try {
+      await A.fetchJSON("/api/account/avatar", { method: "POST", body: fd });
+      window.location.reload();
+    } catch (err) { A.toast(err.message); }
+  }
+
+  avatarDrop.addEventListener("click", () => avatarInput.click());
+  avatarInput.addEventListener("change", () => uploadAvatar(avatarInput.files[0]));
+  avatarDrop.addEventListener("dragover", e => { e.preventDefault(); avatarDrop.classList.add("drag-over"); });
+  avatarDrop.addEventListener("dragleave", () => avatarDrop.classList.remove("drag-over"));
+  avatarDrop.addEventListener("drop", e => {
+    e.preventDefault();
+    avatarDrop.classList.remove("drag-over");
+    const file = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file) uploadAvatar(file);
+  });
+  avatarRemove.addEventListener("click", async e => {
+    e.stopPropagation();
+    try {
+      await A.fetchJSON("/api/account/avatar", { method: "DELETE" });
+      window.location.reload();
+    } catch (err) { A.toast(err.message); }
+  });
+
+  renderToggles();
+  renderLayout();
+  renderSwatches();
+})();
+</script>
 {% endblock %}

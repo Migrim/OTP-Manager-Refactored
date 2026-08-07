@@ -22,8 +22,8 @@ unzip -o /tmp/otp.zip -d /tmp/otp-extract
 cp -r /tmp/otp-extract/OTP-Manager-Refactored-main/. "$INSTALL_DIR/"
 rm -rf /tmp/otp.zip /tmp/otp-extract
 
-pip3 install --break-system-packages flask flask-bcrypt reportlab pyotp "qrcode[pil]" 2>/dev/null \
-    || pip3 install flask flask-bcrypt reportlab pyotp "qrcode[pil]"
+pip3 install --break-system-packages flask flask-bcrypt flask-socketio simple-websocket reportlab pyotp "qrcode[pil]" 2>/dev/null \
+    || pip3 install flask flask-bcrypt flask-socketio simple-websocket reportlab pyotp "qrcode[pil]"
 
 cat > /root/start-otp.sh << 'EOF'
 #!/bin/bash

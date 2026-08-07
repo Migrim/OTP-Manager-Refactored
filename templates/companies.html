@@ -1,318 +1,230 @@
 {% extends "base.html" %}
+{% set active_page = 'companies' %}
 
 {% block title %}Companies | OTP-Tool{% endblock %}
 
-{% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='styles/companies.css') }}">
-<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet">
+{% block page %}
+<div class="page">
+  <div class="page-topbar">
+    <div class="topbar-search">
+      <span class="ico" data-icon="search"></span>
+      <input type="text" id="companies-search" placeholder="Search companies…" autocomplete="off">
+    </div>
+    <div class="topbar-note">{{ companies|length }} companies</div>
+    {% if can_add_companies %}
+    <div class="topbar-sep"></div>
+    <button class="topbar-btn accent" id="open-add-company" type="button">
+      <span style="width:14px;height:14px;display:flex" data-icon="plus"></span>Add Company
+    </button>
+    {% endif %}
+  </div>
+
+  <div class="page-scroll">
+    <div style="max-width:960px;margin:0 auto;display:flex;flex-direction:column;gap:10px">
+      <div class="table-head" style="grid-template-columns:120px 1.6fr 1fr 140px 96px">
+        <div>Company ID</div><div>Name</div><div>OTPs</div><div>Web Access</div><div></div>
+      </div>
+      <div class="table-panel" id="companies-table"></div>
+      <div class="empty-state" id="companies-empty" style="display:none">
+        <span class="ico" data-icon="search"></span>
+        <div class="txt">No companies match your search</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add / edit company drawer -->
+<div class="overlay drawer-side" id="company-overlay">
+  <div class="drawer">
+    <div class="drawer-head">
+      <div>
+        <div class="drawer-title" id="company-drawer-title">Add Company</div>
+        <div class="drawer-sub" id="company-drawer-sub" style="display:none"></div>
+      </div>
+      <button class="drawer-x" data-close-overlay type="button">&#10005;</button>
+    </div>
+
+    <label class="field-label-sm" style="margin-top:16px">Name</label>
+    <input class="text-input" id="company-name" placeholder="e.g. Acme Corp" autocomplete="off">
+
+    <label class="field-label-sm" style="margin-top:14px">Kundennummer</label>
+    <input class="text-input" id="company-kdnr" placeholder="e.g. 10234" autocomplete="off">
+
+    <label class="field-label-sm" style="margin-top:14px">Password</label>
+    <input class="text-input" type="password" id="company-password" placeholder="Account password" autocomplete="new-password">
+
+    <div style="margin-top:22px">
+      <div class="perm-section-title" style="margin-top:0">Web Access</div>
+      <div class="perm-row">
+        <button class="perm-switch" id="company-webaccess" type="button"><span class="knob"></span></button>
+        <div>
+          <div class="perm-label">Enable web access</div>
+          <div class="perm-desc">Allows this company to log in through web access with the credentials above.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="drawer-actions">
+      <button class="btn-outline lg" data-close-overlay type="button">Cancel</button>
+      <button class="btn-accent lg" id="company-submit" type="button">Add Company</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete company modal -->
+<div class="overlay center" id="delete-company-overlay">
+  <div class="modal">
+    <div class="modal-title lg">Delete this company?</div>
+    <div class="modal-sub" style="margin-bottom:18px">This removes <span id="delete-company-name"></span> and all of its OTP entries. This can't be undone.</div>
+    <div style="margin-bottom:22px">
+      <label class="field-label-sm" style="margin-bottom:6px">Type "confirm" to proceed</label>
+      <input class="text-input" id="delete-company-confirm-text" placeholder="confirm" autocomplete="off">
+    </div>
+    <div class="modal-actions" style="margin-top:0">
+      <button class="btn-outline" data-close-overlay type="button">Cancel</button>
+      <button class="btn-danger" id="delete-company-confirm" type="button" disabled>Delete</button>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
-{% block content %}
-<div class="user-grid" id="companiesGrid">
-    {% if companies|length == 0 %}
-        <div class="companies-empty-state">
-            <span class="material-symbols-outlined companies-empty-icon">domain_disabled</span>
-            <div class="companies-empty-text">No companies stored</div>
-        </div>
-    {% else %}
-        {% for company_id, name, kundennummer, secret_count in companies %}
-        {% set delay = range(30, 150)|random %}
-        <div
-            class="user-card"
-            data-company-id="{{ company_id }}"
-            data-company-name="{{ name }}"
-            data-kundennummer="{{ kundennummer or '' }}"
-            data-search="{{ (name ~ ' ' ~ (kundennummer or '') ~ ' ' ~ secret_count)|lower }}"
-            style="animation-delay: {{ delay }}ms;"
-        >
-            <div class="user-name">{{ name }}</div>
-            <div class="user-status">
-                <div>Kd.: {{ kundennummer or "Not assigned" }}</div>
-            </div>
-            <div class="user-actions">
-                <button class="action-button search" title="Search Company">
-                    <span class="material-symbols-outlined">search</span>
-                    <span class="search-count">{{ secret_count }}</span>
-                </button>
-                <button
-                    class="action-button edit"
-                    title="{{ 'Edit Company' if can_edit else 'No permission to edit companies' }}"
-                    {% if not can_edit %}disabled aria-disabled="true"{% endif %}
-                >
-                    <span class="material-icons">edit</span>
-                </button>
-                <button
-                    class="action-button delete"
-                    title="{{ 'Delete Company' if can_delete_companies else 'No permission to delete companies' }}"
-                    {% if not can_delete_companies %}disabled aria-disabled="true"{% endif %}
-                >
-                    <span class="material-icons">delete</span>
-                </button>
-            </div>
-        </div>
-        {% endfor %}
-    {% endif %}
-</div>
-
-{% if can_add_companies %}
-<a href="#" class="fab-add-user" id="openAddCompanyModal" title="Add Company">
-    <span class="material-icons">add</span>
-</a>
-{% endif %}
-
-<div id="addCompanyModal" class="add-user-modal">
-    <div class="add-user-modal-content">
-        <span class="add-user-close" id="closeAddCompanyModal">&times;</span>
-        <form class="add-user-form" method="post" action="/api/create-company">
-            <label for="company_name">Company Name</label>
-            <div class="add-user-input-wrapper">
-                <input type="text" id="company_name" name="name" placeholder="e.g. My Company GmbH" required>
-            </div>
-
-            <label for="kundennummer">Kundennummer (optional)</label>
-            <div class="add-user-input-wrapper">
-                <input type="number" id="kundennummer" name="kundennummer" placeholder="e.g. 12345678">
-            </div>
-
-            <label for="password">Password (optional)</label>
-            <div class="add-user-input-wrapper" style="position: relative;">
-                <input type="password" id="company_password" name="password" placeholder="Optional password">
-                <span id="toggleCompanyPassword" class="material-symbols-outlined" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; font-size: 20px; color: #777;">visibility_off</span>
-            </div>
-
-            <div class="add-user-button-row">
-                <button type="submit">Add Company</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<div id="confirmDeleteCompanyModal" class="add-user-modal">
-    <div class="add-user-modal-content company-delete-modal-card">
-        <form method="post" action="/api/delete-company" id="deleteCompanyForm">
-            <input type="hidden" name="company_id" id="delete-company-id">
-            <div class="company-modal-header company-delete-header">
-                <h3 class="company-modal-title">Delete company?</h3>
-                <p class="company-modal-copy">This will permanently remove <span id="delete-company-name-text">this company</span>.</p>
-            </div>
-            <div class="delete-user-button-row company-modal-actions company-delete-actions">
-                <button type="button" id="cancelDeleteCompanyModal" class="company-modal-secondary">Cancel</button>
-                <button type="submit" class="confirm-delete-button company-delete-primary">
-                    <span class="material-icons" aria-hidden="true">close</span>
-                    <span>Delete Company</span>
-                </button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<div id="editCompanyModal" class="add-user-modal">
-    <div class="add-user-modal-content company-edit-modal-card">
-        <button type="button" class="add-user-close company-edit-close" id="closeEditCompanyModal" aria-label="Close edit company dialog">&times;</button>
-        <form method="post" action="/api/edit-company" class="add-user-form" id="editCompanyForm">
-            <input type="hidden" name="company_id" id="edit-company-id">
-            <div class="company-modal-header">
-                <h3 class="company-modal-title">Edit company</h3>
-                <p class="company-modal-copy">Update <span id="edit-company-name-text">this company</span>.</p>
-            </div>
-
-            <label for="edit-company-name">Company Name</label>
-            <div class="add-user-input-wrapper">
-                <input type="text" name="name" id="edit-company-name" placeholder="e.g. My Company GmbH" required>
-            </div>
-
-            <label for="edit-company-kundennummer">Kundennummer (optional)</label>
-            <div class="add-user-input-wrapper">
-                <input type="number" name="kundennummer" id="edit-company-kundennummer" placeholder="e.g. 12345678">
-            </div>
-
-            <label for="edit-company-password">New Password (optional)</label>
-            <div class="add-user-input-wrapper company-password-input-wrapper">
-                <input type="password" name="password" id="edit-company-password" placeholder="Optional password">
-                <span id="toggleEditCompanyPassword" class="material-symbols-outlined company-password-toggle">visibility_off</span>
-            </div>
-
-            <div class="add-user-button-row company-modal-actions">
-                <button type="button" id="cancelEditCompanyModal" class="company-modal-secondary">Cancel</button>
-                <button type="submit">Save Changes</button>
-            </div>
-        </form>
-    </div>
-</div>
-
+{% block scripts %}
 <script>
-    function debounce(func, delay) {
-        let timeout;
-        return (...args) => {
-            clearTimeout(timeout);
-            timeout = setTimeout(() => func(...args), delay);
-        };
-    }
+(function () {
+  const A = window.App;
+  const COMPANIES = [
+    {% for c in companies %}
+    {
+      id: {{ c[0] }},
+      name: {{ c[1]|tojson }},
+      kundennummer: {{ (c[2] if c[2] is not none else "")|tojson }},
+      count: {{ c[3] }},
+      login_enabled: {{ (c[4]|int if c[4] is not none else 0)|tojson }}
+    }{{ "," if not loop.last }}
+    {% endfor %}
+  ];
+  const PERMS = {
+    canAdd: {{ can_add_companies|tojson }},
+    canEdit: {{ can_edit|tojson }},
+    canDelete: {{ can_delete_companies|tojson }},
+  };
 
-    const addCompanyModal = document.getElementById("addCompanyModal");
-    const confirmDeleteCompanyModal = document.getElementById("confirmDeleteCompanyModal");
-    const editCompanyModal = document.getElementById("editCompanyModal");
-    const deleteCompanyNameText = document.getElementById("delete-company-name-text");
-    const editCompanyNameText = document.getElementById("edit-company-name-text");
+  let search = "";
 
-    function openAddCompanyModal() {
-        addCompanyModal.classList.add("is-open");
-    }
+  function renderTable() {
+    const table = document.getElementById("companies-table");
+    const q = search.trim().toLowerCase();
+    const filtered = q
+      ? COMPANIES.filter(c => c.name.toLowerCase().includes(q) || String(c.kundennummer).toLowerCase().includes(q))
+      : COMPANIES;
+    document.getElementById("companies-empty").style.display = filtered.length ? "none" : "flex";
+    table.innerHTML = filtered.map(c =>
+      '<div class="table-row" style="grid-template-columns:120px 1.6fr 1fr 140px 96px">' +
+      '<div class="row-dim mono" style="font-size:13px">' + (c.kundennummer !== "" ? A.escapeHtml(String(c.kundennummer)) : "CO-" + (1000 + c.id)) + "</div>" +
+      '<div class="row-title">' + A.escapeHtml(c.name) + "</div>" +
+      '<div class="row-dim">' + c.count + "</div>" +
+      '<div class="row-status"><span class="status-dot' + (c.login_enabled ? " on" : "") + '"></span>' + (c.login_enabled ? "Activated" : "Deactivated") + "</div>" +
+      '<div class="row-actions">' +
+      '<button class="icon-btn" data-view="' + c.id + '" title="View"><span class="ico">' + A.ICONS.search + "</span></button>" +
+      (PERMS.canEdit ? '<button class="icon-btn" data-edit="' + c.id + '" title="Edit"><span class="ico">' + A.ICONS.settings + "</span></button>" : "") +
+      (PERMS.canDelete ? '<button class="icon-btn danger" data-delete="' + c.id + '" title="Delete"><span class="ico">' + A.ICONS.xmark + "</span></button>" : "") +
+      "</div></div>"
+    ).join("");
+  }
 
-    function closeAddCompanyModal() {
-        addCompanyModal.classList.remove("is-open");
-    }
+  let editingId = null;
+  let webAccessOn = true;
+  const webBtn = document.getElementById("company-webaccess");
+  webBtn.addEventListener("click", () => {
+    webAccessOn = !webAccessOn;
+    webBtn.classList.toggle("on", webAccessOn);
+  });
 
-    document.getElementById("openAddCompanyModal").onclick = () => {
-        openAddCompanyModal();
+  function openCompanyDrawer(c) {
+    editingId = c ? c.id : null;
+    document.getElementById("company-drawer-title").textContent = c ? "Edit Company" : "Add Company";
+    const sub = document.getElementById("company-drawer-sub");
+    sub.style.display = c ? "block" : "none";
+    if (c) sub.textContent = "Manage details for " + c.name;
+    document.getElementById("company-name").value = c ? c.name : "";
+    document.getElementById("company-kdnr").value = c ? c.kundennummer : "";
+    document.getElementById("company-password").value = "";
+    document.getElementById("company-password").placeholder = c ? "Leave empty to keep current password" : "Account password";
+    webAccessOn = c ? !!c.login_enabled : true;
+    webBtn.classList.toggle("on", webAccessOn);
+    document.getElementById("company-submit").textContent = c ? "Save changes" : "Add Company";
+    A.openOverlay("company-overlay");
+  }
+
+  const addBtn = document.getElementById("open-add-company");
+  if (addBtn) addBtn.addEventListener("click", () => openCompanyDrawer(null));
+
+  function postForm(action, fields) {
+    const form = document.createElement("form");
+    form.method = "POST"; form.action = action;
+    Object.entries(fields).forEach(([k, v]) => {
+      if (v === null || v === undefined || v === false) return;
+      const input = document.createElement("input");
+      input.type = "hidden"; input.name = k; input.value = v === true ? "on" : v;
+      form.appendChild(input);
+    });
+    document.body.appendChild(form);
+    form.submit();
+  }
+
+  document.getElementById("company-submit").addEventListener("click", () => {
+    const name = document.getElementById("company-name").value.trim();
+    if (!name) { A.toast("Please enter a name"); return; }
+    const fields = {
+      name: name,
+      kundennummer: document.getElementById("company-kdnr").value.trim(),
+      password: document.getElementById("company-password").value,
+      login_enabled: webAccessOn,
     };
-
-    document.getElementById("closeAddCompanyModal").onclick = () => {
-        closeAddCompanyModal();
-    };
-
-    window.onclick = (e) => {
-        if (e.target.id === "addCompanyModal") {
-            closeAddCompanyModal();
-        }
-    };
-
-    function openDeleteCompanyModal() {
-        confirmDeleteCompanyModal.classList.add("is-open");
+    if (editingId != null) {
+      postForm("/api/edit-company", Object.assign({ company_id: editingId }, fields));
+    } else {
+      postForm("/api/create-company", fields);
     }
+  });
 
-    function closeDeleteCompanyModal() {
-        confirmDeleteCompanyModal.classList.remove("is-open");
+  let deleteCompanyId = null;
+  const delText = document.getElementById("delete-company-confirm-text");
+  const delBtn = document.getElementById("delete-company-confirm");
+  delText.addEventListener("input", () => {
+    delBtn.disabled = delText.value.trim().toLowerCase() !== "confirm";
+  });
+  delBtn.addEventListener("click", () => {
+    if (deleteCompanyId == null) return;
+    postForm("/api/delete-company", { company_id: deleteCompanyId });
+  });
+
+  document.getElementById("companies-table").addEventListener("click", e => {
+    const view = e.target.closest("[data-view]");
+    if (view) {
+      const c = COMPANIES.find(x => x.id === +view.getAttribute("data-view"));
+      window.location.href = "/?company=" + encodeURIComponent(c.name);
+      return;
     }
-
-    function openEditCompanyModal() {
-        editCompanyModal.classList.add("is-open");
+    const edit = e.target.closest("[data-edit]");
+    if (edit) {
+      openCompanyDrawer(COMPANIES.find(x => x.id === +edit.getAttribute("data-edit")));
+      return;
     }
-
-    function closeEditCompanyModal() {
-        editCompanyModal.classList.remove("is-open");
+    const del = e.target.closest("[data-delete]");
+    if (del) {
+      const c = COMPANIES.find(x => x.id === +del.getAttribute("data-delete"));
+      deleteCompanyId = c.id;
+      document.getElementById("delete-company-name").textContent = c.name;
+      delText.value = ""; delBtn.disabled = true;
+      A.openOverlay("delete-company-overlay");
     }
+  });
 
-    document.querySelectorAll(".action-button.delete").forEach(btn => {
-        btn.onclick = (e) => {
-            const card = e.currentTarget.closest(".user-card");
-            const companyId = card.dataset.companyId;
-            const companyName = card.dataset.companyName || "this company";
-            document.getElementById("delete-company-id").value = companyId;
-            if (deleteCompanyNameText) deleteCompanyNameText.textContent = companyName;
-            openDeleteCompanyModal();
-        };
-    });
+  document.getElementById("companies-search").addEventListener("input", e => { search = e.target.value; renderTable(); });
+  A.attachAutocomplete(document.getElementById("companies-search"), () => COMPANIES.map(c => c.name));
 
-    document.querySelectorAll(".action-button.search").forEach(btn => {
-        btn.onclick = (e) => {
-            const card = e.currentTarget.closest(".user-card");
-            const name = card.dataset.companyName || "";
-            window.location.href = `/search.html?company=${encodeURIComponent(name)}`;
-        };
-    });
-
-    window.addEventListener("click", (e) => {
-        if (e.target.id === "confirmDeleteCompanyModal") {
-            closeDeleteCompanyModal();
-        }
-    });
-
-    document.getElementById("cancelDeleteCompanyModal").onclick = () => {
-        closeDeleteCompanyModal();
-    };
-
-    document.getElementById("toggleCompanyPassword").addEventListener("click", () => {
-        const input = document.getElementById("company_password");
-        const icon = document.getElementById("toggleCompanyPassword");
-        const isVisible = input.type === "text";
-        input.type = isVisible ? "password" : "text";
-        icon.textContent = isVisible ? "visibility_off" : "visibility";
-    });
-
-    document.querySelectorAll(".action-button.edit").forEach(btn => {
-        btn.onclick = (e) => {
-            if (btn.disabled) return;
-            const card = e.currentTarget.closest(".user-card");
-            const companyId = card.dataset.companyId;
-            const name = card.dataset.companyName || "";
-            const kundennummer = (card.dataset.kundennummer || "").trim();
-
-            document.getElementById("edit-company-id").value = companyId;
-            document.getElementById("edit-company-name").value = name;
-            document.getElementById("edit-company-kundennummer").value = kundennummer;
-            document.getElementById("edit-company-password").value = "";
-            if (editCompanyNameText) editCompanyNameText.textContent = name || "this company";
-
-            openEditCompanyModal();
-        };
-    });
-
-    document.getElementById("closeEditCompanyModal").onclick = () => {
-        closeEditCompanyModal();
-    };
-
-    document.getElementById("cancelEditCompanyModal").onclick = () => {
-        closeEditCompanyModal();
-    };
-
-    window.addEventListener("click", (e) => {
-        if (e.target.id === "editCompanyModal") {
-            closeEditCompanyModal();
-        }
-    });
-
-    document.getElementById("toggleEditCompanyPassword").addEventListener("click", () => {
-        const input = document.getElementById("edit-company-password");
-        const icon = document.getElementById("toggleEditCompanyPassword");
-        const isVisible = input.type === "text";
-        input.type = isVisible ? "password" : "text";
-        icon.textContent = isVisible ? "visibility_off" : "visibility";
-    });
-
-    const searchCompanyInput =
-        document.getElementById("search-company-input") ||
-        document.getElementById("search-otp-input") ||
-        document.getElementById("search-input");
-
-    if (searchCompanyInput) {
-        const filterCompanies = (query) => {
-            const cards = document.querySelectorAll(".user-card");
-            let visibleCount = 0;
-
-            cards.forEach(card => {
-                const text = (card.dataset.search || "").toLowerCase();
-                const match = text.includes(query);
-                card.style.display = match ? "flex" : "none";
-                if (match) visibleCount++;
-            });
-
-            const emptyState = document.querySelector(".companies-empty-state");
-            if (emptyState && document.querySelectorAll(".user-card").length > 0) {
-                emptyState.style.display = visibleCount === 0 ? "flex" : "none";
-            }
-        };
-
-        const runFilter = (value) => filterCompanies((value || "").toLowerCase().trim());
-
-        searchCompanyInput.addEventListener("input", (e) => runFilter(e.target.value));
-        searchCompanyInput.addEventListener("input", debounce((e) => runFilter(e.target.value), 100));
-    }
-    document.addEventListener("DOMContentLoaded", () => {
-        document.body.classList.add("companies");
-
-        const scrollParam = new URLSearchParams(window.location.search).get("scroll");
-        if (scrollParam) {
-            const target = document.querySelector(`.user-card[data-company-id="${CSS.escape(scrollParam)}"]`);
-            if (target) {
-                setTimeout(() => {
-                    target.scrollIntoView({ behavior: "smooth", block: "center" });
-                    target.classList.add("company-scroll-highlight");
-                    setTimeout(() => target.classList.remove("company-scroll-highlight"), 2000);
-                }, 150);
-            }
-        }
-    });
+  renderTable();
+})();
 </script>
 {% endblock %}

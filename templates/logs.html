@@ -1,120 +1,313 @@
 {% extends "base.html" %}
+{% set active_page = 'logs' %}
 
-{% block title %}Live Logs{% endblock %}
+{% block title %}Logs | OTP-Tool{% endblock %}
 
-{% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='styles/log.css') }}">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-<script src="{{ url_for('static', filename='java-script/log.js') }}"></script>
-<script src="{{ url_for('static', filename='java-script/export.js') }}"></script>
+{% block page %}
+<div class="page">
+  <div class="logs-card">
+    <div class="logs-topbar">
+      <div class="logs-title">Logs</div>
+      <div class="topbar-sep"></div>
+
+      <div class="topbar-pop-wrap">
+        <button class="logs-filter-btn" id="logs-day-btn" type="button">
+          <span class="f-ico" data-icon="calendar"></span><span id="logs-day-label"></span>
+          <span class="f-chev" data-icon="chevron"></span>
+        </button>
+        <div class="day-pop" id="logs-day-pop"></div>
+      </div>
+      <div class="topbar-sep"></div>
+
+      <div class="topbar-pop-wrap">
+        <button class="logs-filter-btn" id="logs-level-btn" type="button">
+          Level
+          <span class="filter-count" id="logs-level-count" style="display:none"></span>
+          <span class="f-chev" data-icon="chevron"></span>
+        </button>
+        <div class="filter-pop" id="logs-levels"></div>
+      </div>
+      <div class="topbar-sep"></div>
+
+      <div class="topbar-pop-wrap">
+        <button class="logs-filter-btn" id="logs-source-btn" type="button">
+          Sources
+          <span class="filter-count" id="logs-source-count" style="display:none"></span>
+          <span class="f-chev" data-icon="chevron"></span>
+        </button>
+        <div class="filter-pop" id="logs-sources" style="min-width:170px"></div>
+      </div>
+      <div class="topbar-sep"></div>
+
+      <div class="topbar-search">
+        <span class="ico" data-icon="search"></span>
+        <input type="text" id="logs-search" placeholder="Search logs…" autocomplete="off">
+      </div>
+
+      <span id="logs-reset-wrap" style="display:none;align-items:stretch">
+        <div class="topbar-sep"></div>
+        <button class="logs-filter-btn" id="logs-reset" type="button" style="color:var(--text-dim)">Reset</button>
+      </span>
+
+      <div class="topbar-sep"></div>
+      <div class="logs-updated" id="logs-updated">Updated just now</div>
+      <div class="topbar-sep"></div>
+      <button class="live-pill on" id="logs-live" type="button">
+        <span class="ico" id="logs-live-ico"></span><span id="logs-live-label">Live</span>
+      </button>
+      <div class="topbar-sep"></div>
+      <button class="topbar-icon-btn" id="logs-refresh" title="Refresh" type="button">
+        <span style="width:14px;height:14px;display:flex" data-icon="refresh"></span>
+      </button>
+      <div class="topbar-sep"></div>
+      <div class="topbar-pop-wrap">
+        <button class="topbar-icon-btn" id="logs-more-btn" title="More" type="button">
+          <span style="width:14px;height:14px;display:flex" data-icon="dots"></span>
+        </button>
+        <div class="menu-pop" id="logs-more-pop">
+          <div class="menu-title">Actions</div>
+          <button id="logs-export-log" type="button">Export to .log</button>
+          <button id="logs-export-txt" type="button">Export to .txt</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="logs-table-wrap" id="logs-scroll">
+      <table class="logs-table">
+        <thead>
+          <tr>
+            <th style="width:110px">Timestamp</th>
+            <th style="width:95px">Level</th>
+            <th>Message</th>
+            <th style="width:156px">Source</th>
+          </tr>
+        </thead>
+        <tbody id="logs-tbody"></tbody>
+      </table>
+      <div id="logs-empty" style="padding:60px 0;text-align:center;color:var(--text-faint);font-size:13px;display:none">No log entries match these filters</div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
-{% block content %}
-<div class="logs-shell">
-    <aside class="filters">
-        <div class="filters-header">Filters</div>
+{% block scripts %}
+<script>
+(function () {
+  const A = window.App;
+  const DAYS = {{ log_folders|tojson }};
+  const TODAY = {{ today|tojson }};
+  const LEVEL_COLORS = { DEBUG: "#0b7285", INFO: "#3b5bdb", WARN: "#d9480f", ERROR: "#c92a2a", CRITICAL: "#a61e4d" };
+  const LEVELS = ["DEBUG", "INFO", "WARN", "ERROR", "CRITICAL"];
+  const LINE_RE = /^(\d{2}:\d{2}:\d{2})\s+\[(\w+)\]\s+\[([^\]]*)\]:\s?(.*)$/;
 
-        <div class="filter-group">
-            <button class="filter-section open" type="button" data-toggle="timeline">
-                <span>Timeline</span><i class="fa-solid fa-chevron-down"></i>
-            </button>
-            <div class="filter-body open" id="timeline">
-                <div class="select-like">
-                    <form method="get" id="dayForm">
-                        <input type="hidden" name="day" id="dayHidden">
-                        <button type="button" id="dayPicker">
-                            <i class="fa-regular fa-calendar"></i>
-                            <span id="dayLabel">{{ selected_day }}</span>
-                            <i class="fa-solid fa-chevron-down chevron"></i>
-                        </button>
-                        <div class="dropdown" id="dayDropdown">
-                            {% for folder in log_folders %}
-                                <div class="dropdown-item" data-day="{{ folder }}">{{ folder }}</div>
-                            {% endfor %}
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
+  let day = {{ selected_day|tojson }};
+  let entries = [];
+  let levelFilter = new Set();
+  let sourceFilter = new Set();
+  let search = "";
+  let live = true;
+  let lastUpdated = Date.now();
+  let pollTimer = null;
 
-        <div class="filter-group">
-          <button class="filter-section open" type="button" data-toggle="levels">
-            <span>Contains Level</span><i class="fa-solid fa-chevron-down"></i>
-          </button>
-          <div class="filter-body open" id="levels">
-            <label class="chk">
-              <input type="checkbox" class="lvl" value="DEBUG">
-              <span class="badge debug">DEBUG</span>
-              <b class="count" id="count-debug">0</b>
-            </label>
-            <label class="chk">
-              <input type="checkbox" class="lvl" value="INFO">
-              <span class="badge info">INFO</span>
-              <b class="count" id="count-info">0</b>
-            </label>
-            <label class="chk">
-              <input type="checkbox" class="lvl" value="WARN">
-              <span class="badge warn">WARN</span>
-              <b class="count" id="count-warn">0</b>
-            </label>
-            <label class="chk">
-              <input type="checkbox" class="lvl" value="ERROR">
-              <span class="badge error">ERROR</span>
-              <b class="count" id="count-error">0</b>
-            </label>
-            <label class="chk">
-              <input type="checkbox" class="lvl" value="CRITICAL">
-              <span class="badge critical">CRITICAL</span>
-              <b class="count" id="count-critical">0</b>
-            </label>
-          </div>
-        </div>
+  const tbody = document.getElementById("logs-tbody");
+  const scroller = document.getElementById("logs-scroll");
+  const POPS = ["logs-day-pop", "logs-levels", "logs-sources", "logs-more-pop"];
 
-        <div class="filter-group">
-            <button class="filter-section open" type="button" data-toggle="types">
-                <span>Sources</span><i class="fa-solid fa-chevron-down"></i>
-            </button>
-            <div class="filter-body open" id="types"></div>
-        </div>
+  function closePops(except) {
+    POPS.forEach(id => { if (id !== except) document.getElementById(id).classList.remove("open"); });
+  }
 
-        <div class="last-updated" id="lastUpdated">Last updated just now</div>
-    </aside>
+  function dayLabel(d) {
+    if (d === TODAY) return "Today";
+    const yd = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    if (d === yd) return "Yesterday";
+    return d;
+  }
 
-    <main class="logs-main">
-        <div class="topbar">
-            <div class="search-wrap">
-                <i class="fa-solid fa-magnifying-glass"></i>
-                <input id="searchInput" type="text" placeholder="Search…">
-            </div>
-            <div class="topbar-actions">
-              <button id="resetBtn" class="ghost"><i class="fa-regular fa-circle"></i> Reset Filter</button>
-              <button id="refreshBtn" class="icon" title="Refresh"><i class="fa-solid fa-rotate-right"></i> Refresh</button>
-              <button id="liveBtn" class="pill on"><i class="fa-solid fa-play"></i> Live</button>
-              <div class="more-menu-wrap">
-                <button id="moreBtn" class="icon" title="More"><i class="fa-solid fa-ellipsis-vertical"></i></button>
-                <div id="moreMenu" class="action-menu" hidden>
-                  <div class="menu-title">Actions</div>
-                  <button class="menu-item" data-ext="log">Export to .log</button>
-                  <button class="menu-item" data-ext="txt">Export to .txt</button>
-                </div>
-              </div>
-            </div>
-        </div>
+  function parseLines(lines) {
+    return (lines || []).map((line, i) => {
+      const m = line.replace(/\n$/, "").match(LINE_RE);
+      if (!m) return { ts: "", level: "INFO", source: "app", message: line.trim(), idx: i };
+      let level = m[2].toUpperCase();
+      if (level === "WARNING") level = "WARN";
+      return { ts: m[1], level: level, source: m[3], message: m[4], idx: i };
+    }).filter(e => e.message !== "");
+  }
 
-        <div class="table-wrap" id="tableScroll">
-            <table class="logs-table" id="logsTable">
-                <thead>
-                    <tr>
-                        <th class="ts">Timestamp</th>
-                        <th class="lvl">Level</th>
-                        <th class="msg">Message</th>
-                        <th class="src">Source</th>
-                    </tr>
-                </thead>
-                <tbody id="logsBody"></tbody>
-            </table>
-        </div>
-    </main>
-</div>
+  function filtered() {
+    const q = search.trim().toLowerCase();
+    return entries.filter(e => {
+      if (levelFilter.size && !levelFilter.has(e.level)) return false;
+      if (sourceFilter.size && !sourceFilter.has(e.source)) return false;
+      if (q && !((e.ts + " " + e.level + " " + e.source + " " + e.message).toLowerCase().includes(q))) return false;
+      return true;
+    });
+  }
 
+  function updateFilterBadges() {
+    const lvlCount = document.getElementById("logs-level-count");
+    lvlCount.style.display = levelFilter.size ? "flex" : "none";
+    lvlCount.textContent = levelFilter.size;
+    const srcCount = document.getElementById("logs-source-count");
+    srcCount.style.display = sourceFilter.size ? "flex" : "none";
+    srcCount.textContent = sourceFilter.size;
+    const hasAny = levelFilter.size > 0 || sourceFilter.size > 0 || search.trim().length > 0;
+    document.getElementById("logs-reset-wrap").style.display = hasAny ? "flex" : "none";
+  }
+
+  function renderTable() {
+    const rows = filtered();
+    document.getElementById("logs-empty").style.display = rows.length ? "none" : "block";
+    tbody.innerHTML = rows.map(e =>
+      "<tr><td class='ts'>" + A.escapeHtml(e.ts) + "</td>" +
+      "<td><span class='lvl-cell'><span class='lvl-dot' style='background:" + (LEVEL_COLORS[e.level] || "#888") + "'></span>" + A.escapeHtml(e.level) + "</span></td>" +
+      "<td>" + A.escapeHtml(e.message) + "</td>" +
+      "<td class='src'>" + A.escapeHtml(e.source) + "</td></tr>"
+    ).join("");
+    updateFilterBadges();
+    if (live) scroller.scrollTop = scroller.scrollHeight;
+  }
+
+  function renderFilters() {
+    const levelWrap = document.getElementById("logs-levels");
+    levelWrap.innerHTML = LEVELS.map(lv => {
+      const count = entries.filter(e => e.level === lv).length;
+      const color = LEVEL_COLORS[lv];
+      return '<label class="logs-check">' +
+        '<input type="checkbox" data-level="' + lv + '"' + (levelFilter.has(lv) ? " checked" : "") + ' style="accent-color:' + color + '">' +
+        '<span class="level-badge" style="background:color-mix(in srgb, ' + color + ' 16%, transparent);color:' + color + '">' + lv + "</span>" +
+        '<span class="count">' + count + "</span></label>";
+    }).join("");
+
+    const sources = [...new Set(entries.map(e => e.source))].sort();
+    document.getElementById("logs-sources").innerHTML = sources.map(src =>
+      '<label class="logs-check"><input type="checkbox" data-source="' + A.escapeHtml(src) + '"' +
+      (sourceFilter.has(src) ? " checked" : "") + ' style="accent-color:var(--accent)">' + A.escapeHtml(src) + "</label>"
+    ).join("") || '<div style="padding:6px 8px;font-size:12px;color:var(--text-faint)">No sources</div>';
+
+    document.getElementById("logs-day-label").textContent = dayLabel(day);
+    document.getElementById("logs-day-pop").innerHTML = DAYS.map(d =>
+      '<div class="day-opt' + (d === day ? " active" : "") + '" data-day="' + d + '">' + dayLabel(d) + "</div>"
+    ).join("");
+    updateFilterBadges();
+  }
+
+  function renderSkeletonRows() {
+    let html = "";
+    for (let i = 0; i < 12; i++) {
+      const msgW = 40 + Math.round(Math.random() * 45);
+      html += "<tr class='skeleton-wrap'>" +
+        "<td><div class='skeleton skeleton-text sm' style='width:62px'></div></td>" +
+        "<td><div class='skeleton skeleton-text sm' style='width:54px;border-radius:999px'></div></td>" +
+        "<td><div class='skeleton skeleton-text' style='width:" + msgW + "%'></div></td>" +
+        "<td><div class='skeleton skeleton-text sm' style='width:92px'></div></td></tr>";
+    }
+    tbody.innerHTML = html;
+    document.getElementById("logs-empty").style.display = "none";
+  }
+
+  function updatedLabel() {
+    const secs = Math.max(0, Math.floor((Date.now() - lastUpdated) / 1000));
+    const label = secs < 1 ? "Updated just now" : secs < 60 ? "Updated " + secs + "s ago" : "Updated " + Math.floor(secs / 60) + "m ago";
+    document.getElementById("logs-updated").textContent = label;
+  }
+  setInterval(updatedLabel, 1000);
+
+  async function fetchLogs(showToast) {
+    try {
+      const res = await A.fetchJSON("/api/logs?day=" + encodeURIComponent(day));
+      entries = parseLines(res.logs);
+      lastUpdated = Date.now();
+      renderFilters();
+      renderTable();
+      updatedLabel();
+      if (showToast) A.toast("Logs refreshed");
+    } catch (err) { if (showToast) A.toast(err.message); }
+  }
+
+  function setLive(v) {
+    live = v;
+    const pill = document.getElementById("logs-live");
+    pill.classList.toggle("on", live);
+    document.getElementById("logs-live-label").textContent = live ? "Live" : "Paused";
+    document.getElementById("logs-live-ico").innerHTML = live ? A.ICONS.pause : A.ICONS.play;
+    clearInterval(pollTimer);
+    if (live) pollTimer = setInterval(() => fetchLogs(false), 3000);
+  }
+
+  /* popover toggles */
+  function bindPop(btnId, popId) {
+    document.getElementById(btnId).addEventListener("click", e => {
+      e.stopPropagation();
+      const pop = document.getElementById(popId);
+      const wasOpen = pop.classList.contains("open");
+      closePops();
+      pop.classList.toggle("open", !wasOpen);
+    });
+    document.getElementById(popId).addEventListener("click", e => e.stopPropagation());
+  }
+  bindPop("logs-day-btn", "logs-day-pop");
+  bindPop("logs-level-btn", "logs-levels");
+  bindPop("logs-source-btn", "logs-sources");
+  bindPop("logs-more-btn", "logs-more-pop");
+  document.addEventListener("click", () => closePops());
+
+  /* filter interactions */
+  document.getElementById("logs-levels").addEventListener("change", e => {
+    const cb = e.target.closest("[data-level]");
+    if (!cb) return;
+    const lv = cb.getAttribute("data-level");
+    if (levelFilter.has(lv)) levelFilter.delete(lv); else levelFilter.add(lv);
+    renderTable();
+  });
+  document.getElementById("logs-sources").addEventListener("change", e => {
+    const cb = e.target.closest("[data-source]");
+    if (!cb) return;
+    const src = cb.getAttribute("data-source");
+    if (sourceFilter.has(src)) sourceFilter.delete(src); else sourceFilter.add(src);
+    renderTable();
+  });
+  document.getElementById("logs-day-pop").addEventListener("click", e => {
+    const opt = e.target.closest("[data-day]");
+    if (!opt) return;
+    day = opt.getAttribute("data-day");
+    closePops();
+    levelFilter.clear(); sourceFilter.clear();
+    entries = [];
+    renderSkeletonRows();
+    fetchLogs(false);
+  });
+
+  document.getElementById("logs-search").addEventListener("input", e => { search = e.target.value; renderTable(); });
+  A.attachAutocomplete(document.getElementById("logs-search"), () => {
+    const sources = new Set();
+    entries.forEach(e => { if (e.source) sources.add(e.source); });
+    return LEVELS.concat(Array.from(sources));
+  });
+  document.getElementById("logs-reset").addEventListener("click", () => {
+    levelFilter.clear(); sourceFilter.clear(); search = "";
+    document.getElementById("logs-search").value = "";
+    renderFilters(); renderTable();
+  });
+  document.getElementById("logs-refresh").addEventListener("click", () => fetchLogs(true));
+  document.getElementById("logs-live").addEventListener("click", () => setLive(!live));
+
+  function exportLogs(ext) {
+    const text = filtered().map(e => day + " " + e.ts + " [" + e.level + "] [" + e.source + "]: " + e.message).join("\n");
+    const blob = new Blob([text], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "otp-logs-" + day + "." + ext; a.click();
+    URL.revokeObjectURL(url);
+    closePops();
+    A.toast("Exported ." + ext);
+  }
+  document.getElementById("logs-export-log").addEventListener("click", () => exportLogs("log"));
+  document.getElementById("logs-export-txt").addEventListener("click", () => exportLogs("txt"));
+
+  renderSkeletonRows();
+  setLive(true);
+  fetchLogs(false);
+})();
+</script>
 {% endblock %}

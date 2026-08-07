@@ -502,16 +502,19 @@ def create_company():
         return redirect("/companies")
     t0 = time.perf_counter()
     name = request.form.get("name")
-    kundennummer = request.form.get("kundennummer")
+    kundennummer = request.form.get("kundennummer") or None
+    password = (request.form.get("password") or "").strip()
+    login_enabled = 1 if request.form.get("login_enabled") in ("on", "true", "1") else 0
     if not name:
         logger.warning(f"{u(getattr(g, 'user_id', None))} create_company result=missing_name")
         return jsonify({"error": "Missing name"}), 400
+    hashed_password = bcrypt.generate_password_hash(password).decode("utf-8") if password else None
     with sqlite3.connect(DB_PATH) as db:
         cursor = db.cursor()
-        if kundennummer:
-            cursor.execute("INSERT INTO companies (name, kundennummer) VALUES (?, ?)", (name, kundennummer))
-        else:
-            cursor.execute("INSERT INTO companies (name) VALUES (?)", (name,))
+        cursor.execute(
+            "INSERT INTO companies (name, kundennummer, password, login_enabled) VALUES (?, ?, ?, ?)",
+            (name, kundennummer, hashed_password, login_enabled),
+        )
         db.commit()
         new_id = cursor.lastrowid
     dt = round((time.perf_counter() - t0) * 1000)
@@ -553,6 +556,7 @@ def edit_company():
     name = request.form.get("name")
     kundennummer = request.form.get("kundennummer")
     password = request.form.get("password")
+    login_enabled = 1 if request.form.get("login_enabled") in ("on", "true", "1") else 0
 
     if not company_id or not name:
         logger.warning(f"{u(getattr(g, 'user_id', None))} edit_company result=missing_fields")
@@ -570,13 +574,13 @@ def edit_company():
         cursor = db.cursor()
         if hashed_password:
             cursor.execute(
-                "UPDATE companies SET name = ?, kundennummer = ?, password = ? WHERE company_id = ?",
-                (name, kundennummer, hashed_password, company_id),
+                "UPDATE companies SET name = ?, kundennummer = ?, password = ?, login_enabled = ? WHERE company_id = ?",
+                (name, kundennummer, hashed_password, login_enabled, company_id),
             )
         else:
             cursor.execute(
-                "UPDATE companies SET name = ?, kundennummer = ? WHERE company_id = ?",
-                (name, kundennummer, company_id),
+                "UPDATE companies SET name = ?, kundennummer = ?, login_enabled = ? WHERE company_id = ?",
+                (name, kundennummer, login_enabled, company_id),
             )
         db.commit()
 

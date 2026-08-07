@@ -2,7 +2,13 @@ from flask import Flask, render_template, request, redirect, url_for, flash, ses
 import sqlite3
 import json
 import os
+import sys
+import shutil
 import uuid
+import urllib.request
+import subprocess
+import signal
+import struct
 from datetime import datetime
 import time
 from functools import wraps
@@ -10,19 +16,224 @@ from api import api_bp
 from extensions import bcrypt
 from logger import logger
 import threading
-from database import hourly_maintenance, acquire_lock, release_lock, get_missing_columns, ensure_dirs, init_db
+from flask_socketio import SocketIO, emit, join_room, disconnect
+from database import (
+    hourly_maintenance, acquire_lock, release_lock, get_missing_columns,
+    ensure_dirs, init_db, backup_db, load_state, save_state,
+    normalize_secrets, check_orphans, BACKUP_DIR,
+)
+
+try:
+    import pty
+    import fcntl
+    import termios
+except ImportError:
+    pty = fcntl = termios = None
 
 _LOGIN_MAX_ATTEMPTS = 5
-_LOGIN_LOCKOUT_SECONDS = 900 
+_LOGIN_LOCKOUT_SECONDS = 900
 _login_attempts: dict = {}
 _login_lock = threading.Lock()
 
 app = Flask(__name__)
 bcrypt.init_app(app)
+socketio = SocketIO(app, async_mode="threading")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join("instance", "otp.db")
 SETTINGS_PATH = os.path.join(BASE_DIR, "settings.json")
+AVATAR_DIR = os.path.join(BASE_DIR, "static", "avatars")
+os.makedirs(AVATAR_DIR, exist_ok=True)
+AVATAR_EXTS = ("png", "jpg", "webp")
+AVATAR_MAX_BYTES = 3 * 1024 * 1024
+SERVER_START_TIME = time.time()
+STATE_PATH = os.path.join(BASE_DIR, "otp-server.state.json")
+
+def get_server_started_at():
+    # otp-server.state.json is written by start.py when it launches this
+    # process, so it reflects the real supervised uptime rather than
+    # whenever this Python interpreter last happened to import app.py.
+    try:
+        with open(STATE_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f) or {}
+        started_at = data.get("started_at")
+        if started_at:
+            return float(started_at)
+    except Exception:
+        pass
+    return SERVER_START_TIME
+
+# ---- remote console ----------------------------------------------------
+# Bridges a single shared start.py dashboard, running in a real pty on the
+# server, to admins connected over the /console websocket namespace. All
+# connected admins see the same session (like `screen -x`) since the CLI is
+# meant to be driven by one operator at a time.
+CONSOLE_CMD = [sys.executable or "python3", os.path.join(BASE_DIR, "start.py")]
+_CONSOLE_BUFFER_MAX = 200_000
+_console_lock = threading.Lock()
+_console = {"proc": None, "fd": None}
+_console_buffer = bytearray()
+
+def _console_reader(fd, proc):
+    while True:
+        try:
+            data = os.read(fd, 4096)
+        except OSError:
+            break
+        if not data:
+            break
+        with _console_lock:
+            _console_buffer.extend(data)
+            if len(_console_buffer) > _CONSOLE_BUFFER_MAX:
+                del _console_buffer[: len(_console_buffer) - _CONSOLE_BUFFER_MAX]
+        socketio.emit("output", data.decode("utf-8", "replace"), namespace="/console", room="console")
+    proc.wait()
+    with _console_lock:
+        if _console["proc"] is proc:
+            _console["proc"] = None
+            _console["fd"] = None
+    socketio.emit("exited", {}, namespace="/console", room="console")
+
+def _console_start():
+    if pty is None:
+        return False, "Remote console isn't supported on this platform."
+    with _console_lock:
+        proc = _console["proc"]
+        if proc is not None and proc.poll() is None:
+            return True, None
+        master_fd, slave_fd = pty.openpty()
+        env = os.environ.copy()
+        env["TERM"] = "xterm-256color"
+        try:
+            proc = subprocess.Popen(
+                CONSOLE_CMD,
+                cwd=BASE_DIR,
+                stdin=slave_fd,
+                stdout=slave_fd,
+                stderr=slave_fd,
+                env=env,
+                preexec_fn=os.setsid,
+                close_fds=True,
+            )
+        except Exception as e:
+            os.close(master_fd)
+            os.close(slave_fd)
+            return False, f"Failed to start console: {e}"
+        os.close(slave_fd)
+        _console["proc"] = proc
+        _console["fd"] = master_fd
+        _console_buffer.clear()
+        threading.Thread(target=_console_reader, args=(master_fd, proc), daemon=True).start()
+        return True, None
+
+def _console_write(data: bytes):
+    with _console_lock:
+        fd = _console["fd"]
+    if fd is not None:
+        try:
+            os.write(fd, data)
+        except OSError:
+            pass
+
+def _console_resize(rows, cols):
+    with _console_lock:
+        fd = _console["fd"]
+        proc = _console["proc"]
+    if fd is None or fcntl is None or termios is None:
+        return
+    try:
+        fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
+        if proc is not None:
+            os.killpg(os.getpgid(proc.pid), signal.SIGWINCH)
+    except OSError:
+        pass
+
+def _console_stop():
+    with _console_lock:
+        proc = _console["proc"]
+        fd = _console["fd"]
+        _console["proc"] = None
+        _console["fd"] = None
+    if proc is not None:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        except OSError:
+            pass
+    if fd is not None:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+
+def _console_authorized():
+    load_user()
+    return bool(g.logged_in and g.is_admin)
+
+@socketio.on("connect", namespace="/console")
+def console_connect():
+    if not _console_authorized():
+        logger.warning("rejected unauthorized remote console connection attempt")
+        disconnect()
+        return False
+    join_room("console")
+    ok, err = _console_start()
+    if not ok:
+        emit("error", {"message": err})
+        return
+    with _console_lock:
+        snapshot = bytes(_console_buffer)
+    if snapshot:
+        emit("output", snapshot.decode("utf-8", "replace"))
+    logger.info(f"{u(g.user_id)} opened the remote console")
+
+@socketio.on("input", namespace="/console")
+def console_input(data):
+    if not _console_authorized() or not isinstance(data, str):
+        return
+    _console_write(data.encode("utf-8"))
+
+@socketio.on("resize", namespace="/console")
+def console_resize_evt(data):
+    if not _console_authorized() or not isinstance(data, dict):
+        return
+    try:
+        rows = int(data.get("rows", 24))
+        cols = int(data.get("cols", 80))
+    except (TypeError, ValueError):
+        return
+    _console_resize(rows, cols)
+
+@socketio.on("stop_console", namespace="/console")
+def console_stop_evt():
+    if not _console_authorized():
+        return
+    logger.warning(f"{u(g.user_id)} ended the remote console session")
+    _console_stop()
+    socketio.emit("exited", {}, namespace="/console", room="console")
+
+def sniff_avatar_ext(data):
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "png"
+    if data[:3] == b"\xff\xd8\xff":
+        return "jpg"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "webp"
+    return None
+
+def get_avatar_url(user_id):
+    if not user_id:
+        return None
+    for ext in AVATAR_EXTS:
+        path = os.path.join(AVATAR_DIR, f"{user_id}.{ext}")
+        if os.path.isfile(path):
+            return url_for("static", filename=f"avatars/{user_id}.{ext}") + f"?v={int(os.path.getmtime(path))}"
+    return None
+
+def remove_avatar_files(user_id):
+    for ext in AVATAR_EXTS:
+        path = os.path.join(AVATAR_DIR, f"{user_id}.{ext}")
+        if os.path.isfile(path):
+            os.remove(path)
 
 def load_app_settings():
     defaults = {
@@ -41,10 +252,12 @@ def load_app_settings():
     except:
         port = defaults["port"]
     secret_key = str(os.environ.get("OTP_SECRET_KEY") or data.get("secret_key") or defaults["secret_key"]).strip() or defaults["secret_key"]
+    company_name = str(data.get("company_name") or "").strip()
     return {
         "host": host,
         "port": port,
-        "secret_key": secret_key
+        "secret_key": secret_key,
+        "company_name": company_name
     }
 
 APP_SETTINGS = load_app_settings()
@@ -259,6 +472,8 @@ def inject_user():
         is_logged_in=g.logged_in,
         is_admin=g.is_admin,
         current_user_id=g.user_id,
+        username=g.username,
+        avatar_url=get_avatar_url(g.user_id) if g.logged_in else None,
         can_delete=g.can_delete,
         can_edit=g.can_edit,
         can_add_companies=g.can_add_companies,
@@ -267,7 +482,9 @@ def inject_user():
         can_add_users=g.can_add_users,
         user_settings=g.user_settings,
         show_index_button=INDEX_TEMPLATE_PRESENT,
-        app_version=get_app_version()
+        app_version=get_app_version(),
+        current_year=datetime.now().year,
+        company_brand=APP_SETTINGS.get("company_name", "")
     )
 
 @app.route("/login", methods=["GET", "POST"])
@@ -383,7 +600,8 @@ def users():
         """)
         user_list = cursor.fetchall()
 
-    return render_template("users.html", users=user_list, current_user_id=g.user_id)
+    users_with_avatars = [tuple(u) + (get_avatar_url(u[0]),) for u in user_list]
+    return render_template("users.html", users=users_with_avatars, current_user_id=g.user_id)
 
 @app.route("/companies")
 @login_required
@@ -400,10 +618,11 @@ def companies():
             SELECT c.company_id,
                    c.name,
                    c.kundennummer,
-                   COUNT(s.id) AS secret_count
+                   COUNT(s.id) AS secret_count,
+                   c.login_enabled
             FROM companies c
             LEFT JOIN otp_secrets s ON s.company_id = c.company_id
-            GROUP BY c.company_id, c.name, c.kundennummer
+            GROUP BY c.company_id, c.name, c.kundennummer, c.login_enabled
             ORDER BY c.name ASC
             """
         )
@@ -497,6 +716,31 @@ def update_settings():
         flash("Could not save settings.", "error")
     return redirect(url_for("settings"))
 
+@app.route("/api/account/avatar", methods=["POST"])
+@login_required
+def upload_avatar():
+    file = request.files.get("avatar")
+    if not file or not file.filename:
+        return jsonify({"error": "No file provided"}), 400
+    data = file.read(AVATAR_MAX_BYTES + 1)
+    if len(data) > AVATAR_MAX_BYTES:
+        return jsonify({"error": "Image must be 3MB or smaller"}), 400
+    ext = sniff_avatar_ext(data)
+    if not ext:
+        return jsonify({"error": "Only PNG, JPEG, or WebP images are allowed"}), 400
+    remove_avatar_files(g.user_id)
+    with open(os.path.join(AVATAR_DIR, f"{g.user_id}.{ext}"), "wb") as f:
+        f.write(data)
+    logger.info(f"{u(g.user_id)} updated their profile photo")
+    return jsonify({"avatar_url": get_avatar_url(g.user_id)})
+
+@app.route("/api/account/avatar", methods=["DELETE"])
+@login_required
+def delete_avatar():
+    remove_avatar_files(g.user_id)
+    logger.info(f"{u(g.user_id)} removed their profile photo")
+    return jsonify({"message": "Profile photo removed"})
+
 @app.route("/add", methods=["GET", "POST"])
 @login_required
 @permission_required("can_add_secrets")
@@ -571,111 +815,342 @@ def user_pinned():
 @app.route("/search.html")
 @login_required
 def search_page():
-    search_raw = request.args.get("search")
-    if search_raw is None:
-        search_raw = request.args.get("q", "")
-    q_raw = search_raw
-    q = q_raw.strip().lower()
-
-    company_raw = request.args.get("company", "")
-    company_q = company_raw.strip().lower()
-
-    admin_on_top = g.user_settings.get("show_including_admin_on_top", 0)
-
-    with sqlite3.connect(DB_PATH) as db:
-        cursor = db.cursor()
-
-        if company_q:
-            cursor.execute("SELECT company_id, name FROM companies WHERE LOWER(name) = ?", (company_q,))
-            company = cursor.fetchone()
-            if company:
-                company_id, company_name = company
-                if admin_on_top:
-                    cursor.execute(
-                        """
-                        SELECT s.name, s.email, c.name
-                        FROM otp_secrets s
-                        LEFT JOIN companies c ON s.company_id = c.company_id
-                        WHERE s.company_id = ?
-                        ORDER BY CASE WHEN LOWER(s.name) LIKE '%admin%' THEN 0 ELSE 1 END ASC, s.name ASC
-                        """,
-                        (company_id,),
-                    )
-                else:
-                    cursor.execute(
-                        """
-                        SELECT s.name, s.email, c.name
-                        FROM otp_secrets s
-                        LEFT JOIN companies c ON s.company_id = c.company_id
-                        WHERE s.company_id = ?
-                        ORDER BY s.name ASC
-                        """,
-                        (company_id,),
-                    )
-                results = cursor.fetchall()
-                logger.info(f"{u(g.user_id)} company-search '{company_name}' — {len(results)} results.")
-                return render_template("search.html", query=company_name, results=results)
-
-            logger.info(f"{u(g.user_id)} company-search '{company_raw}' — 0 results (company not found).")
-            return render_template("search.html", query=company_raw, results=[])
-
-        cursor.execute("SELECT company_id, name FROM companies WHERE LOWER(name) = ?", (q,))
-        company = cursor.fetchone()
-        if company and q:
-            return redirect(url_for("search_page", company=search_raw.strip() if isinstance(search_raw, str) else q_raw.strip()))
-
-        if admin_on_top:
-            cursor.execute(
-                """
-                SELECT s.name, s.email, c.name
-                FROM otp_secrets s
-                LEFT JOIN companies c ON s.company_id = c.company_id
-                WHERE LOWER(s.name) LIKE ? OR LOWER(s.email) LIKE ? OR LOWER(c.name) LIKE ?
-                ORDER BY CASE WHEN LOWER(s.name) LIKE '%admin%' THEN 0 ELSE 1 END ASC, c.name ASC, s.name ASC
-                """,
-                (f"%{q}%", f"%{q}%", f"%{q}%"),
-            )
-        else:
-            cursor.execute(
-                """
-                SELECT s.name, s.email, c.name
-                FROM otp_secrets s
-                LEFT JOIN companies c ON s.company_id = c.company_id
-                WHERE LOWER(s.name) LIKE ? OR LOWER(s.email) LIKE ? OR LOWER(c.name) LIKE ?
-                ORDER BY c.name ASC, s.name ASC
-                """,
-                (f"%{q}%", f"%{q}%", f"%{q}%"),
-            )
-        results = cursor.fetchall()
-
-    logger.info(f"{u(g.user_id)} searched for '{search_raw if isinstance(search_raw, str) else q_raw}' — {len(results)} results.")
-    return render_template("search.html", query=search_raw if isinstance(search_raw, str) else q_raw, results=results)
+    """Search now lives on the home screen — keep old links working."""
+    q = (request.args.get("search") or request.args.get("q") or "").strip()
+    company = (request.args.get("company") or "").strip()
+    if company:
+        return redirect(url_for("home", company=company))
+    return redirect(url_for("home", q=q) if q else url_for("home"))
 
 @app.route("/logs")
 @login_required
 @admin_required
 def view_logs():
-    if not g.is_admin:
-        flash("Access denied.", "error")
-        logger.warning(f"{u(g.user_id)} tried to access /logs without admin permissions.")
-        return redirect(url_for("home"))
-
-    selected_day = request.args.get("day") or datetime.now().strftime("%Y-%m-%d")
-    folder_path = os.path.join("logs", selected_day)
-    log_file = os.path.join(folder_path, "app.log")
+    today = datetime.now().strftime("%Y-%m-%d")
+    selected_day = request.args.get("day") or today
 
     try:
-        with open(log_file, "r") as f:
-            lines = f.readlines()[-500:]
+        log_folders = sorted(
+            [name for name in os.listdir("logs") if os.path.isdir(os.path.join("logs", name))],
+            reverse=True,
+        )
     except FileNotFoundError:
-        lines = []
+        log_folders = []
+    if not log_folders:
+        log_folders = [today]
 
-    log_folders = sorted(
-        [name for name in os.listdir("logs") if os.path.isdir(os.path.join("logs", name))],
-        reverse=True,
+    return render_template("logs.html", log_folders=log_folders, selected_day=selected_day, today=today)
+
+def admin_required_json(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not g.logged_in:
+            return jsonify({"error": "Authentication required"}), 401
+        if not g.is_admin:
+            logger.warning(f"{u(g.user_id)} attempted admin-only API access path={request.path}")
+            return jsonify({"error": "Admin access required"}), 403
+        return f(*args, **kwargs)
+    return decorated_function
+
+@app.route("/webaccess")
+@login_required
+@admin_required
+def webaccess():
+    with sqlite3.connect(DB_PATH) as db:
+        cursor = db.cursor()
+        cursor.execute("SELECT company_id, name, login_enabled FROM companies ORDER BY name ASC")
+        company_list = cursor.fetchall()
+    return render_template("webaccess.html", companies=company_list)
+
+@app.route("/api/toggle-web-access", methods=["POST"])
+@admin_required_json
+def toggle_web_access():
+    data = request.get_json() or {}
+    company_id = data.get("company_id")
+    enabled = 1 if data.get("enabled") else 0
+    if not company_id:
+        return jsonify({"error": "Missing company_id"}), 400
+    with sqlite3.connect(DB_PATH) as db:
+        cursor = db.cursor()
+        cursor.execute("UPDATE companies SET login_enabled = ? WHERE company_id = ?", (enabled, company_id))
+        db.commit()
+        if not cursor.rowcount:
+            return jsonify({"error": "Company not found"}), 404
+    logger.info(f"{u(g.user_id)} set web access enabled={bool(enabled)} for company id={company_id}")
+    return jsonify({"enabled": bool(enabled)})
+
+def _list_backups():
+    backups = []
+    try:
+        for name in os.listdir(BACKUP_DIR):
+            if not (name.startswith("otp_") and name.endswith(".db")):
+                continue
+            path = os.path.join(BACKUP_DIR, name)
+            try:
+                size = os.path.getsize(path)
+                mtime = os.path.getmtime(path)
+            except OSError:
+                continue
+            backups.append({
+                "name": name,
+                "date": datetime.fromtimestamp(mtime).strftime("%b %d, %H:%M"),
+                "size": f"{size / (1024 * 1024):.1f} MB",
+                "mtime": mtime,
+            })
+    except FileNotFoundError:
+        pass
+    backups.sort(key=lambda b: b["mtime"], reverse=True)
+    for b in backups:
+        del b["mtime"]
+    return backups
+
+@app.route("/database")
+@login_required
+@admin_required
+def database_page():
+    try:
+        size_mb = round(os.path.getsize(DB_PATH) / (1024 * 1024), 1)
+    except OSError:
+        size_mb = 0.0
+    with sqlite3.connect(DB_PATH) as db:
+        cursor = db.cursor()
+        cursor.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+        tables = cursor.fetchone()[0]
+        records = 0
+        for table in ("otp_secrets", "users", "companies"):
+            try:
+                cursor.execute(f"SELECT COUNT(*) FROM {table}")
+                records += cursor.fetchone()[0]
+            except sqlite3.Error:
+                pass
+
+    backups = _list_backups()
+    last_backup = backups[0]["date"] if backups else "Never"
+    last_vacuum = load_state().get("last_vacuum") or "Unknown"
+    if last_vacuum == datetime.now().strftime("%Y-%m-%d"):
+        last_vacuum = "Today"
+
+    stats = [
+        {"label": "Database size", "value": f"{size_mb} MB"},
+        {"label": "Tables", "value": tables},
+        {"label": "Total records", "value": records},
+        {"label": "Last backup", "value": last_backup},
+        {"label": "Last vacuum", "value": last_vacuum},
+    ]
+    return render_template("database.html", stats=stats, backups=backups, size_mb=size_mb)
+
+_SCHEMA_COLUMN_DEFAULTS = {
+    "users.can_delete": "INTEGER DEFAULT 0",
+    "users.can_edit": "INTEGER DEFAULT 0",
+    "users.can_add_companies": "INTEGER DEFAULT 0",
+    "users.can_delete_companies": "INTEGER DEFAULT 0",
+    "users.can_add_secrets": "INTEGER DEFAULT 0",
+    "users.can_add_users": "INTEGER DEFAULT 0",
+    "users.blur_on_inactive": "INTEGER DEFAULT 1",
+    "users.show_including_admin_on_top": "INTEGER DEFAULT 0",
+    "users.hide_codes_by_default": "INTEGER DEFAULT 0",
+    "users.hide_secret_field": "INTEGER DEFAULT 0",
+    "users.show_search_and_link": "INTEGER DEFAULT 0",
+    "companies.login_enabled": "INTEGER DEFAULT 0",
+}
+
+@app.route("/api/db/task", methods=["POST"])
+@admin_required_json
+def run_db_task():
+    data = request.get_json() or {}
+    task = data.get("task")
+    logger.info(f"{u(g.user_id)} started database task '{task}'")
+
+    try:
+        if task == "vacuum":
+            with sqlite3.connect(DB_PATH) as db:
+                db.isolation_level = None
+                db.execute("VACUUM")
+                db.execute("PRAGMA optimize")
+            state = load_state()
+            state["last_vacuum"] = datetime.now().strftime("%Y-%m-%d")
+            save_state(state)
+            return jsonify({"message": "Vacuum & optimize completed"})
+
+        if task == "schema":
+            missing = get_missing_columns()
+            if not missing:
+                return jsonify({"message": "Schema is up to date"})
+            with sqlite3.connect(DB_PATH) as db:
+                cursor = db.cursor()
+                for item in missing:
+                    table, col = item.split(".", 1)
+                    coldef = _SCHEMA_COLUMN_DEFAULTS.get(item, "INTEGER DEFAULT 0")
+                    cursor.execute(f"ALTER TABLE {table} ADD COLUMN {col} {coldef}")
+                db.commit()
+            return jsonify({"message": f"Schema updated — added {len(missing)} missing column(s)"})
+
+        if task == "integrity":
+            with sqlite3.connect(DB_PATH) as db:
+                cursor = db.cursor()
+                cursor.execute("PRAGMA integrity_check")
+                integrity_ok = (cursor.fetchone() or ["error"])[0].lower() == "ok"
+                cursor.execute("PRAGMA foreign_key_check")
+                fk_issues = len(cursor.fetchall())
+            orphans = check_orphans()
+            result = f"{orphans} orphaned records · {fk_issues} broken foreign keys · schema {'OK' if integrity_ok else 'ISSUES FOUND'}"
+            return jsonify({"message": "Integrity check completed", "result": result})
+
+        if task == "repair":
+            normalize_secrets()
+            with sqlite3.connect(DB_PATH) as db:
+                db.execute("REINDEX")
+            return jsonify({"message": "Database repaired"})
+
+        if task == "reset_sessions":
+            with sqlite3.connect(DB_PATH) as db:
+                cursor = db.cursor()
+                cursor.execute("SELECT id FROM users")
+                for (uid,) in cursor.fetchall():
+                    cursor.execute("UPDATE users SET session_token = ? WHERE id = ?", (str(uuid.uuid4()), uid))
+                db.commit()
+            return jsonify({"message": "All sessions reset — every user will need to log in again"})
+
+        if task == "backup":
+            dest = backup_db()
+            if not dest:
+                return jsonify({"error": "No database file found"}), 500
+            return jsonify({"message": "Backup created"})
+
+        return jsonify({"error": "Unknown task"}), 400
+    except Exception as e:
+        logger.exception(f"database task '{task}' failed: {e}")
+        return jsonify({"error": f"Task failed: {e}"}), 500
+
+@app.route("/api/db/backups")
+@admin_required_json
+def db_backups():
+    return jsonify(_list_backups())
+
+@app.route("/api/db/load-backup", methods=["POST"])
+@admin_required_json
+def db_load_backup():
+    data = request.get_json() or {}
+    name = data.get("name") or ""
+    valid_names = {b["name"] for b in _list_backups()}
+    if name not in valid_names:
+        return jsonify({"error": "Unknown backup"}), 400
+    src = os.path.join(BACKUP_DIR, name)
+    try:
+        backup_db()
+        shutil.copyfile(src, os.path.join(BASE_DIR, DB_PATH))
+        for suffix in ("-wal", "-shm"):
+            side = os.path.join(BASE_DIR, DB_PATH) + suffix
+            if os.path.exists(side):
+                os.remove(side)
+        logger.warning(f"{u(g.user_id)} restored database backup {name}")
+        return jsonify({"message": f"Loaded {name} — a safety backup of the previous database was created"})
+    except Exception as e:
+        logger.exception(f"restore of backup {name} failed: {e}")
+        return jsonify({"error": f"Restore failed: {e}"}), 500
+
+@app.route("/server")
+@login_required
+@admin_required
+def server_page():
+    # Show the persisted settings.json values (not env overrides) so saving
+    # never accidentally persists a temporary override.
+    try:
+        with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
+            stored = json.load(f) or {}
+    except Exception:
+        stored = {}
+    cli_command = f"cd {BASE_DIR} && {os.path.basename(sys.executable or 'python3')} start.py"
+    return render_template(
+        "server.html",
+        server_port=stored.get("port", APP_SETTINGS.get("port", 7440)),
+        server_secret=stored.get("secret_key", ""),
+        company_brand=stored.get("company_name", APP_SETTINGS.get("company_name", "")),
+        cli_command=cli_command,
+        server_started_at=get_server_started_at(),
+        github_url="https://github.com/Migrim/OTP-Manager-Refactored",
     )
 
-    return render_template("logs.html", logs=lines, log_folders=log_folders, selected_day=selected_day)
+@app.route("/api/server/check-update")
+@admin_required_json
+def server_check_update():
+    url = "https://raw.githubusercontent.com/Migrim/OTP-Manager-Refactored/main/VERSION"
+    current = get_app_version()
+    try:
+        with urllib.request.urlopen(url, timeout=8) as res:
+            latest = res.read().decode("utf-8").strip()
+    except Exception as e:
+        logger.warning(f"update check failed: {e}")
+        return jsonify({"error": "Could not reach the update server"}), 502
+
+    def vtuple(v):
+        parts = []
+        for chunk in v.strip().lstrip("v").split("."):
+            digits = "".join(ch for ch in chunk if ch.isdigit())
+            parts.append(int(digits) if digits else 0)
+        return tuple(parts)
+
+    available = vtuple(latest) > vtuple(current)
+    logger.info(f"{u(g.user_id)} checked for updates: current={current} latest={latest} available={available}")
+    return jsonify({"current": current, "latest": latest, "available": available})
+
+@app.route("/api/server/config", methods=["POST"])
+@admin_required_json
+def server_config():
+    data = request.get_json() or {}
+    try:
+        port = int(data.get("port"))
+        if not (1 <= port <= 65535):
+            raise ValueError
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid port"}), 400
+    secret_key = str(data.get("secret_key") or "").strip()
+    if not secret_key:
+        return jsonify({"error": "Secret key cannot be empty"}), 400
+    company_name = str(data.get("company_name") or "").strip()[:13]
+
+    try:
+        with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
+            settings = json.load(f) or {}
+    except Exception:
+        settings = {}
+    settings["port"] = port
+    settings["secret_key"] = secret_key
+    settings["company_name"] = company_name
+    with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
+        json.dump(settings, f, indent=2)
+
+    APP_SETTINGS["company_name"] = company_name
+    logger.info(f"{u(g.user_id)} updated server configuration (port={port})")
+    changed_runtime = port != APP_SETTINGS.get("port") or secret_key != APP_SETTINGS.get("secret_key")
+    msg = "Server configuration saved"
+    if changed_runtime:
+        msg += " — restart the server to apply port/secret changes"
+    return jsonify({"message": msg})
+
+def _restart_process():
+    logger.warning("server restart requested from web UI")
+    time.sleep(0.6)
+    os.execv(sys.executable, [sys.executable] + sys.argv)
+
+def _stop_process():
+    logger.warning("server stop requested from web UI")
+    time.sleep(0.6)
+    os._exit(0)
+
+@app.route("/api/server/restart", methods=["POST"])
+@admin_required_json
+def server_restart():
+    logger.info(f"{u(g.user_id)} restarted the server")
+    threading.Thread(target=_restart_process, daemon=True).start()
+    return jsonify({"message": "Restarting"})
+
+@app.route("/api/server/stop", methods=["POST"])
+@admin_required_json
+def server_stop():
+    logger.info(f"{u(g.user_id)} stopped the server")
+    threading.Thread(target=_stop_process, daemon=True).start()
+    return jsonify({"message": "Stopping"})
 
 def maintenance_loop():
     while True:
@@ -698,4 +1173,4 @@ if __name__ == "__main__":
     if start_thread:
         t = threading.Thread(target=maintenance_loop, daemon=True)
         t.start()
-    app.run(host=APP_SETTINGS["host"], port=APP_SETTINGS["port"], debug=True, use_reloader=True)
+    socketio.run(app, host=APP_SETTINGS["host"], port=APP_SETTINGS["port"], debug=True, use_reloader=True, allow_unsafe_werkzeug=True)

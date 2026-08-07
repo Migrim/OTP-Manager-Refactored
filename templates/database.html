@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% set active_page = 'database' %}
+
+{% block title %}Database | OTP-Tool{% endblock %}
+
+{% block page %}
+<div class="page">
+  <div class="page-topbar">
+    <div style="display:flex;align-items:center;gap:8px;padding-left:14px;overflow:hidden">
+      <span style="font-size:12px;font-weight:600;color:var(--text-dim);flex:none;white-space:nowrap">Database</span>
+      <span id="db-size-top" style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;letter-spacing:-0.5px;color:var(--accent);white-space:nowrap;overflow:hidden"></span>
+    </div>
+    <div class="topbar-spacer"></div>
+    <div class="topbar-sep"></div>
+    <div class="topbar-select">
+      <select id="db-task-select" style="font-weight:600;padding-right:30px"></select>
+      <span class="chev" data-icon="chevron"></span>
+    </div>
+    <div class="topbar-sep"></div>
+    <span id="db-task-action" style="display:flex;align-items:stretch">
+      <button class="topbar-btn accent" id="db-task-run" type="button">Run</button>
+    </span>
+  </div>
+
+  <div class="page-scroll" style="padding:26px 30px 50px 30px">
+    <div style="max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:14px">
+
+      <div class="stat-grid">
+        {% for stat in stats %}
+        <div class="stat-cell">
+          <div class="stat-label">{{ stat.label }}</div>
+          <div class="stat-value">{{ stat.value }}</div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <div id="db-tasks"></div>
+
+      <div class="collapse-card" id="backups-card" style="margin-top:6px">
+        <button class="collapse-head" id="backups-toggle" type="button">
+          <span class="ch-title">Backups</span>
+          <span class="ch-right">
+            <span id="backups-count">{{ backups|length }}</span>
+            <span class="ch-chev" data-icon="chevron"></span>
+          </span>
+        </button>
+        <div class="collapse-body">
+          <div id="backups-list"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Load backup confirm modal -->
+<div class="overlay center" id="load-backup-overlay">
+  <div class="modal">
+    <div class="modal-title">Load this backup?</div>
+    <div class="modal-sub">This replaces the current database with <span id="load-backup-name" class="mono"></span>. The current database is backed up first.</div>
+    <div class="modal-actions">
+      <button class="btn-outline" data-close-overlay type="button">Cancel</button>
+      <button class="btn-danger" id="load-backup-confirm" type="button">Load backup</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const A = window.App;
+  const SIZE_MB = {{ size_mb|tojson }};
+  let BACKUPS = {{ backups|tojson }};
+
+  const TASKS = [
+    { key: "vacuum", title: "Vacuum & Optimize", desc: "Reclaims unused space and defragments the database file.", icon: "refresh" },
+    { key: "schema", title: "Update Schema", desc: "Applies pending schema migrations to bring the database up to date.", icon: "settings" },
+    { key: "integrity", title: "Check Integrity", desc: "Scans for orphaned records, broken foreign keys, and other inconsistencies.", icon: "shield" },
+    { key: "repair", title: "Repair Database", desc: "Attempts to fix corruption and rebuild damaged indexes.", icon: "wrench" },
+    { key: "reset_sessions", title: "Reset All Sessions", desc: "Invalidates every active session, signing all users out immediately.", icon: "logout" },
+    { key: "backup", title: "Create Backup", desc: "Snapshots the current database to the backups list below.", icon: "backup" },
+  ];
+  const taskState = {};
+  const taskResult = {};
+
+  /* topbar: size label + task selector */
+  const taskSelect = document.getElementById("db-task-select");
+  taskSelect.innerHTML = TASKS.map(t => '<option value="' + t.key + '">' + t.title + "</option>").join("");
+  (function () {
+    const max = 25, len = 16;
+    const filled = Math.max(0, Math.min(len, Math.round((SIZE_MB / max) * len)));
+    document.getElementById("db-size-top").textContent = "█".repeat(filled) + "░".repeat(len - filled) + " " + SIZE_MB + "/" + max + " MB";
+  })();
+
+  function renderTopAction() {
+    const running = (taskState[taskSelect.value] || "idle") === "running";
+    document.getElementById("db-task-action").innerHTML = running
+      ? '<span style="width:80px;display:flex;align-items:center;justify-content:center"><span class="spinner" style="width:16px;height:16px;border-width:2px"></span></span>'
+      : '<button class="topbar-btn accent" id="db-task-run" type="button">Run</button>';
+  }
+  taskSelect.addEventListener("change", renderTopAction);
+  document.getElementById("db-task-action").addEventListener("click", e => {
+    if (e.target.closest("#db-task-run")) runTask(taskSelect.value);
+  });
+
+  function renderTasks() {
+    document.getElementById("db-tasks").innerHTML = TASKS.map(t => {
+      const st = taskState[t.key] || "idle";
+      let action;
+      if (st === "running") action = '<div class="spinner"></div>';
+      else if (st === "done") action = '<button class="btn-outline" data-run="' + t.key + '" type="button" style="color:var(--text-dim)"><span style="width:13px;height:13px;color:var(--ok);display:flex">' + A.ICONS.check + "</span>Run again</button>";
+      else action = '<button class="btn-accent" data-run="' + t.key + '" type="button" style="padding:9px 16px">Run</button>';
+      return '<div class="task-card" style="margin-bottom:14px"><div class="task-main">' +
+        '<span class="task-ico">' + (A.ICONS[t.icon] || "") + "</span>" +
+        '<div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:10px"><span class="task-title">' + t.title + "</span></div>" +
+        '<div class="task-desc">' + t.desc + "</div></div>" + action + "</div>" +
+        (taskResult[t.key] ? '<div class="task-result">' + A.escapeHtml(taskResult[t.key]) + "</div>" : "") +
+        "</div>";
+    }).join("");
+  }
+
+  async function runTask(key) {
+    if (!key || taskState[key] === "running") return;
+    taskState[key] = "running";
+    renderTasks();
+    renderTopAction();
+    try {
+      const res = await A.fetchJSON("/api/db/task", { method: "POST", body: { task: key } });
+      taskState[key] = "done";
+      if (res.result) taskResult[key] = res.result;
+      A.toast(res.message || "Done");
+      if (key === "backup") refreshBackups();
+    } catch (err) {
+      taskState[key] = "idle";
+      A.toast(err.message);
+    }
+    renderTasks();
+    renderTopAction();
+  }
+
+  document.getElementById("db-tasks").addEventListener("click", e => {
+    const btn = e.target.closest("[data-run]");
+    if (btn) runTask(btn.getAttribute("data-run"));
+  });
+
+  /* backups */
+  let loadingBackup = null;
+  let pendingLoad = null;
+
+  function renderBackups() {
+    document.getElementById("backups-count").textContent = BACKUPS.length;
+    document.getElementById("backups-list").innerHTML = BACKUPS.map(b =>
+      '<div class="backup-row">' +
+      '<span class="b-ico">' + A.ICONS.database + "</span>" +
+      '<div style="flex:1;min-width:0"><div class="b-name">' + A.escapeHtml(b.name) + '</div><div class="b-meta">' + A.escapeHtml(b.date) + " · " + A.escapeHtml(b.size) + "</div></div>" +
+      (loadingBackup === b.name ? '<div class="spinner sm"></div>' : '<button class="b-load" data-load="' + A.escapeHtml(b.name) + '" type="button">Load</button>') +
+      "</div>"
+    ).join("") || '<div style="padding:16px;font-size:12.5px;color:var(--text-faint);border-top:1px solid var(--border)">No backups yet</div>';
+  }
+
+  async function refreshBackups() {
+    try {
+      BACKUPS = await A.fetchJSON("/api/db/backups");
+      renderBackups();
+    } catch (err) {}
+  }
+
+  document.getElementById("backups-toggle").addEventListener("click", () => {
+    document.getElementById("backups-card").classList.toggle("open");
+  });
+
+  document.getElementById("backups-list").addEventListener("click", e => {
+    const btn = e.target.closest("[data-load]");
+    if (!btn || loadingBackup) return;
+    pendingLoad = btn.getAttribute("data-load");
+    document.getElementById("load-backup-name").textContent = pendingLoad;
+    A.openOverlay("load-backup-overlay");
+  });
+
+  document.getElementById("load-backup-confirm").addEventListener("click", async () => {
+    if (!pendingLoad) return;
+    A.closeOverlay("load-backup-overlay");
+    loadingBackup = pendingLoad;
+    renderBackups();
+    try {
+      const res = await A.fetchJSON("/api/db/load-backup", { method: "POST", body: { name: pendingLoad } });
+      A.toast(res.message || ("Loaded " + pendingLoad));
+    } catch (err) { A.toast(err.message); }
+    loadingBackup = null;
+    pendingLoad = null;
+    renderBackups();
+  });
+
+  renderTasks();
+  renderBackups();
+})();
+</script>
+{% endblock %}

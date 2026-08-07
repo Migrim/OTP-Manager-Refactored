@@ -1,0 +1,323 @@
+{% extends "base.html" %}
+{% set active_page = 'server' %}
+
+{% block title %}Server Management | OTP-Tool{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='styles/vendor/xterm.css') }}">
+{% endblock %}
+
+{% block page %}
+<div class="page">
+  <div class="page-topbar">
+    <div style="display:flex;align-items:center;gap:12px;padding-left:14px;overflow:hidden">
+      <span style="font-size:12px;font-weight:600;color:var(--text-dim);flex:none;white-space:nowrap">Uptime &mdash; <span id="uptime-label"></span></span>
+      <span id="uptime-bar" style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;letter-spacing:-0.5px;color:var(--accent);white-space:nowrap;overflow:hidden"></span>
+    </div>
+    <div class="topbar-spacer"></div>
+    <a class="topbar-btn" href="{{ github_url }}" target="_blank" rel="noopener noreferrer">
+      <span style="width:14px;height:14px;display:flex" data-icon="github"></span><span>GitHub</span>
+    </a>
+    <div class="topbar-sep"></div>
+    <button class="topbar-btn" id="restart-btn" type="button">
+      <span style="width:14px;height:14px;display:flex" data-icon="refresh"></span><span id="restart-label">Restart Server</span>
+    </button>
+    <div class="topbar-sep"></div>
+    <button class="topbar-btn" id="stop-btn" type="button" style="font-weight:600">
+      <span style="width:14px;height:14px;display:flex;color:var(--danger)" data-icon="power"></span><span id="stop-label">Stop Server</span>
+    </button>
+  </div>
+
+  <div class="page-scroll" style="padding:26px 30px 50px 30px">
+    <div style="max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:14px">
+
+      <!-- Software update -->
+      <div class="task-card">
+        <div class="task-main">
+          <span class="task-ico" data-icon="refresh"></span>
+          <div style="flex:1;min-width:0">
+            <div class="task-title">Software Update</div>
+            <div class="task-desc">Current version <b style="color:var(--text)">v{{ app_version }}</b></div>
+          </div>
+          <span id="update-action">
+            <button class="btn-accent" id="check-updates" type="button" style="padding:9px 16px">Check for Updates</button>
+          </span>
+        </div>
+        <div class="info-banner" id="update-banner" style="display:none">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13.5px;font-weight:700;color:var(--text)" id="update-banner-title"></div>
+            <div style="font-size:12.5px;color:var(--text-dim);margin-top:4px;line-height:1.5" id="update-banner-desc"></div>
+          </div>
+          <button class="btn-accent" id="update-copy-cmd" type="button" style="flex:none;padding:9px 16px">Copy install command</button>
+        </div>
+        <div id="update-uptodate" style="display:none;align-items:center;gap:8px;font-size:13px;color:var(--ok);font-weight:600">
+          <span style="width:14px;height:14px;display:flex" data-icon="check"></span><span id="update-uptodate-text"></span>
+        </div>
+      </div>
+
+      <!-- Server configuration -->
+      <div class="task-card">
+        <div class="task-title">Server Configuration</div>
+        <div>
+          <label class="field-label-sm">Company Name</label>
+          <input class="text-input" id="cfg-brand" placeholder="Your Company Inc." maxlength="13" value="{{ company_brand }}">
+        </div>
+        <div>
+          <label class="field-label-sm">Port</label>
+          <input class="text-input" id="cfg-port" placeholder="7440" value="{{ server_port }}">
+        </div>
+        <div>
+          <label class="field-label-sm">Secret Key</label>
+          <div style="position:relative">
+            <input class="text-input mono padded" type="password" id="cfg-secret" placeholder="Server secret key" value="{{ server_secret }}">
+            <button id="cfg-secret-toggle" type="button" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);padding:5px 9px;border-radius:6px;border:none;background:none;color:var(--text-faint);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Show</button>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:flex-end">
+          <button class="btn-accent" id="cfg-save" type="button" style="padding:9px 16px">Save</button>
+        </div>
+      </div>
+
+      <!-- CLI -->
+      <div class="task-card">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="width:16px;height:16px;display:flex;color:var(--text-dim)" data-icon="terminal"></span>
+          <div class="task-title">Manage via CLI</div>
+        </div>
+        <div style="font-size:12.5px;color:var(--text-dim);line-height:1.5">The server ships with a terminal dashboard for starting, stopping, updating, and inspecting this installation. Run the command below on the server machine.</div>
+        <div>
+          <label class="field-label-sm">Command</label>
+          <div style="position:relative">
+            <input class="text-input mono padded" id="cli-command" readonly value="{{ cli_command }}">
+            <button id="cli-copy" type="button" title="Copy" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);width:26px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:6px;border:none;background:none;color:var(--text-faint);cursor:pointer">
+              <span style="width:13px;height:13px;display:flex" data-icon="copy"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Remote console -->
+      <div class="task-card">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="width:16px;height:16px;display:flex;color:var(--text-dim)" data-icon="terminal"></span>
+          <div class="task-title">Remote Console</div>
+          <span id="console-status" style="margin-left:auto;font-size:11.5px;font-weight:600;color:var(--text-faint)">Disconnected</span>
+        </div>
+        <div style="font-size:12.5px;color:var(--text-dim);line-height:1.5">Drive the terminal dashboard above directly from the browser, without SSH access to the machine. One shared session at a time &mdash; other admins who connect see the same screen.</div>
+        <div id="console-term" style="display:none;height:360px;border-radius:10px;overflow:hidden;background:#111;padding:8px"></div>
+        <div style="display:flex;justify-content:flex-end;gap:8px">
+          <button class="btn-danger" id="console-stop" type="button" style="display:none">End Session</button>
+          <button class="btn-accent" id="console-connect" type="button" style="padding:9px 16px">Connect</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Restart modal -->
+<div class="overlay center" id="restart-overlay">
+  <div class="modal">
+    <div class="modal-title lg">Restart server?</div>
+    <div class="modal-sub">All connected users will be logged out and OTP codes will briefly stop refreshing while the server restarts.</div>
+    <div class="modal-actions">
+      <button class="btn-outline" data-close-overlay type="button">Cancel</button>
+      <button class="btn-accent" id="restart-confirm" type="button" style="padding:9px 16px">Restart</button>
+    </div>
+  </div>
+</div>
+
+<!-- Stop modal -->
+<div class="overlay center" id="stop-overlay">
+  <div class="modal">
+    <div class="modal-title lg">Stop server?</div>
+    <div class="modal-sub">All connected users will be logged out and OTP codes will stop refreshing until the server is started again.</div>
+    <div class="modal-actions">
+      <button class="btn-outline" data-close-overlay type="button">Cancel</button>
+      <button class="btn-danger" id="stop-confirm" type="button">Stop Server</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='java-script/vendor/socket.io.min.js') }}"></script>
+<script src="{{ url_for('static', filename='java-script/vendor/xterm.js') }}"></script>
+<script src="{{ url_for('static', filename='java-script/vendor/xterm-addon-fit.js') }}"></script>
+<script>
+(function () {
+  const A = window.App;
+  const CURRENT_VERSION = {{ app_version|tojson }};
+
+  /* ---- uptime ---- */
+  const SERVER_STARTED_AT = {{ server_started_at|tojson }};
+  const uptimeLabelEl = document.getElementById("uptime-label");
+  const uptimeBarEl = document.getElementById("uptime-bar");
+  function renderUptime() {
+    const ms = Date.now() - SERVER_STARTED_AT * 1000;
+    const totalMin = Math.max(0, Math.floor(ms / 60000));
+    const d = Math.floor(totalMin / 1440);
+    const h = Math.floor((totalMin % 1440) / 60);
+    const m = totalMin % 60;
+    uptimeLabelEl.textContent = d + "d " + h + "h " + m + "m";
+    const barTotal = 30;
+    const filled = Math.min(barTotal, Math.round((ms / (7 * 86400000)) * barTotal));
+    uptimeBarEl.textContent = "█".repeat(filled) + "░".repeat(barTotal - filled);
+  }
+  renderUptime();
+  setInterval(renderUptime, 30000);
+
+  /* ---- update check ---- */
+  const checkBtn = document.getElementById("check-updates");
+  checkBtn.addEventListener("click", async () => {
+    document.getElementById("update-action").innerHTML = '<div class="spinner"></div>';
+    document.getElementById("update-banner").style.display = "none";
+    document.getElementById("update-uptodate").style.display = "none";
+    try {
+      const res = await A.fetchJSON("/api/server/check-update");
+      if (res.available) {
+        document.getElementById("update-banner").style.display = "flex";
+        document.getElementById("update-banner-title").textContent = "Update available — v" + res.latest;
+        document.getElementById("update-banner-desc").textContent =
+          "Updates are installed from the terminal dashboard while the server is stopped. Copy the command, run it on the server machine, and choose Update.";
+        try { localStorage.setItem("otp-update-available", res.latest); } catch (e) {}
+      } else {
+        document.getElementById("update-uptodate").style.display = "flex";
+        document.getElementById("update-uptodate-text").textContent = "You're up to date — v" + (res.current || CURRENT_VERSION);
+        try { localStorage.removeItem("otp-update-available"); } catch (e) {}
+        var dot = document.getElementById("update-dot");
+        if (dot) dot.style.display = "none";
+      }
+    } catch (err) {
+      A.toast(err.message);
+    }
+    document.getElementById("update-action").innerHTML = "";
+    document.getElementById("update-action").appendChild(checkBtn);
+  });
+
+  document.getElementById("update-copy-cmd").addEventListener("click", () => {
+    A.copyText(document.getElementById("cli-command").value, "Command copied");
+  });
+
+  /* ---- config ---- */
+  const secretInput = document.getElementById("cfg-secret");
+  document.getElementById("cfg-secret-toggle").addEventListener("click", function () {
+    const show = secretInput.type === "password";
+    secretInput.type = show ? "text" : "password";
+    this.textContent = show ? "Hide" : "Show";
+  });
+
+  document.getElementById("cfg-save").addEventListener("click", async () => {
+    const port = parseInt(document.getElementById("cfg-port").value, 10);
+    if (!port || port < 1 || port > 65535) { A.toast("Please enter a valid port (1-65535)"); return; }
+    try {
+      const res = await A.fetchJSON("/api/server/config", {
+        method: "POST",
+        body: {
+          company_name: document.getElementById("cfg-brand").value.trim().slice(0, 13),
+          port: port,
+          secret_key: secretInput.value,
+        },
+      });
+      A.toast(res.message || "Server configuration saved");
+    } catch (err) { A.toast(err.message); }
+  });
+
+  document.getElementById("cli-copy").addEventListener("click", () => {
+    A.copyText(document.getElementById("cli-command").value, "Command copied");
+  });
+
+  /* ---- restart / stop ---- */
+  const restartBtn = document.getElementById("restart-btn");
+  const stopBtn = document.getElementById("stop-btn");
+
+  restartBtn.addEventListener("click", () => A.openOverlay("restart-overlay"));
+  stopBtn.addEventListener("click", () => A.openOverlay("stop-overlay"));
+
+  document.getElementById("restart-confirm").addEventListener("click", async () => {
+    A.closeOverlay("restart-overlay");
+    restartBtn.disabled = true; stopBtn.disabled = true;
+    document.getElementById("restart-label").textContent = "Restarting…";
+    try {
+      await A.fetchJSON("/api/server/restart", { method: "POST" });
+    } catch (err) {}
+    setTimeout(function poll() {
+      fetch("/login", { cache: "no-store" }).then(() => window.location.reload()).catch(() => setTimeout(poll, 1500));
+    }, 2500);
+  });
+
+  document.getElementById("stop-confirm").addEventListener("click", async () => {
+    A.closeOverlay("stop-overlay");
+    restartBtn.disabled = true; stopBtn.disabled = true;
+    document.getElementById("stop-label").textContent = "Stopping…";
+    try {
+      await A.fetchJSON("/api/server/stop", { method: "POST" });
+    } catch (err) {}
+    A.toast("Server is shutting down");
+  });
+
+  /* ---- remote console ---- */
+  const termEl = document.getElementById("console-term");
+  const statusEl = document.getElementById("console-status");
+  const connectBtn = document.getElementById("console-connect");
+  const stopBtn = document.getElementById("console-stop");
+  let term = null, fitAddon = null, socket = null;
+
+  function setStatus(text, color) {
+    statusEl.textContent = text;
+    statusEl.style.color = color || "var(--text-faint)";
+  }
+
+  function sendResize() {
+    if (socket && socket.connected && term) {
+      socket.emit("resize", { rows: term.rows, cols: term.cols });
+    }
+  }
+
+  connectBtn.addEventListener("click", () => {
+    if (socket) return;
+    termEl.style.display = "block";
+    connectBtn.style.display = "none";
+    stopBtn.style.display = "inline-flex";
+    setStatus("Connecting…");
+
+    if (!term) {
+      term = new Terminal({
+        convertEol: true,
+        fontSize: 13,
+        fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+        theme: { background: "#111111" },
+      });
+      fitAddon = new FitAddon.FitAddon();
+      term.loadAddon(fitAddon);
+      term.open(termEl);
+      fitAddon.fit();
+      term.onData((data) => { if (socket && socket.connected) socket.emit("input", data); });
+    } else {
+      fitAddon.fit();
+    }
+
+    socket = io("/console");
+    socket.on("connect", () => { setStatus("Connected", "var(--ok)"); sendResize(); });
+    socket.on("disconnect", () => setStatus("Reconnecting…"));
+    socket.on("output", (data) => term.write(data));
+    socket.on("exited", () => { setStatus("Session ended"); });
+    socket.on("error", (payload) => { A.toast((payload && payload.message) || "Console error"); });
+  });
+
+  stopBtn.addEventListener("click", () => {
+    if (socket) {
+      socket.emit("stop_console");
+      socket.disconnect();
+      socket = null;
+    }
+    termEl.style.display = "none";
+    stopBtn.style.display = "none";
+    connectBtn.style.display = "inline-flex";
+    setStatus("Disconnected");
+  });
+
+  window.addEventListener("resize", () => { if (fitAddon && termEl.style.display !== "none") { fitAddon.fit(); sendResize(); } });
+})();
+</script>
+{% endblock %}

@@ -375,6 +375,32 @@ def server_urls():
         return [f"http://{host}:{port}"]
     return [f"http://{host}:{port}"]
 
+def ensure_schema_current():
+    """Upgrade the database schema if it is outdated (a backup is made first).
+
+    Returns (changed, error): changed is True when an upgrade ran, error is a
+    message when the schema could not be brought up to date."""
+    db_path = os.path.join(BASE_DIR, "instance", "otp.db")
+    if not os.path.exists(db_path):
+        return False, None
+    try:
+        db = _load_db_module()
+        if not db.check_schema_needs_update():
+            return False, None
+        import io
+        buf = io.StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = buf
+        try:
+            db.upgrade_database()
+        finally:
+            sys.stdout = old_stdout
+        if db.check_schema_needs_update():
+            return True, "schema is still outdated after the upgrade"
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
 def start_server():
     s = status()
     if s["running"]:
@@ -393,6 +419,13 @@ def start_server():
 
     if port_in_use("127.0.0.1", port):
         return False, f"Port {port} is already in use."
+
+    schema_note = ""
+    changed, schema_err = ensure_schema_current()
+    if schema_err:
+        return False, f"Database schema upgrade failed: {schema_err}"
+    if changed:
+        schema_note = " Database schema was upgraded first."
 
     try:
         logf = open(LOG_PATH, "w", encoding="utf-8", buffering=1)
@@ -450,7 +483,7 @@ def start_server():
         "host": host,
         "port": port
     })
-    return True, f"Started (PID {p.pid}) on port {port}."
+    return True, f"Started (PID {p.pid}) on port {port}.{schema_note}"
 
 def stop_server(grace_seconds=6):
     pid = read_pid()
@@ -539,6 +572,10 @@ def read_local_version():
             return f.read().strip() or "0.0.0"
     except:
         return "0.0.0"
+
+def write_local_version(v):
+    with open(VERSION_PATH, "w", encoding="utf-8") as f:
+        f.write(str(v).strip() + "\n")
 
 def normalize_version(v):
     v = str(v or "").strip()
@@ -1727,6 +1764,7 @@ def settings_menu():
         {"key": "1", "choice": "1", "label": "Set port"},
         {"key": "2", "choice": "2", "label": "Set secret"},
         {"key": "3", "choice": "3", "label": "Reset to defaults"},
+        {"key": "4", "choice": "4", "label": "Set version"},
         {"key": "B", "choice": "0", "label": "Back"},
     ]
 
@@ -1738,8 +1776,9 @@ def settings_menu():
     while True:
         cfg = read_settings()
         lines = [
-            f"{bold('Current Port')}   : {gray(str(cfg['port']))}",
-            f"{bold('Current Secret')} : {gray(mask_secret(cfg['secret_key']))}",
+            f"{bold('Current Port')}    : {gray(str(cfg['port']))}",
+            f"{bold('Current Secret')}  : {gray(mask_secret(cfg['secret_key']))}",
+            f"{bold('Current Version')} : {gray(read_local_version())}",
             "",
         ]
 
@@ -1752,7 +1791,7 @@ def settings_menu():
             lines.append(line)
 
         lines.append("")
-        lines.append(dim("Use ↑/↓ + Enter, or press 1/2/3/0 directly."))
+        lines.append(dim("Use ↑/↓ + Enter, or press 1-4/0 directly."))
         render_box("Settings", lines, "Esc also goes back.")
 
         key = read_menu_key()
@@ -1810,6 +1849,27 @@ def settings_menu():
                 continue
             write_settings(get_default_settings())
             toast("Settings reset.", True)
+            continue
+
+        if choice == "4":
+            tw, _ = get_terminal_size()
+            prompt = (" " * max(0, (tw - 28) // 2)) + f"New version [{read_local_version()}]: "
+            value = read_line_allow_escape(prompt)
+            if value is None:
+                toast("Version change cancelled.", False)
+                continue
+            value = normalize_version(value)
+            if value == "" or value.lower() == "b":
+                toast("Version change cancelled.", False)
+                continue
+            if not re.fullmatch(r"\d+(\.\d+){1,3}", value):
+                toast("Invalid version. Use e.g. 2.6.1", False)
+                continue
+            try:
+                write_local_version(value)
+                toast(f"Version set to {value}", True)
+            except Exception as e:
+                toast(f"Could not write VERSION: {e}", False)
             continue
 
         if choice == "0":
