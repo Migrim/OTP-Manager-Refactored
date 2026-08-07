@@ -260,7 +260,7 @@
   const termEl = document.getElementById("console-term");
   const statusEl = document.getElementById("console-status");
   const connectBtn = document.getElementById("console-connect");
-  const stopBtn = document.getElementById("console-stop");
+  const consoleStopBtn = document.getElementById("console-stop");
   let term = null, fitAddon = null, socket = null;
 
   function setStatus(text, color) {
@@ -278,7 +278,7 @@
     if (socket) return;
     termEl.style.display = "block";
     connectBtn.style.display = "none";
-    stopBtn.style.display = "inline-flex";
+    consoleStopBtn.style.display = "inline-flex";
     setStatus("Connecting…");
 
     if (!term) {
@@ -305,14 +305,14 @@
     socket.on("error", (payload) => { A.toast((payload && payload.message) || "Console error"); });
   });
 
-  stopBtn.addEventListener("click", () => {
+  consoleStopBtn.addEventListener("click", () => {
     if (socket) {
       socket.emit("stop_console");
       socket.disconnect();
       socket = null;
     }
     termEl.style.display = "none";
-    stopBtn.style.display = "none";
+    consoleStopBtn.style.display = "none";
     connectBtn.style.display = "inline-flex";
     setStatus("Disconnected");
   });
