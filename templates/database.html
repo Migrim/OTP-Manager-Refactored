@@ -106,20 +106,23 @@
     if (e.target.closest("#db-task-run")) runTask(taskSelect.value);
   });
 
+  function renderStatus(key) {
+    const st = taskState[key] || "idle";
+    if (st === "running") return '<div class="task-status" style="color:var(--text-dim)"><span class="spinner sm"></span>Running…</div>';
+    if (st === "done") return '<div class="task-status" style="color:var(--ok)"><span style="width:13px;height:13px;display:flex">' + A.ICONS.check + "</span>Done</div>";
+    if (st === "error") return '<div class="task-status" style="color:var(--danger)"><span style="width:13px;height:13px;display:flex">' + A.ICONS.xmark + "</span>Failed</div>";
+    return '<div class="task-status" style="color:var(--text-faint)"><span class="status-dot"></span>Idle</div>';
+  }
+
   function renderTasks() {
-    document.getElementById("db-tasks").innerHTML = TASKS.map(t => {
-      const st = taskState[t.key] || "idle";
-      let action;
-      if (st === "running") action = '<div class="spinner"></div>';
-      else if (st === "done") action = '<button class="btn-outline" data-run="' + t.key + '" type="button" style="color:var(--text-dim)"><span style="width:13px;height:13px;color:var(--ok);display:flex">' + A.ICONS.check + "</span>Run again</button>";
-      else action = '<button class="btn-accent" data-run="' + t.key + '" type="button" style="padding:9px 16px">Run</button>';
-      return '<div class="task-card" style="margin-bottom:14px"><div class="task-main">' +
+    document.getElementById("db-tasks").innerHTML = TASKS.map(t =>
+      '<div class="task-card" style="margin-bottom:14px"><div class="task-main">' +
         '<span class="task-ico">' + (A.ICONS[t.icon] || "") + "</span>" +
         '<div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:10px"><span class="task-title">' + t.title + "</span></div>" +
-        '<div class="task-desc">' + t.desc + "</div></div>" + action + "</div>" +
+        '<div class="task-desc">' + t.desc + "</div></div>" + renderStatus(t.key) + "</div>" +
         (taskResult[t.key] ? '<div class="task-result">' + A.escapeHtml(taskResult[t.key]) + "</div>" : "") +
-        "</div>";
-    }).join("");
+        "</div>"
+    ).join("");
   }
 
   async function runTask(key) {
@@ -134,17 +137,12 @@
       A.toast(res.message || "Done");
       if (key === "backup") refreshBackups();
     } catch (err) {
-      taskState[key] = "idle";
+      taskState[key] = "error";
       A.toast(err.message);
     }
     renderTasks();
     renderTopAction();
   }
-
-  document.getElementById("db-tasks").addEventListener("click", e => {
-    const btn = e.target.closest("[data-run]");
-    if (btn) runTask(btn.getAttribute("data-run"));
-  });
 
   /* backups */
   let loadingBackup = null;
