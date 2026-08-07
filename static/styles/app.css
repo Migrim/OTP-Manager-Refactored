@@ -716,7 +716,7 @@ html.blur-active .otp-panel, html.blur-active .otp-cards { filter: blur(9px); tr
 .level-badge { padding: 2px 7px; border-radius: 999px; font-size: 10px; font-weight: 700; }
 .logs-check .count { font-size: 11px; color: var(--text-faint); background: var(--input-bg); border-radius: 999px; padding: 1px 7px; font-weight: 600; margin-left: auto; }
 .logs-updated { font-size: 11.5px; color: var(--text-faint); flex: none; white-space: nowrap; display: flex; align-items: center; padding: 0 12px; }
-.logs-table-wrap { flex: 1; min-height: 0; overflow-y: auto; animation: pageIn 0.28s ease; }
+.logs-table-wrap { flex: 1; min-height: 0; overflow-y: auto; }
 .logs-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .logs-table th {
   text-align: left; padding: 10px 14px; font-size: 11px; font-weight: 700; color: var(--text-dim);
@@ -728,7 +728,6 @@ html.blur-active .otp-panel, html.blur-active .otp-cards { filter: blur(9px); tr
   font-size: 12px; color: var(--text-dim); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis;
 }
-.logs-table tbody tr { animation: rowIn 0.2s ease; }
 .logs-table tbody tr:nth-child(odd) { background: var(--header-bg); }
 .logs-table tbody tr:hover { background: var(--header-bg); }
 .lvl-cell { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; color: var(--text); white-space: nowrap; }
