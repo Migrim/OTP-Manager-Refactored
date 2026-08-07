@@ -33,8 +33,11 @@ html.dark-mode {
   color-scheme: dark;
 }
 
+@view-transition { navigation: auto; }
+
 * { box-sizing: border-box; }
 html, body { height: 100%; }
+html { background: var(--app-bg); }
 body {
   margin: 0;
   -webkit-font-smoothing: antialiased;

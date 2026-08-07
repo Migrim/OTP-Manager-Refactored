@@ -126,6 +126,8 @@
   </button>
   {% endif %}
 
+  <script>if (window.App) App.hydrateIcons();</script>
+
   <main class="main {{ '' if is_logged_in else 'no-side' }}">
     {% block page %}{% endblock %}
   </main>
