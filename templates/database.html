@@ -70,7 +70,7 @@
 <script>
 (function () {
   const A = window.App;
-  const SIZE_MB = {{ size_mb|tojson }};
+  const SIZE_BYTES = {{ size_bytes|tojson }};
   let BACKUPS = {{ backups|tojson }};
 
   const TASKS = [
@@ -88,9 +88,11 @@
   const taskSelect = document.getElementById("db-task-select");
   taskSelect.innerHTML = TASKS.map(t => '<option value="' + t.key + '">' + t.title + "</option>").join("");
   (function () {
-    const max = 25, len = 16;
-    const filled = Math.max(0, Math.min(len, Math.round((SIZE_MB / max) * len)));
-    document.getElementById("db-size-top").textContent = "█".repeat(filled) + "░".repeat(len - filled) + " " + SIZE_MB + "/" + max + " MB";
+    // Guide-only ceiling for the bar visual, not a real storage limit.
+    const maxBytes = 5 * 1024 * 1024, len = 16;
+    const filled = Math.max(0, Math.min(len, Math.round((SIZE_BYTES / maxBytes) * len)));
+    const fmt = (b) => b < 1024 * 1024 ? (b / 1024).toFixed(1) + " KB" : (b / (1024 * 1024)).toFixed(1) + " MB";
+    document.getElementById("db-size-top").textContent = "█".repeat(filled) + "░".repeat(len - filled) + " " + fmt(SIZE_BYTES) + "/" + fmt(maxBytes);
   })();
 
   function renderTopAction() {

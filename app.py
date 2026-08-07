@@ -909,9 +909,11 @@ def _list_backups():
 @admin_required
 def database_page():
     try:
-        size_mb = round(os.path.getsize(DB_PATH) / (1024 * 1024), 1)
+        size_bytes = os.path.getsize(DB_PATH)
     except OSError:
-        size_mb = 0.0
+        size_bytes = 0
+    size_mb = round(size_bytes / (1024 * 1024), 1)
+    size_label = f"{size_bytes / 1024:.1f} KB" if size_bytes < 1024 * 1024 else f"{size_mb} MB"
     with sqlite3.connect(DB_PATH) as db:
         cursor = db.cursor()
         cursor.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
@@ -931,13 +933,13 @@ def database_page():
         last_vacuum = "Today"
 
     stats = [
-        {"label": "Database size", "value": f"{size_mb} MB"},
+        {"label": "Database size", "value": size_label},
         {"label": "Tables", "value": tables},
         {"label": "Total records", "value": records},
         {"label": "Last backup", "value": last_backup},
         {"label": "Last vacuum", "value": last_vacuum},
     ]
-    return render_template("database.html", stats=stats, backups=backups, size_mb=size_mb)
+    return render_template("database.html", stats=stats, backups=backups, size_bytes=size_bytes)
 
 _SCHEMA_COLUMN_DEFAULTS = {
     "users.can_delete": "INTEGER DEFAULT 0",
