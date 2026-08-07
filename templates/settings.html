@@ -108,13 +108,15 @@
   document.getElementById("security-title").innerHTML =
     '<span style="color:var(--accent)">' + A.ICONS.shield + "</span>Security";
 
-  document.addEventListener("click", e => {
+  function onSwitchClick(e) {
     const sw = e.target.closest(".switch[data-key]");
     if (!sw) return;
     const key = sw.getAttribute("data-key");
     state[key] = !state[key];
     renderToggles();
-  });
+  }
+  document.addEventListener("click", onSwitchClick);
+  if (A.onPageLeave) A.onPageLeave(() => document.removeEventListener("click", onSwitchClick));
 
   /* layout */
   function currentLayout() { return A.getCookie("layout") === "cards" ? "cards" : "list"; }

@@ -342,13 +342,15 @@
     }
   }
 
+  let tickRaf = null;
   function tick() {
     remaining = Math.max(0, (cycleEndAt - Date.now()) / 1000);
     if (remaining <= 0) fetchData();
     updateTimers();
-    requestAnimationFrame(tick);
+    tickRaf = requestAnimationFrame(tick);
   }
-  requestAnimationFrame(tick);
+  tickRaf = requestAnimationFrame(tick);
+  if (A.onPageLeave) A.onPageLeave(() => cancelAnimationFrame(tickRaf));
 
   /* ---------- interactions ---------- */
 
@@ -592,14 +594,19 @@
 
   if (SETTINGS.blur_on_inactive) {
     let idleTimer = null;
+    const idleEvents = ["mousemove", "mousedown", "keydown", "scroll", "touchstart"];
     const arm = () => {
       document.documentElement.classList.remove("blur-active");
       clearTimeout(idleTimer);
       idleTimer = setTimeout(() => document.documentElement.classList.add("blur-active"), 60000);
     };
-    ["mousemove", "mousedown", "keydown", "scroll", "touchstart"].forEach(ev =>
-      window.addEventListener(ev, arm, { passive: true }));
+    idleEvents.forEach(ev => window.addEventListener(ev, arm, { passive: true }));
     arm();
+    if (A.onPageLeave) A.onPageLeave(() => {
+      clearTimeout(idleTimer);
+      idleEvents.forEach(ev => window.removeEventListener(ev, arm));
+      document.documentElement.classList.remove("blur-active");
+    });
   }
 
   fetchData();

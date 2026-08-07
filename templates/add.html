@@ -235,9 +235,10 @@
       previewRemaining.textContent = whole;
       if (currentPreview !== null) updatePreview(false);
     }
-    requestAnimationFrame(previewTick);
+    previewRaf = requestAnimationFrame(previewTick);
   }
-  requestAnimationFrame(previewTick);
+  let previewRaf = requestAnimationFrame(previewTick);
+  if (A.onPageLeave) A.onPageLeave(() => cancelAnimationFrame(previewRaf));
 
   document.getElementById("preview-copy").addEventListener("click", () => {
     if (currentPreview) A.copyText(currentPreview, "Copied code: " + currentPreview);

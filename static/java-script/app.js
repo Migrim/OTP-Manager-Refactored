@@ -320,6 +320,106 @@
     if (e.key === "Escape") closeProfileMenu();
   });
 
+  /* ---------- soft navigation (keeps the sidebar mounted across page loads) ---------- */
+
+  const SOFT_NAV_EXCLUDE = new Set(["/server", "/logout"]);
+  let pageLeaveHandlers = [];
+  function onPageLeave(fn) { pageLeaveHandlers.push(fn); }
+  function runPageLeaveHandlers() {
+    const handlers = pageLeaveHandlers;
+    pageLeaveHandlers = [];
+    handlers.forEach(fn => { try { fn(); } catch (e) {} });
+  }
+
+  function softNavLinkFor(target) {
+    const a = target.closest(".sidebar a[href]");
+    if (!a || a.target || a.hasAttribute("download")) return null;
+    let url;
+    try { url = new URL(a.href, location.href); } catch (e) { return null; }
+    if (url.origin !== location.origin) return null;
+    if (SOFT_NAV_EXCLUDE.has(url.pathname)) return null;
+    return a;
+  }
+
+  function setNavProgress(active) {
+    const bar = document.getElementById("nav-progress");
+    if (!bar) return;
+    if (active) {
+      bar.classList.add("loading");
+      bar.style.width = "0%";
+      requestAnimationFrame(() => { bar.style.width = "70%"; });
+    } else {
+      bar.style.width = "100%";
+      setTimeout(() => { bar.classList.remove("loading"); bar.style.width = "0%"; }, 200);
+    }
+  }
+
+  let navSeq = 0;
+  async function softNavigate(href, push) {
+    const seq = ++navSeq;
+    setNavProgress(true);
+    try {
+      const res = await fetch(href, { headers: { "X-Requested-With": "XMLHttpRequest" } });
+      if (seq !== navSeq) return;
+      if (!res.ok) { location.href = href; return; }
+      const html = await res.text();
+      if (seq !== navSeq) return;
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      const newMain = doc.querySelector("main");
+      const newNav = doc.querySelector(".sidebar nav");
+      if (!newMain || !newNav) { location.href = href; return; }
+
+      runPageLeaveHandlers();
+      closeProfileMenu();
+
+      const curMain = document.querySelector("main");
+      curMain.className = newMain.className;
+      curMain.innerHTML = newMain.innerHTML;
+
+      const curNav = document.querySelector(".sidebar nav");
+      const oldDot = curNav.querySelector("#update-dot");
+      const dotVisible = !!oldDot && oldDot.style.display !== "none";
+      curNav.innerHTML = newNav.innerHTML;
+      const newDot = curNav.querySelector("#update-dot");
+      if (newDot && dotVisible) newDot.style.display = "inline-block";
+
+      const pageScripts = document.getElementById("page-scripts");
+      if (pageScripts) {
+        pageScripts.innerHTML = "";
+        doc.querySelectorAll("#page-scripts script").forEach(old => {
+          const s = document.createElement("script");
+          s.async = false;
+          if (old.src) s.src = old.src; else s.textContent = old.textContent;
+          pageScripts.appendChild(s);
+        });
+      }
+
+      document.title = doc.title;
+      hydrateIcons();
+      if (push) history.pushState({ softNav: true }, "", href);
+    } catch (e) {
+      location.href = href;
+    } finally {
+      setNavProgress(false);
+    }
+  }
+
+  document.addEventListener("click", e => {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    if (SOFT_NAV_EXCLUDE.has(location.pathname)) return;
+    const a = softNavLinkFor(e.target);
+    if (!a) return;
+    const url = new URL(a.href, location.href);
+    if (url.pathname === location.pathname && url.search === location.search) { e.preventDefault(); return; }
+    e.preventDefault();
+    softNavigate(a.href, true);
+  });
+
+  window.addEventListener("popstate", () => {
+    if (!document.querySelector(".sidebar")) return;
+    softNavigate(location.href, false);
+  });
+
   /* ---------- command palette ---------- */
 
   const cmdk = {
@@ -479,6 +579,6 @@
   window.App = {
     ICONS, toast, copyText, hydrateIcons, digitsHTML, digitsHTMLUpdate, ringSVG, setRing, escapeHtml,
     fetchJSON, openOverlay, closeOverlay, closeAllOverlays, applyAccent, setCookie, getCookie,
-    cmdkOpen, attachAutocomplete,
+    cmdkOpen, attachAutocomplete, onPageLeave,
   };
 })();

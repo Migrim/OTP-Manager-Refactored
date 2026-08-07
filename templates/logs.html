@@ -211,7 +211,7 @@
     const label = secs < 1 ? "Updated just now" : secs < 60 ? "Updated " + secs + "s ago" : "Updated " + Math.floor(secs / 60) + "m ago";
     document.getElementById("logs-updated").textContent = label;
   }
-  setInterval(updatedLabel, 1000);
+  const updatedLabelTimer = setInterval(updatedLabel, 1000);
 
   async function fetchLogs(showToast) {
     try {
@@ -250,7 +250,14 @@
   bindPop("logs-level-btn", "logs-levels");
   bindPop("logs-source-btn", "logs-sources");
   bindPop("logs-more-btn", "logs-more-pop");
-  document.addEventListener("click", () => closePops());
+  function onDocClick() { closePops(); }
+  document.addEventListener("click", onDocClick);
+
+  if (A.onPageLeave) A.onPageLeave(() => {
+    clearInterval(updatedLabelTimer);
+    clearInterval(pollTimer);
+    document.removeEventListener("click", onDocClick);
+  });
 
   /* filter interactions */
   document.getElementById("logs-levels").addEventListener("change", e => {
