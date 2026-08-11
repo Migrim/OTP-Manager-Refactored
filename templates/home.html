@@ -366,6 +366,23 @@
     return c;
   }, document.getElementById("home-search-kbd"));
 
+  function clearSearchAndFilters() {
+    if (!query && !companyFilter) return;
+    query = ""; companyFilter = "";
+    searchInput.value = ""; filterSelect.value = "";
+    searchAC.refresh();
+    render();
+  }
+
+  document.addEventListener("keydown", e => {
+    if (e.key !== "Escape") return;
+    if (document.querySelector(".overlay.open")) return;
+    clearSearchAndFilters();
+  });
+
+  const homeNavLink = document.querySelector('.sidebar nav a.nav-item[href="/"]');
+  if (homeNavLink) homeNavLink.addEventListener("click", clearSearchAndFilters);
+
   function entryById(id) { return secrets.find(e => String(e.id) === String(id)); }
 
   content.addEventListener("click", e => {
