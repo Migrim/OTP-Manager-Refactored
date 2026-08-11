@@ -44,6 +44,10 @@
             <span id="check-updates-label">Check for Updates</span>
           </button>
         </div>
+        <div style="display:flex;gap:16px">
+          <button id="preview-update-btn" type="button" style="padding:0;border:none;background:none;color:var(--text-faint);font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Preview update screen</button>
+          <button id="preview-update-error-btn" type="button" style="padding:0;border:none;background:none;color:var(--text-faint);font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Preview failure state</button>
+        </div>
         <div class="update-banner-wrap" id="update-banner">
           <div class="update-banner">
             <div style="flex:1;min-width:0">
@@ -320,10 +324,13 @@
     updateLogRow.classList.toggle("err", !!isError);
   }
 
+  let lastUpdatePhaseIdx = 0;
   function setUpdateSteps(phase, isError) {
-    const idx = UPDATE_PHASES.indexOf(phase);
     const done = phase === "done";
-    const filled = done ? UPDATE_PHASES.length : Math.max(0, idx);
+    let idx = UPDATE_PHASES.indexOf(phase);
+    if (idx === -1 && !done) idx = lastUpdatePhaseIdx;
+    else if (!done) lastUpdatePhaseIdx = idx;
+    const filled = done ? UPDATE_PHASES.length : idx;
     updateStepsEl.querySelectorAll(".update-step").forEach((el, i) => {
       const glyph = el.querySelector(".glyph");
       const detail = el.querySelector(".detail");
@@ -407,6 +414,36 @@
     stopUpdateBg();
   });
 
+  /* ---- preview: run the wait screen against fake data, no server calls ---- */
+  function previewUpdateSequence(withError) {
+    updateOverlayClose.style.display = "none";
+    setUpdateSteps("stopping", false);
+    setUpdateStatus("initializing…", false);
+    updateOverlay.classList.add("open");
+    startUpdateBg();
+    const seq = [
+      [800, () => setUpdateSteps("stopping", false)],
+      [1800, () => { setUpdateSteps("updating", false); setUpdateStatus(UPDATE_PHASE_LABELS.updating, false); }],
+    ];
+    if (withError) {
+      seq.push([3000, () => {
+        setUpdateSteps("error", true);
+        setUpdateStatus("error: update package checksum mismatch — check the server logs", true);
+        updateOverlayClose.style.display = "inline-flex";
+      }]);
+    } else {
+      seq.push([2800, () => { setUpdateSteps("starting", false); setUpdateStatus(UPDATE_PHASE_LABELS.starting, false); }]);
+      seq.push([3800, () => {
+        setUpdateSteps("done", false);
+        setUpdateStatus("preview complete — this was a simulated run, nothing was updated", false);
+        updateOverlayClose.style.display = "inline-flex";
+      }]);
+    }
+    seq.forEach(([delay, fn]) => setTimeout(fn, delay));
+  }
+  document.getElementById("preview-update-btn").addEventListener("click", () => previewUpdateSequence(false));
+  document.getElementById("preview-update-error-btn").addEventListener("click", () => previewUpdateSequence(true));
+
   document.getElementById("update-confirm-btn").addEventListener("click", async () => {
     A.closeOverlay("update-confirm-overlay");
     const triggerTs = Date.now() / 1000;
@@ -418,6 +455,7 @@
     try {
       await A.fetchJSON("/api/server/update-now", { method: "POST" });
     } catch (err) {
+      setUpdateSteps("error", true);
       setUpdateStatus("error: " + err.message + " — could not start the update", true);
       updateOverlayClose.style.display = "inline-flex";
       return;
