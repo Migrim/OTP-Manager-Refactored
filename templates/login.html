@@ -91,7 +91,7 @@
   var ASCII_RAMP = ' .:-=+*#%@'.split('');
 
   function getAsciiStyle() {
-    try { return localStorage.getItem(ASCII_KEY) || 'starfield'; } catch (e) { return 'starfield'; }
+    try { return localStorage.getItem(ASCII_KEY) || 'ripple'; } catch (e) { return 'ripple'; }
   }
   function saveAsciiStyle(style) {
     try { localStorage.setItem(ASCII_KEY, style); } catch (e) {}

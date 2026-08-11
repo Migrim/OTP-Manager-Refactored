@@ -48,6 +48,14 @@ AVATAR_EXTS = ("png", "jpg", "webp")
 AVATAR_MAX_BYTES = 3 * 1024 * 1024
 SERVER_START_TIME = time.time()
 STATE_PATH = os.path.join(BASE_DIR, "otp-server.state.json")
+UPDATE_STATUS_PATH = os.path.join(BASE_DIR, "otp-server.update-status.json")
+
+def read_update_status():
+    try:
+        with open(UPDATE_STATUS_PATH, "r", encoding="utf-8") as f:
+            return json.load(f) or {}
+    except Exception:
+        return {}
 
 def get_server_started_at():
     # otp-server.state.json is written by start.py when it launches this
@@ -1153,6 +1161,42 @@ def server_stop():
     logger.info(f"{u(g.user_id)} stopped the server")
     threading.Thread(target=_stop_process, daemon=True).start()
     return jsonify({"message": "Stopping"})
+
+@app.route("/api/server/update-now", methods=["POST"])
+@admin_required_json
+def server_update_now():
+    logger.warning(f"{u(g.user_id)} triggered an update from the web UI")
+    try:
+        with open(UPDATE_STATUS_PATH, "w", encoding="utf-8") as f:
+            json.dump({
+                "phase": "stopping",
+                "ok": None,
+                "message": "Stopping server for update...",
+                "ts": time.time(),
+            }, f)
+    except Exception:
+        pass
+    # A detached process does the stop -> update -> start cycle so it survives
+    # this process being killed as part of "stop". See start.py --run-update.
+    subprocess.Popen(
+        [sys.executable, os.path.join(BASE_DIR, "start.py"), "--run-update"],
+        cwd=BASE_DIR,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        stdin=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    return jsonify({"message": "Update started", "server_started_at": SERVER_START_TIME})
+
+@app.route("/api/server/ping")
+@admin_required_json
+def server_ping():
+    return jsonify({
+        "ok": True,
+        "version": get_app_version(),
+        "started_at": SERVER_START_TIME,
+        "last_update": read_update_status() or None,
+    })
 
 def maintenance_loop():
     while True:

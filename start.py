@@ -31,6 +31,7 @@ LOG_PATH = os.path.join(BASE_DIR, "otp-server.output.log")
 APP_PY_PATH = os.path.join(BASE_DIR, "app.py")
 VERSION_PATH = os.path.join(BASE_DIR, "VERSION")
 SETTINGS_PATH = os.path.join(BASE_DIR, "settings.json")
+UPDATE_STATUS_PATH = os.path.join(BASE_DIR, "otp-server.update-status.json")
 
 PYTHON = sys.executable or "python3"
 APP_CMD = [PYTHON, os.path.join(BASE_DIR, "app.py")]
@@ -55,7 +56,8 @@ PROTECTED_FILES = {
     os.path.basename(PID_PATH),
     os.path.basename(STATE_PATH),
     os.path.basename(LOG_PATH),
-    os.path.basename(SETTINGS_PATH)
+    os.path.basename(SETTINGS_PATH),
+    os.path.basename(UPDATE_STATUS_PATH)
 }
 
 ANSI = sys.stdout.isatty()
@@ -899,6 +901,51 @@ def update_from_github():
             return False, "Update aborted because local VERSION did not update correctly."
 
         return True, f"Updated from {info['local']} to {info['remote']}."
+
+def write_update_status(d):
+    try:
+        with open(UPDATE_STATUS_PATH, "w", encoding="utf-8") as f:
+            json.dump(d, f, ensure_ascii=False, indent=2)
+    except:
+        pass
+
+def read_update_status():
+    try:
+        with open(UPDATE_STATUS_PATH, "r", encoding="utf-8") as f:
+            return json.load(f) or {}
+    except:
+        return {}
+
+def run_update_cycle():
+    """Non-interactive stop -> update -> start, run as a detached process so it
+    survives the web-triggered SIGTERM sent to this app.py's own PID. Progress is
+    written to UPDATE_STATUS_PATH so the web UI can poll it once the new server
+    process is back up (the old one can't answer once it's been stopped)."""
+    write_update_status({"phase": "stopping", "ok": None, "message": "Stopping server for update...", "ts": time.time()})
+    ok, msg = stop_server()
+    if not ok:
+        write_update_status({"phase": "error", "ok": False, "message": f"Could not stop server: {msg}", "ts": time.time()})
+        return
+
+    write_update_status({"phase": "updating", "ok": None, "message": "Downloading and applying update...", "ts": time.time()})
+    try:
+        ok, msg = update_from_github()
+    except Exception as e:
+        ok, msg = False, str(e)
+
+    if not ok:
+        write_update_status({"phase": "error", "ok": False, "message": f"Update failed: {msg}", "ts": time.time()})
+        start_server()
+        return
+
+    write_update_status({"phase": "starting", "ok": None, "message": "Starting updated server...", "ts": time.time()})
+    ok2, msg2 = start_server()
+    write_update_status({
+        "phase": "done" if ok2 else "error",
+        "ok": ok2,
+        "message": msg2 if ok2 else f"Update applied but failed to start: {msg2}",
+        "ts": time.time(),
+    })
 
 ASCII_TITLE = r"""
 ░░░░░░░░      ░░░        ░░       ░░░░░░░░░        ░░░      ░░░░      ░░░  ░░░░░░░░░░░░░
@@ -2102,4 +2149,7 @@ def main():
                     break
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == "--run-update":
+        run_update_cycle()
+    else:
+        main()

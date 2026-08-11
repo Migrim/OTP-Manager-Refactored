@@ -46,9 +46,12 @@
         <div class="info-banner" id="update-banner" style="display:none">
           <div style="flex:1;min-width:0">
             <div style="font-size:13.5px;font-weight:700;color:var(--text)" id="update-banner-title"></div>
-            <div style="font-size:12.5px;color:var(--text-dim);margin-top:4px;line-height:1.5" id="update-banner-desc"></div>
+            <div style="font-size:12.5px;color:var(--text-dim);margin-top:4px;line-height:1.5">The server will stop, download and install the update, then start back up automatically. All connected users will be logged out while this happens.</div>
           </div>
-          <button class="btn-accent" id="update-copy-cmd" type="button" style="flex:none;padding:9px 16px">Copy install command</button>
+          <div style="display:flex;gap:8px;flex:none">
+            <button class="btn-outline" id="update-copy-cmd" type="button" style="padding:9px 14px">Copy CLI command</button>
+            <button class="btn-accent" id="update-now-btn" type="button" style="padding:9px 16px">Update Now</button>
+          </div>
         </div>
         <div id="update-uptodate" style="display:none;align-items:center;gap:8px;font-size:13px;color:var(--ok);font-weight:600">
           <span style="width:14px;height:14px;display:flex" data-icon="check"></span><span id="update-uptodate-text"></span>
@@ -163,6 +166,33 @@
     </div>
   </div>
 </div>
+
+<!-- Update modal -->
+<div class="overlay center" id="update-confirm-overlay">
+  <div class="modal">
+    <div class="modal-title lg">Update to v<span id="update-confirm-version"></span>?</div>
+    <div class="modal-sub">The server will stop, download and install the update, then start back up automatically. All connected users will be logged out and OTP codes will briefly stop refreshing while this happens.</div>
+    <div class="modal-actions">
+      <button class="btn-outline" data-close-overlay type="button">Cancel</button>
+      <button class="btn-accent" id="update-confirm-btn" type="button" style="padding:9px 16px">Update Now</button>
+    </div>
+  </div>
+</div>
+
+<!-- Update: full-page wait screen -->
+<div class="update-overlay" id="update-overlay">
+  <div class="update-overlay-inner">
+    <div class="update-pulse">
+      <span class="update-pulse-ring r1"></span>
+      <span class="update-pulse-ring r2"></span>
+      <span class="update-pulse-ring r3"></span>
+      <span class="update-pulse-core"><span data-icon="refresh"></span></span>
+    </div>
+    <div class="update-overlay-title" id="update-overlay-title">Stopping server&hellip;</div>
+    <div class="update-overlay-sub" id="update-overlay-sub">Please wait &mdash; this page will reload automatically once the update finishes.</div>
+    <button class="btn-outline update-overlay-close" id="update-overlay-close" type="button">Close</button>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -194,6 +224,7 @@
 
   /* ---- update check ---- */
   const checkBtn = document.getElementById("check-updates");
+  let latestAvailableVersion = null;
   checkBtn.addEventListener("click", async () => {
     document.getElementById("update-action").innerHTML = '<div class="spinner"></div>';
     document.getElementById("update-banner").style.display = "none";
@@ -201,12 +232,12 @@
     try {
       const res = await A.fetchJSON("/api/server/check-update");
       if (res.available) {
+        latestAvailableVersion = res.latest;
         document.getElementById("update-banner").style.display = "flex";
         document.getElementById("update-banner-title").textContent = "Update available — v" + res.latest;
-        document.getElementById("update-banner-desc").textContent =
-          "Updates are installed from the terminal dashboard while the server is stopped. Copy the command, run it on the server machine, and choose Update.";
         try { localStorage.setItem("otp-update-available", res.latest); } catch (e) {}
       } else {
+        latestAvailableVersion = null;
         document.getElementById("update-uptodate").style.display = "flex";
         document.getElementById("update-uptodate-text").textContent = "You're up to date — v" + (res.current || CURRENT_VERSION);
         try { localStorage.removeItem("otp-update-available"); } catch (e) {}
@@ -223,6 +254,82 @@
   document.getElementById("update-copy-cmd").addEventListener("click", () => {
     A.copyText(document.getElementById("cli-command").value, "Command copied");
   });
+
+  /* ---- update now: stop -> update -> start, with a live wait screen ---- */
+  const updateOverlay = document.getElementById("update-overlay");
+  const updateOverlayTitle = document.getElementById("update-overlay-title");
+  const updateOverlaySub = document.getElementById("update-overlay-sub");
+  const updateOverlayClose = document.getElementById("update-overlay-close");
+
+  document.getElementById("update-now-btn").addEventListener("click", () => {
+    document.getElementById("update-confirm-version").textContent = latestAvailableVersion || "?";
+    A.openOverlay("update-confirm-overlay");
+  });
+
+  updateOverlayClose.addEventListener("click", () => {
+    updateOverlay.classList.remove("open");
+  });
+
+  document.getElementById("update-confirm-btn").addEventListener("click", async () => {
+    A.closeOverlay("update-confirm-overlay");
+    const triggerTs = Date.now() / 1000;
+    updateOverlayTitle.textContent = "Stopping server…";
+    updateOverlaySub.textContent = "Please wait — this page will reload automatically once the update finishes.";
+    updateOverlayClose.style.display = "none";
+    updateOverlay.classList.add("open");
+    try {
+      await A.fetchJSON("/api/server/update-now", { method: "POST" });
+    } catch (err) {
+      updateOverlayTitle.textContent = "Could not start the update";
+      updateOverlaySub.textContent = err.message;
+      updateOverlayClose.style.display = "inline-flex";
+      return;
+    }
+    pollUpdateStatus(triggerTs, Date.now() + 180000, false);
+  });
+
+  const UPDATE_PHASE_LABELS = {
+    stopping: "Stopping server…",
+    updating: "Downloading update…",
+    starting: "Starting updated server…",
+  };
+
+  function pollUpdateStatus(triggerTs, deadline, sawDip) {
+    fetch("/api/server/ping", { cache: "no-store", headers: { "X-Requested-With": "XMLHttpRequest" } })
+      .then((res) => (res && res.ok ? res.json() : Promise.reject(new Error("not ok"))))
+      .then((data) => {
+        const upd = data && data.last_update;
+        if (upd && upd.ts >= triggerTs - 2) {
+          if (upd.phase === "done") {
+            updateOverlayTitle.textContent = "Update complete — v" + (data.version || "");
+            updateOverlaySub.textContent = "Reloading…";
+            setTimeout(() => window.location.reload(), 1200);
+            return;
+          }
+          if (upd.phase === "error") {
+            updateOverlayTitle.textContent = "Update failed";
+            updateOverlaySub.textContent = upd.message || "Check the server logs for details.";
+            updateOverlayClose.style.display = "inline-flex";
+            return;
+          }
+          updateOverlayTitle.textContent = UPDATE_PHASE_LABELS[upd.phase] || "Updating…";
+          updateOverlaySub.textContent = "Please wait — this page will reload automatically once the update finishes.";
+        } else if (sawDip) {
+          updateOverlayTitle.textContent = "Server is back — finishing up…";
+        }
+        if (Date.now() > deadline) {
+          updateOverlayTitle.textContent = "Taking longer than expected";
+          updateOverlaySub.textContent = "The update is still running in the background. Feel free to check back in a bit.";
+          updateOverlayClose.style.display = "inline-flex";
+        }
+        setTimeout(() => pollUpdateStatus(triggerTs, deadline, sawDip), 1500);
+      })
+      .catch(() => {
+        updateOverlayTitle.textContent = "Restarting…";
+        updateOverlaySub.textContent = "Waiting for the server to come back online…";
+        setTimeout(() => pollUpdateStatus(triggerTs, deadline, true), 1200);
+      });
+  }
 
   /* ---- config ---- */
   const secretInput = document.getElementById("cfg-secret");

@@ -852,6 +852,35 @@ html.blur-active .otp-panel, html.blur-active .otp-cards { filter: blur(9px); tr
 @keyframes consoleDotBlink { 0%, 100% { opacity: 0; } 30%, 60% { opacity: 1; } }
 .console-connecting-sub { font-size: 12.5px; color: var(--text-faint); margin-top: -8px; }
 
+/* server update: full-page "ripple pulse" wait screen */
+.update-overlay {
+  position: fixed; inset: 0; z-index: 100000; display: none;
+  align-items: center; justify-content: center; flex-direction: column;
+  background: var(--app-bg);
+}
+.update-overlay.open { display: flex; }
+.update-overlay-inner { display: flex; flex-direction: column; align-items: center; gap: 24px; text-align: center; padding: 0 24px; max-width: 420px; }
+.update-pulse { position: relative; width: 96px; height: 96px; display: flex; align-items: center; justify-content: center; flex: none; }
+.update-pulse-ring {
+  position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--accent);
+  animation: updatePulseRing 2.2s cubic-bezier(.2,.6,.35,1) infinite; opacity: 0;
+}
+.update-pulse-ring.r2 { animation-delay: 0.7s; }
+.update-pulse-ring.r3 { animation-delay: 1.4s; }
+@keyframes updatePulseRing {
+  0% { transform: scale(0.5); opacity: 0.55; }
+  100% { transform: scale(2); opacity: 0; }
+}
+.update-pulse-core {
+  position: relative; z-index: 1; width: 46px; height: 46px; border-radius: 50%;
+  background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.update-pulse-core span { width: 20px; height: 20px; display: flex; animation: spin 1.6s linear infinite; }
+.update-overlay-title { font-size: 17px; font-weight: 700; color: var(--text); }
+.update-overlay-sub { font-size: 13px; color: var(--text-dim); line-height: 1.5; }
+.update-overlay-close { display: none; margin-top: 4px; }
+
 .collapse-card { display: flex; flex-direction: column; background: var(--row-bg); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
 .collapse-head {
   display: flex; align-items: center; justify-content: space-between; width: 100%;
