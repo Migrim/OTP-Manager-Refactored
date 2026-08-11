@@ -177,8 +177,51 @@
     }
     return new Uint8Array(out);
   }
+  /* Pure-JS SHA-1/HMAC so the preview keeps working on plain-HTTP hosts,
+     where the Web Crypto API (crypto.subtle) is unavailable (secure-context only). */
+  function sha1(bytes) {
+    function rotl(n, s) { return ((n << s) | (n >>> (32 - s))) >>> 0; }
+    const ml = bytes.length * 8;
+    const padded = new Uint8Array((bytes.length + 9 + 63) & ~63);
+    padded.set(bytes);
+    padded[bytes.length] = 0x80;
+    const view = new DataView(padded.buffer);
+    view.setUint32(padded.length - 4, ml >>> 0, false);
+    view.setUint32(padded.length - 8, Math.floor(ml / 0x100000000), false);
+    let h0 = 0x67452301, h1 = 0xEFCDAB89, h2 = 0x98BADCFE, h3 = 0x10325476, h4 = 0xC3D2E1F0;
+    const w = new Uint32Array(80);
+    for (let chunkStart = 0; chunkStart < padded.length; chunkStart += 64) {
+      for (let i = 0; i < 16; i++) w[i] = view.getUint32(chunkStart + i * 4, false);
+      for (let i = 16; i < 80; i++) w[i] = rotl(w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16], 1);
+      let a = h0, b = h1, c = h2, d = h3, e = h4;
+      for (let i = 0; i < 80; i++) {
+        let f, k;
+        if (i < 20) { f = (b & c) | (~b & d); k = 0x5A827999; }
+        else if (i < 40) { f = b ^ c ^ d; k = 0x6ED9EBA1; }
+        else if (i < 60) { f = (b & c) | (b & d) | (c & d); k = 0x8F1BBCDC; }
+        else { f = b ^ c ^ d; k = 0xCA62C1D6; }
+        const temp = (rotl(a, 5) + f + e + k + w[i]) >>> 0;
+        e = d; d = c; c = rotl(b, 30); b = a; a = temp;
+      }
+      h0 = (h0 + a) >>> 0; h1 = (h1 + b) >>> 0; h2 = (h2 + c) >>> 0; h3 = (h3 + d) >>> 0; h4 = (h4 + e) >>> 0;
+    }
+    const out = new Uint8Array(20);
+    const dv = new DataView(out.buffer);
+    dv.setUint32(0, h0, false); dv.setUint32(4, h1, false); dv.setUint32(8, h2, false);
+    dv.setUint32(12, h3, false); dv.setUint32(16, h4, false);
+    return out;
+  }
+  function concatBytes(a, b) { const out = new Uint8Array(a.length + b.length); out.set(a, 0); out.set(b, a.length); return out; }
+  function hmacSha1(keyBytes, msgBytes) {
+    const blockSize = 64;
+    let key = keyBytes;
+    if (key.length > blockSize) key = sha1(key);
+    if (key.length < blockSize) { const padded = new Uint8Array(blockSize); padded.set(key); key = padded; }
+    const oKeyPad = new Uint8Array(blockSize), iKeyPad = new Uint8Array(blockSize);
+    for (let i = 0; i < blockSize; i++) { oKeyPad[i] = key[i] ^ 0x5c; iKeyPad[i] = key[i] ^ 0x36; }
+    return sha1(concatBytes(oKeyPad, sha1(concatBytes(iKeyPad, msgBytes))));
+  }
   async function totp(secret) {
-    if (!window.crypto || !crypto.subtle) return null;
     const keyBytes = base32ToBytes(secret);
     if (!keyBytes || !keyBytes.length) return null;
     const counter = Math.floor(Date.now() / 1000 / 30);
@@ -186,8 +229,7 @@
     let c = counter;
     for (let i = 7; i >= 0; i--) { msg[i] = c & 0xff; c = Math.floor(c / 256); }
     try {
-      const key = await crypto.subtle.importKey("raw", keyBytes, { name: "HMAC", hash: "SHA-1" }, false, ["sign"]);
-      const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, msg));
+      const sig = hmacSha1(keyBytes, msg);
       const off = sig[sig.length - 1] & 0x0f;
       const bin = ((sig[off] & 0x7f) << 24) | (sig[off + 1] << 16) | (sig[off + 2] << 8) | sig[off + 3];
       return String(bin % 1000000).padStart(6, "0");
