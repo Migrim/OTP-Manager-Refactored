@@ -6,8 +6,10 @@
 {% block page %}
 <div class="page">
   <div class="page-topbar">
-    <div class="page-title">Web Access</div>
-    <div class="topbar-spacer"></div>
+    <div class="topbar-search">
+      <span class="ico" data-icon="search"></span>
+      <input type="text" id="webaccess-search" placeholder="Search companies…" autocomplete="off">
+    </div>
     <div class="topbar-note">{{ companies|length }} companies</div>
   </div>
 
@@ -16,7 +18,7 @@
       <div class="table-panel" id="webaccess-list" style="display:none"></div>
       <div class="empty-state" id="webaccess-empty" style="display:none">
         <span class="ico" data-icon="globe"></span>
-        <div class="txt">No companies yet</div>
+        <div class="txt" id="webaccess-empty-txt">No companies yet</div>
       </div>
     </div>
   </div>
@@ -33,14 +35,19 @@
     {% endfor %}
   ];
 
+  let search = "";
   const list = document.getElementById("webaccess-list");
   const empty = document.getElementById("webaccess-empty");
 
   function render() {
     const hasAny = COMPANIES.length > 0;
-    list.style.display = hasAny ? "" : "none";
-    empty.style.display = hasAny ? "none" : "flex";
-    list.innerHTML = COMPANIES.map(c =>
+    const q = search.trim().toLowerCase();
+    const filtered = q ? COMPANIES.filter(c => c.name.toLowerCase().includes(q)) : COMPANIES;
+    list.style.display = filtered.length ? "" : "none";
+    empty.style.display = filtered.length ? "none" : "flex";
+    document.getElementById("webaccess-empty-txt").textContent = hasAny ? "No companies match your search" : "No companies yet";
+    empty.querySelector(".ico").innerHTML = A.ICONS[hasAny ? "search" : "globe"];
+    list.innerHTML = filtered.map(c =>
       '<div class="table-row" style="display:flex;align-items:center;gap:12px">' +
       '<div class="row-title" style="flex:1;min-width:0">' + A.escapeHtml(c.name) + "</div>" +
       '<div class="row-dim" style="font-size:12px;margin-right:8px">' + (c.enabled ? "Enabled" : "Disabled") + "</div>" +
@@ -63,6 +70,9 @@
       render();
     } catch (err) { A.toast(err.message); }
   });
+
+  document.getElementById("webaccess-search").addEventListener("input", e => { search = e.target.value; render(); });
+  A.attachAutocomplete(document.getElementById("webaccess-search"), () => COMPANIES.map(c => c.name));
 
   render();
 })();

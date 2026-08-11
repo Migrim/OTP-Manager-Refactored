@@ -151,9 +151,11 @@
     const filtered = q
       ? USERS.filter(u => u.name.toLowerCase().includes(q) || roleLabel(u).toLowerCase().includes(q))
       : USERS;
+    const hasAny = USERS.length > 0;
     const emptyEl = document.getElementById("users-empty");
     emptyEl.style.display = filtered.length ? "none" : "flex";
-    emptyEl.querySelector(".txt").textContent = USERS.length ? "No users match your search" : "No dashboard users yet";
+    emptyEl.querySelector(".txt").textContent = hasAny ? "No users match your search" : "No dashboard users yet";
+    emptyEl.querySelector(".ico").innerHTML = A.ICONS[hasAny ? "search" : "users"];
     table.innerHTML = filtered.map(u => {
       const isBuiltinAdmin = u.name.trim().toLowerCase() === "admin";
       const initials = u.name.trim().slice(0, 2).toUpperCase();

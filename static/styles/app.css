@@ -507,11 +507,14 @@ html.show-company-icons .otp-section-head .sec-tool { display: flex; }
 html.blur-active .otp-panel, html.blur-active .otp-cards { filter: blur(9px); transition: filter 0.4s ease; }
 
 .empty-state {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  min-height: 55vh; padding: 40px 0; color: var(--text-faint); text-align: center;
+  display: flex; flex-direction: row; align-items: center; justify-content: center;
+  min-height: 55vh; padding: 40px 0; color: var(--text-faint); text-align: center; gap: 10px;
 }
-.empty-state .ico { width: 36px; height: 36px; margin-bottom: 10px; display: flex; }
-.empty-state .txt { font-size: 14px; }
+.empty-state .ico {
+  width: 20px; height: 20px; color: var(--text-dim); display: flex; align-items: center; justify-content: center;
+}
+.empty-state .ico svg { width: 20px; height: 20px; display: block; }
+.empty-state .txt { font-size: 14px; font-weight: 600; color: var(--text); }
 
 .back-to-top {
   position: absolute; right: 26px; bottom: 26px; width: 42px; height: 42px; border-radius: 50%;
