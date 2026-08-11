@@ -435,6 +435,13 @@ def start_server():
         return False, f"Could not open log file: {e}"
 
     env = os.environ.copy()
+    # Werkzeug's reloader stamps these into its own process env to hand off
+    # its listening socket fd to its reload child. If they leak through here
+    # (e.g. inherited via the web-triggered update's stop -> update -> start
+    # cycle), the new app.py process mistakes itself for that reload child
+    # and tries to reuse a closed fd, crashing with "Bad file descriptor".
+    env.pop("WERKZEUG_RUN_MAIN", None)
+    env.pop("WERKZEUG_SERVER_FD", None)
     env.setdefault("PYTHONUNBUFFERED", "1")
     env["OTP_HOST"] = str(host)
     env["OTP_PORT"] = str(port)
