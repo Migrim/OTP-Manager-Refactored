@@ -348,6 +348,7 @@ html.sidebar-closed .main, .main.no-side { margin-left: 10px; }
 .btn-accent:hover { filter: brightness(1.08); }
 .btn-accent:disabled { opacity: 0.5; cursor: default; }
 .btn-accent.lg { padding: 10px 18px; font-size: 13.5px; }
+.spin { animation: spin 0.8s linear infinite; }
 .btn-outline {
   display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border-radius: 9px;
   border: 1px solid var(--border); background: none; color: var(--text); font-size: 13px;
@@ -852,34 +853,50 @@ html.blur-active .otp-panel, html.blur-active .otp-cards { filter: blur(9px); tr
 @keyframes consoleDotBlink { 0%, 100% { opacity: 0; } 30%, 60% { opacity: 1; } }
 .console-connecting-sub { font-size: 12.5px; color: var(--text-faint); margin-top: -8px; }
 
-/* server update: full-page "ripple pulse" wait screen */
+/* server update: full-page terminal wait screen */
 .update-overlay {
   position: fixed; inset: 0; z-index: 100000; display: none;
   align-items: center; justify-content: center; flex-direction: column;
   background: var(--app-bg);
 }
 .update-overlay.open { display: flex; }
-.update-overlay-inner { display: flex; flex-direction: column; align-items: center; gap: 24px; text-align: center; padding: 0 24px; max-width: 420px; }
-.update-pulse { position: relative; width: 96px; height: 96px; display: flex; align-items: center; justify-content: center; flex: none; }
-.update-pulse-ring {
-  position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--accent);
-  animation: updatePulseRing 2.2s cubic-bezier(.2,.6,.35,1) infinite; opacity: 0;
+.update-overlay-inner { display: flex; flex-direction: column; align-items: center; gap: 18px; text-align: center; padding: 0 24px; width: 100%; max-width: 460px; }
+.update-overlay-sub { font-size: 12.5px; color: var(--text-faint); line-height: 1.5; }
+.update-overlay-close { display: none; margin-top: 2px; }
+
+.update-term {
+  width: 100%; text-align: left; background: var(--side-bg); border: 1px solid var(--border);
+  border-radius: 10px; overflow: hidden; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
 }
-.update-pulse-ring.r2 { animation-delay: 0.7s; }
-.update-pulse-ring.r3 { animation-delay: 1.4s; }
-@keyframes updatePulseRing {
-  0% { transform: scale(0.5); opacity: 0.55; }
-  100% { transform: scale(2); opacity: 0; }
+.update-term-bar {
+  display: flex; align-items: center; gap: 7px; padding: 10px 14px;
+  background: var(--header-bg); border-bottom: 1px solid var(--border);
 }
-.update-pulse-core {
-  position: relative; z-index: 1; width: 46px; height: 46px; border-radius: 50%;
-  background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 10px 26px color-mix(in srgb, var(--accent) 45%, transparent);
+.update-term-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.update-term-dot.r { background: #ff5f56; }
+.update-term-dot.y { background: #ffbd2e; }
+.update-term-dot.g { background: #27c93f; }
+.update-term-bar-title {
+  margin-left: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+  font-weight: 600; color: var(--text-faint); letter-spacing: 0.02em;
 }
-.update-pulse-core span { width: 20px; height: 20px; display: flex; animation: spin 1.6s linear infinite; }
-.update-overlay-title { font-size: 17px; font-weight: 700; color: var(--text); }
-.update-overlay-sub { font-size: 13px; color: var(--text-dim); line-height: 1.5; }
-.update-overlay-close { display: none; margin-top: 4px; }
+.update-term-body {
+  padding: 18px 20px 20px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px; line-height: 1.7; color: var(--text-dim);
+}
+.update-term-line { white-space: pre-wrap; word-break: break-word; }
+.update-term-line.dim { color: var(--text-faint); }
+.update-term-line.err, .update-term-line.err .txt { color: var(--danger); }
+.update-term-steps { margin: 12px 0; display: flex; flex-direction: column; gap: 3px; }
+.update-term-step { color: var(--text-faint); }
+.update-term-step .mark { display: inline-block; width: 26px; color: inherit; }
+.update-term-step.done { color: var(--ok); }
+.update-term-step.active { color: var(--text); animation: updateStepPulse 1.1s ease-in-out infinite; }
+.update-term-step.err { color: var(--danger); }
+@keyframes updateStepPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+.update-term-progress { margin: 10px 0 14px; color: var(--accent); letter-spacing: -0.5px; }
+.update-term-cursor { display: inline-block; margin-left: 2px; animation: updateCursorBlink 1s step-end infinite; }
+@keyframes updateCursorBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
 
 .collapse-card { display: flex; flex-direction: column; background: var(--row-bg); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
 .collapse-head {
@@ -904,9 +921,19 @@ html.blur-active .otp-panel, html.blur-active .otp-cards { filter: blur(9px); tr
 }
 .backup-row .b-load:hover { background: var(--header-bg); }
 
-.info-banner {
-  display: flex; align-items: center; gap: 12px; background: var(--input-bg); border-radius: 9px; padding: 12px 14px;
+.update-banner-wrap {
+  display: grid; grid-template-rows: 0fr; opacity: 0; margin-top: -12px;
+  padding-top: 0; border-top: 0 solid var(--border);
+  transition: grid-template-rows 0.32s cubic-bezier(.3,.7,.4,1), opacity 0.28s ease,
+    margin-top 0.32s cubic-bezier(.3,.7,.4,1), padding-top 0.32s cubic-bezier(.3,.7,.4,1),
+    border-top-width 0.28s ease;
 }
+.update-banner-wrap.open { grid-template-rows: 1fr; opacity: 1; margin-top: 0; padding-top: 14px; border-top-width: 1px; }
+.update-banner {
+  display: flex; align-items: center; gap: 12px; overflow: hidden; min-height: 0;
+}
+.update-banner-title { font-size: 13.5px; font-weight: 700; color: var(--text); }
+.update-banner-desc { font-size: 12px; color: var(--text-dim); margin-top: 3px; line-height: 1.5; }
 .progress-track { width: 100%; height: 8px; border-radius: 4px; background: var(--border); overflow: hidden; }
 .progress-fill { height: 100%; border-radius: 4px; background: var(--accent); width: 0; transition: width 0.25s ease; }
 

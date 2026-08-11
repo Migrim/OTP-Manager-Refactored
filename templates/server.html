@@ -34,23 +34,24 @@
       <!-- Software update -->
       <div class="task-card">
         <div class="task-main">
-          <span class="task-ico" data-icon="refresh"></span>
           <div style="flex:1;min-width:0">
             <div class="task-title">Software Update</div>
             <div class="task-desc">Current version <b style="color:var(--text)">v{{ app_version }}</b></div>
           </div>
-          <span id="update-action">
-            <button class="btn-accent" id="check-updates" type="button" style="padding:9px 16px">Check for Updates</button>
-          </span>
+          <button class="btn-accent" id="check-updates" type="button" style="padding:9px 16px">
+            <span style="width:14px;height:14px;display:flex" data-icon="refresh" id="check-updates-ico"></span>
+            <span id="check-updates-label">Check for Updates</span>
+          </button>
         </div>
-        <div class="info-banner" id="update-banner" style="display:none">
-          <div style="flex:1;min-width:0">
-            <div style="font-size:13.5px;font-weight:700;color:var(--text)" id="update-banner-title"></div>
-            <div style="font-size:12.5px;color:var(--text-dim);margin-top:4px;line-height:1.5">The server will stop, download and install the update, then start back up automatically. All connected users will be logged out while this happens.</div>
-          </div>
-          <div style="display:flex;gap:8px;flex:none">
-            <button class="btn-outline" id="update-copy-cmd" type="button" style="padding:9px 14px">Copy CLI command</button>
-            <button class="btn-accent" id="update-now-btn" type="button" style="padding:9px 16px">Update Now</button>
+        <div class="update-banner-wrap" id="update-banner">
+          <div class="update-banner">
+            <div style="flex:1;min-width:0">
+              <div class="update-banner-title" id="update-banner-title"></div>
+              <div class="update-banner-desc">Stops the server, installs the update, and restarts automatically.</div>
+            </div>
+            <button class="btn-accent" id="update-now-btn" type="button" style="padding:9px 16px">
+              <span style="width:14px;height:14px;display:flex" data-icon="arrowUp"></span>Update Now
+            </button>
           </div>
         </div>
         <div id="update-uptodate" style="display:none;align-items:center;gap:8px;font-size:13px;color:var(--ok);font-weight:600">
@@ -179,16 +180,25 @@
   </div>
 </div>
 
-<!-- Update: full-page wait screen -->
+<!-- Update: full-page terminal wait screen -->
 <div class="update-overlay" id="update-overlay">
   <div class="update-overlay-inner">
-    <div class="update-pulse">
-      <span class="update-pulse-ring r1"></span>
-      <span class="update-pulse-ring r2"></span>
-      <span class="update-pulse-ring r3"></span>
-      <span class="update-pulse-core"><span data-icon="refresh"></span></span>
+    <div class="update-term">
+      <div class="update-term-bar">
+        <span class="update-term-dot r"></span><span class="update-term-dot y"></span><span class="update-term-dot g"></span>
+        <span class="update-term-bar-title">update.sh</span>
+      </div>
+      <div class="update-term-body">
+        <div class="update-term-line">$ ./update.sh --to v<span id="update-term-version"></span></div>
+        <div class="update-term-steps" id="update-term-steps">
+          <div class="update-term-step" data-phase="stopping"><span class="mark">[ ]</span>stop server</div>
+          <div class="update-term-step" data-phase="updating"><span class="mark">[ ]</span>download &amp; install update</div>
+          <div class="update-term-step" data-phase="starting"><span class="mark">[ ]</span>restart server</div>
+        </div>
+        <div class="update-term-progress" id="update-term-progress"></div>
+        <div class="update-term-line dim" id="update-term-status"><span>&gt;</span> <span class="txt">initializing&hellip;</span><span class="update-term-cursor">&#9608;</span></div>
+      </div>
     </div>
-    <div class="update-overlay-title" id="update-overlay-title">Stopping server&hellip;</div>
     <div class="update-overlay-sub" id="update-overlay-sub">Please wait &mdash; this page will reload automatically once the update finishes.</div>
     <button class="btn-outline update-overlay-close" id="update-overlay-close" type="button">Close</button>
   </div>
@@ -224,17 +234,28 @@
 
   /* ---- update check ---- */
   const checkBtn = document.getElementById("check-updates");
+  const checkBtnIco = document.getElementById("check-updates-ico");
+  const checkBtnLabel = document.getElementById("check-updates-label");
   let latestAvailableVersion = null;
   checkBtn.addEventListener("click", async () => {
-    document.getElementById("update-action").innerHTML = '<div class="spinner"></div>';
-    document.getElementById("update-banner").style.display = "none";
+    checkBtn.disabled = true;
+    checkBtnIco.classList.add("spin");
+    checkBtnLabel.textContent = "Checking…";
+    document.getElementById("update-banner").classList.remove("open");
     document.getElementById("update-uptodate").style.display = "none";
-    try {
-      const res = await A.fetchJSON("/api/server/check-update");
+    const minWait = new Promise((resolve) => setTimeout(resolve, 2000));
+    const [outcome] = await Promise.all([
+      A.fetchJSON("/api/server/check-update").catch((err) => ({ __error: err })),
+      minWait,
+    ]);
+    if (outcome && outcome.__error) {
+      A.toast(outcome.__error.message);
+    } else {
+      const res = outcome;
       if (res.available) {
         latestAvailableVersion = res.latest;
-        document.getElementById("update-banner").style.display = "flex";
         document.getElementById("update-banner-title").textContent = "Update available — v" + res.latest;
+        document.getElementById("update-banner").classList.add("open");
         try { localStorage.setItem("otp-update-available", res.latest); } catch (e) {}
       } else {
         latestAvailableVersion = null;
@@ -244,22 +265,49 @@
         var dot = document.getElementById("update-dot");
         if (dot) dot.style.display = "none";
       }
-    } catch (err) {
-      A.toast(err.message);
     }
-    document.getElementById("update-action").innerHTML = "";
-    document.getElementById("update-action").appendChild(checkBtn);
+    checkBtn.disabled = false;
+    checkBtnIco.classList.remove("spin");
+    checkBtnLabel.textContent = "Check for Updates";
   });
 
-  document.getElementById("update-copy-cmd").addEventListener("click", () => {
-    A.copyText(document.getElementById("cli-command").value, "Command copied");
-  });
-
-  /* ---- update now: stop -> update -> start, with a live wait screen ---- */
+  /* ---- update now: stop -> update -> start, with a live terminal wait screen ---- */
   const updateOverlay = document.getElementById("update-overlay");
-  const updateOverlayTitle = document.getElementById("update-overlay-title");
   const updateOverlaySub = document.getElementById("update-overlay-sub");
   const updateOverlayClose = document.getElementById("update-overlay-close");
+  const updateTermVersion = document.getElementById("update-term-version");
+  const updateTermSteps = document.getElementById("update-term-steps");
+  const updateTermProgress = document.getElementById("update-term-progress");
+  const updateTermStatus = document.getElementById("update-term-status");
+  const updateTermStatusTxt = updateTermStatus.querySelector(".txt");
+
+  const UPDATE_PHASES = ["stopping", "updating", "starting"];
+  const UPDATE_PHASE_LABELS = {
+    stopping: "stopping server…",
+    updating: "downloading update…",
+    starting: "starting updated server…",
+  };
+
+  function setUpdateStatus(text, isError) {
+    updateTermStatusTxt.textContent = text;
+    updateTermStatus.classList.toggle("err", !!isError);
+  }
+
+  function setUpdateSteps(phase, isError) {
+    const idx = UPDATE_PHASES.indexOf(phase);
+    const done = phase === "done";
+    let filled = done ? UPDATE_PHASES.length : Math.max(0, idx);
+    updateTermSteps.querySelectorAll(".update-term-step").forEach((el, i) => {
+      const mark = el.querySelector(".mark");
+      el.classList.remove("done", "active", "err");
+      if (done || i < idx) { el.classList.add("done"); mark.textContent = "[x]"; }
+      else if (i === idx) { el.classList.add(isError ? "err" : "active"); mark.textContent = isError ? "[!]" : "[ ]"; }
+      else { mark.textContent = "[ ]"; }
+    });
+    const width = 24;
+    const f = Math.round((filled / UPDATE_PHASES.length) * width);
+    updateTermProgress.textContent = "[" + "█".repeat(f) + "░".repeat(width - f) + "] " + Math.round((filled / UPDATE_PHASES.length) * 100) + "%";
+  }
 
   document.getElementById("update-now-btn").addEventListener("click", () => {
     document.getElementById("update-confirm-version").textContent = latestAvailableVersion || "?";
@@ -273,26 +321,22 @@
   document.getElementById("update-confirm-btn").addEventListener("click", async () => {
     A.closeOverlay("update-confirm-overlay");
     const triggerTs = Date.now() / 1000;
-    updateOverlayTitle.textContent = "Stopping server…";
+    updateTermVersion.textContent = latestAvailableVersion || "?";
+    setUpdateSteps("stopping", false);
+    setUpdateStatus("initializing…", false);
     updateOverlaySub.textContent = "Please wait — this page will reload automatically once the update finishes.";
     updateOverlayClose.style.display = "none";
     updateOverlay.classList.add("open");
     try {
       await A.fetchJSON("/api/server/update-now", { method: "POST" });
     } catch (err) {
-      updateOverlayTitle.textContent = "Could not start the update";
-      updateOverlaySub.textContent = err.message;
+      setUpdateStatus("error: " + err.message, true);
+      updateOverlaySub.textContent = "Could not start the update.";
       updateOverlayClose.style.display = "inline-flex";
       return;
     }
     pollUpdateStatus(triggerTs, Date.now() + 180000, false);
   });
-
-  const UPDATE_PHASE_LABELS = {
-    stopping: "Stopping server…",
-    updating: "Downloading update…",
-    starting: "Starting updated server…",
-  };
 
   function pollUpdateStatus(triggerTs, deadline, sawDip) {
     fetch("/api/server/ping", { cache: "no-store", headers: { "X-Requested-With": "XMLHttpRequest" } })
@@ -301,32 +345,35 @@
         const upd = data && data.last_update;
         if (upd && upd.ts >= triggerTs - 2) {
           if (upd.phase === "done") {
-            updateOverlayTitle.textContent = "Update complete — v" + (data.version || "");
+            setUpdateSteps("done", false);
+            setUpdateStatus("update complete — v" + (data.version || ""), false);
             updateOverlaySub.textContent = "Reloading…";
             setTimeout(() => window.location.reload(), 1200);
             return;
           }
           if (upd.phase === "error") {
-            updateOverlayTitle.textContent = "Update failed";
-            updateOverlaySub.textContent = upd.message || "Check the server logs for details.";
+            setUpdateSteps(upd.phase, true);
+            setUpdateStatus("error: " + (upd.message || "update failed"), true);
+            updateOverlaySub.textContent = "Check the server logs for details.";
             updateOverlayClose.style.display = "inline-flex";
             return;
           }
-          updateOverlayTitle.textContent = UPDATE_PHASE_LABELS[upd.phase] || "Updating…";
+          setUpdateSteps(upd.phase, false);
+          setUpdateStatus(UPDATE_PHASE_LABELS[upd.phase] || "updating…", false);
           updateOverlaySub.textContent = "Please wait — this page will reload automatically once the update finishes.";
         } else if (sawDip) {
-          updateOverlayTitle.textContent = "Server is back — finishing up…";
+          setUpdateStatus("server is back — finishing up…", false);
         }
         if (Date.now() > deadline) {
-          updateOverlayTitle.textContent = "Taking longer than expected";
+          setUpdateStatus("taking longer than expected…", false);
           updateOverlaySub.textContent = "The update is still running in the background. Feel free to check back in a bit.";
           updateOverlayClose.style.display = "inline-flex";
         }
         setTimeout(() => pollUpdateStatus(triggerTs, deadline, sawDip), 1500);
       })
       .catch(() => {
-        updateOverlayTitle.textContent = "Restarting…";
-        updateOverlaySub.textContent = "Waiting for the server to come back online…";
+        setUpdateSteps("starting", false);
+        setUpdateStatus("restarting — waiting for the server to come back online…", false);
         setTimeout(() => pollUpdateStatus(triggerTs, deadline, true), 1200);
       });
   }
