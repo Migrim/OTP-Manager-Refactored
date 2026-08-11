@@ -12,7 +12,13 @@
   </div>
 
   <div class="page-scroll">
-    <div class="table-panel" style="max-width:800px;margin:0 auto" id="webaccess-list"></div>
+    <div style="max-width:800px;margin:0 auto">
+      <div class="table-panel" id="webaccess-list" style="display:none"></div>
+      <div class="empty-state" id="webaccess-empty" style="display:none">
+        <span class="ico" data-icon="globe"></span>
+        <div class="txt">No companies yet</div>
+      </div>
+    </div>
   </div>
 </div>
 {% endblock %}
@@ -28,8 +34,12 @@
   ];
 
   const list = document.getElementById("webaccess-list");
+  const empty = document.getElementById("webaccess-empty");
 
   function render() {
+    const hasAny = COMPANIES.length > 0;
+    list.style.display = hasAny ? "" : "none";
+    empty.style.display = hasAny ? "none" : "flex";
     list.innerHTML = COMPANIES.map(c =>
       '<div class="table-row" style="display:flex;align-items:center;gap:12px">' +
       '<div class="row-title" style="flex:1;min-width:0">' + A.escapeHtml(c.name) + "</div>" +

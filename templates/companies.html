@@ -21,13 +21,13 @@
 
   <div class="page-scroll">
     <div style="max-width:960px;margin:0 auto;display:flex;flex-direction:column;gap:10px">
-      <div class="table-head" style="grid-template-columns:120px 1.6fr 1fr 140px 96px">
+      <div class="table-head" id="companies-table-head" style="grid-template-columns:120px 1.6fr 1fr 140px 96px">
         <div>Company ID</div><div>Name</div><div>OTPs</div><div>Web Access</div><div></div>
       </div>
       <div class="table-panel" id="companies-table"></div>
       <div class="empty-state" id="companies-empty" style="display:none">
         <span class="ico" data-icon="search"></span>
-        <div class="txt">No companies match your search</div>
+        <div class="txt" id="companies-empty-txt">No companies match your search</div>
       </div>
     </div>
   </div>
@@ -113,11 +113,17 @@
 
   function renderTable() {
     const table = document.getElementById("companies-table");
+    const head = document.getElementById("companies-table-head");
+    const hasAny = COMPANIES.length > 0;
+    head.style.display = hasAny ? "" : "none";
+    table.style.display = hasAny ? "" : "none";
     const q = search.trim().toLowerCase();
     const filtered = q
       ? COMPANIES.filter(c => c.name.toLowerCase().includes(q) || String(c.kundennummer).toLowerCase().includes(q))
       : COMPANIES;
     document.getElementById("companies-empty").style.display = filtered.length ? "none" : "flex";
+    document.getElementById("companies-empty-txt").textContent = hasAny ? "No companies match your search" : "No companies yet";
+    document.querySelector("#companies-empty .ico").innerHTML = A.ICONS[hasAny ? "search" : "building"];
     table.innerHTML = filtered.map(c =>
       '<div class="table-row" style="grid-template-columns:120px 1.6fr 1fr 140px 96px">' +
       '<div class="row-dim mono" style="font-size:13px">' + (c.kundennummer !== "" ? A.escapeHtml(String(c.kundennummer)) : "CO-" + (1000 + c.id)) + "</div>" +
