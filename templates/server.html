@@ -90,14 +90,12 @@
 
       <!-- CLI -->
       <div class="task-card">
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="width:16px;height:16px;display:flex;color:var(--text-dim)" data-icon="terminal"></span>
-          <div class="task-title">Manage via CLI</div>
-        </div>
-        <div style="font-size:12.5px;color:var(--text-dim);line-height:1.5">The server ships with a terminal dashboard for starting, stopping, updating, and inspecting this installation. Run the command below on the server machine.</div>
-        <div>
-          <label class="field-label-sm">Command</label>
-          <div style="position:relative">
+        <div class="task-main">
+          <div style="flex:none">
+            <div class="task-title">Manage via CLI</div>
+            <div class="task-desc">Run this command on the Server.</div>
+          </div>
+          <div style="position:relative;flex:1;min-width:0">
             <input class="text-input mono padded" id="cli-command" readonly value="{{ cli_command }}">
             <button id="cli-copy" type="button" title="Copy" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);width:26px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:6px;border:none;background:none;color:var(--text-faint);cursor:pointer">
               <span style="width:13px;height:13px;display:flex" data-icon="copy"></span>
