@@ -40,6 +40,7 @@
           </div>
           <button class="btn-accent" id="check-updates" type="button" style="padding:9px 16px">
             <span style="width:14px;height:14px;display:flex" data-icon="refresh" id="check-updates-ico"></span>
+            <span class="spinner sm light" id="check-updates-spinner" style="display:none"></span>
             <span id="check-updates-label">Check for Updates</span>
           </button>
         </div>
@@ -54,8 +55,11 @@
             </button>
           </div>
         </div>
-        <div id="update-uptodate" style="display:none;align-items:center;gap:8px;font-size:13px;color:var(--ok);font-weight:600">
-          <span style="width:14px;height:14px;display:flex" data-icon="check"></span><span id="update-uptodate-text"></span>
+        <div class="update-banner-wrap" id="update-uptodate">
+          <div class="update-banner" style="gap:8px">
+            <span style="width:14px;height:14px;display:flex;color:var(--ok)" data-icon="check"></span>
+            <span id="update-uptodate-text" style="font-size:13px;font-weight:600;color:var(--text)"></span>
+          </div>
         </div>
       </div>
 
@@ -235,14 +239,16 @@
   /* ---- update check ---- */
   const checkBtn = document.getElementById("check-updates");
   const checkBtnIco = document.getElementById("check-updates-ico");
+  const checkBtnSpinner = document.getElementById("check-updates-spinner");
   const checkBtnLabel = document.getElementById("check-updates-label");
   let latestAvailableVersion = null;
   checkBtn.addEventListener("click", async () => {
     checkBtn.disabled = true;
-    checkBtnIco.classList.add("spin");
+    checkBtnIco.style.display = "none";
+    checkBtnSpinner.style.display = "flex";
     checkBtnLabel.textContent = "Checking…";
     document.getElementById("update-banner").classList.remove("open");
-    document.getElementById("update-uptodate").style.display = "none";
+    document.getElementById("update-uptodate").classList.remove("open");
     const minWait = new Promise((resolve) => setTimeout(resolve, 2000));
     const [outcome] = await Promise.all([
       A.fetchJSON("/api/server/check-update").catch((err) => ({ __error: err })),
@@ -259,15 +265,16 @@
         try { localStorage.setItem("otp-update-available", res.latest); } catch (e) {}
       } else {
         latestAvailableVersion = null;
-        document.getElementById("update-uptodate").style.display = "flex";
         document.getElementById("update-uptodate-text").textContent = "You're up to date — v" + (res.current || CURRENT_VERSION);
+        document.getElementById("update-uptodate").classList.add("open");
         try { localStorage.removeItem("otp-update-available"); } catch (e) {}
         var dot = document.getElementById("update-dot");
         if (dot) dot.style.display = "none";
       }
     }
     checkBtn.disabled = false;
-    checkBtnIco.classList.remove("spin");
+    checkBtnSpinner.style.display = "none";
+    checkBtnIco.style.display = "flex";
     checkBtnLabel.textContent = "Check for Updates";
   });
 
