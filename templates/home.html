@@ -175,9 +175,7 @@
   }
 
   function rowHTML(e, isPinnedGroup) {
-    const check = selectMode
-      ? '<div class="otp-row-check"><input type="checkbox" data-select="' + e.id + '"' + (selected.has(e.id) ? " checked" : "") + "></div>"
-      : "";
+    const check = '<div class="otp-row-check"><input type="checkbox" data-select="' + e.id + '"' + (selected.has(e.id) ? " checked" : "") + "></div>";
     return '<div class="otp-row-wrap">' + check +
       '<div class="otp-row" data-ctx="' + e.id + '" style="grid-template-columns:' + gridCols() + '">' +
       '<div class="otp-name"><div class="nm">' + A.escapeHtml(e.name) + "</div>" +
@@ -189,9 +187,7 @@
   }
 
   function cardHTML(e, isPinnedGroup) {
-    const check = selectMode
-      ? '<input type="checkbox" class="card-check" data-select="' + e.id + '"' + (selected.has(e.id) ? " checked" : "") + ">"
-      : "";
+    const check = '<input type="checkbox" class="card-check" data-select="' + e.id + '"' + (selected.has(e.id) ? " checked" : "") + ">";
     return '<div class="otp-card" data-ctx="' + e.id + '">' + check +
       '<div style="min-width:0"><div class="nm">' + A.escapeHtml(e.name) + "</div>" +
       (isPinnedGroup ? '<div class="co">' + A.escapeHtml(e.company_name || "") + "</div>" : "") +
@@ -209,7 +205,7 @@
     const allSel = ids.length && ids.every(id => selected.has(id));
     const head =
       '<div class="otp-section-head">' +
-      (selectMode ? '<input type="checkbox" data-select-group="' + A.escapeHtml(title) + '"' + (allSel ? " checked" : "") + ">" : "") +
+      '<span class="sec-check"><input type="checkbox" data-select-group="' + A.escapeHtml(title) + '"' + (allSel ? " checked" : "") + "></span>" +
       (isPinnedGroup ? '<span class="sec-pin">' + A.ICONS.pinFilled + "</span>" : "") +
       '<span class="sec-title">' + A.escapeHtml(isPinnedGroup ? "Pinned" : title) + "</span>" +
       '<span class="sec-count">' + entries.length + "</span>" +
@@ -248,7 +244,7 @@
   function sectionsKeyOf(pinnedEntries, names, byCompany) {
     const idOf = e => e.id + (e.current_code ? "1" : "0");
     return JSON.stringify({
-      layout: LAYOUT, selectMode,
+      layout: LAYOUT,
       pinned: pinnedEntries.map(idOf),
       sections: names.map(n => [n, byCompany[n].map(idOf)]),
     });
@@ -429,6 +425,22 @@
     groupCb.checked = ids.length > 0 && ids.every(id => selected.has(id));
   }
 
+  /* checkboxes are always in the DOM (see rowHTML/cardHTML/sectionHTML); toggling this
+     class is what animates them in/out smoothly instead of an instant innerHTML swap */
+  function syncSelectionUI() {
+    content.querySelectorAll("[data-select]").forEach(cb => {
+      cb.checked = selected.has(+cb.getAttribute("data-select"));
+    });
+    content.querySelectorAll("[data-section]").forEach(syncGroupCheckbox);
+  }
+  function setSelectMode(on) {
+    selectMode = on;
+    content.classList.toggle("select-mode", on);
+    if (!on) selected.clear();
+    syncSelectionUI();
+    renderBulkBar();
+  }
+
   /* selection is local UI state — toggle it in place instead of rebuilding the table */
   content.addEventListener("change", e => {
     const sel = e.target.closest("[data-select]");
@@ -461,18 +473,21 @@
   function closeCtx() {
     if (ctxEls) { ctxEls.forEach(el => el.remove()); ctxEls = null; }
   }
-  content.addEventListener("contextmenu", ev => {
-    const row = ev.target.closest("[data-ctx]");
-    if (!row) return;
-    ev.preventDefault();
+  function openCtxMenu(entry, clientX, clientY) {
     closeCtx();
-    const entry = entryById(row.getAttribute("data-ctx"));
-    if (!entry) return;
     const isPinned = pinned.has(String(entry.id));
     const backdrop = document.createElement("div");
     backdrop.className = "ctx-backdrop";
     backdrop.addEventListener("click", closeCtx);
-    backdrop.addEventListener("contextmenu", e2 => { e2.preventDefault(); closeCtx(); });
+    backdrop.addEventListener("contextmenu", e2 => {
+      e2.preventDefault();
+      closeCtx();
+      const under = document.elementFromPoint(e2.clientX, e2.clientY);
+      const row = under && under.closest && under.closest("[data-ctx]");
+      if (!row) return;
+      const nextEntry = entryById(row.getAttribute("data-ctx"));
+      if (nextEntry) openCtxMenu(nextEntry, e2.clientX, e2.clientY);
+    });
     const menu = document.createElement("div");
     menu.className = "ctx-menu";
     menu.innerHTML =
@@ -483,7 +498,7 @@
       '<button class="ctx-item" data-act="export"><span class="ico">' + A.ICONS.exportIco + "</span>Export as PDF</button>" +
       (PERMS.canDelete ? '<div class="ctx-sep"></div><button class="ctx-item danger" data-act="delete"><span class="ico">' + A.ICONS.trash + "</span>Delete</button>" : "");
     const menuW = 180, menuH = 220;
-    let x = ev.clientX, y = ev.clientY;
+    let x = clientX, y = clientY;
     if (x + menuW > window.innerWidth) x = window.innerWidth - menuW - 8;
     if (y + menuH > window.innerHeight) y = window.innerHeight - menuH - 8;
     menu.style.left = x + "px"; menu.style.top = y + "px";
@@ -495,13 +510,21 @@
       if (act === "copy") { if (entry.current_code) A.copyText(entry.current_code, "Copied code: " + entry.current_code); }
       else if (act === "edit") openEdit(entry);
       else if (act === "pin") togglePin(entry);
-      else if (act === "select") { selectMode = true; selected.add(entry.id); render(); }
+      else if (act === "select") { selected.add(entry.id); setSelectMode(true); }
       else if (act === "export") window.location.href = "/api/export-search?secret_id=" + entry.id;
       else if (act === "delete") openDelete(entry.id);
     });
     document.body.appendChild(backdrop);
     document.body.appendChild(menu);
     ctxEls = [backdrop, menu];
+  }
+  content.addEventListener("contextmenu", ev => {
+    const row = ev.target.closest("[data-ctx]");
+    if (!row) return;
+    ev.preventDefault();
+    const entry = entryById(row.getAttribute("data-ctx"));
+    if (!entry) return;
+    openCtxMenu(entry, ev.clientX, ev.clientY);
   });
 
   async function togglePin(entry) {
@@ -531,7 +554,7 @@
       const btn = e.target.closest("[data-bulk]");
       if (!btn) return;
       const act = btn.getAttribute("data-bulk");
-      if (act === "cancel") { selectMode = false; selected.clear(); render(); }
+      if (act === "cancel") { setSelectMode(false); }
       else if (act === "export") {
         const qs = [...selected].map(id => "secret_id=" + id).join("&");
         window.location.href = "/api/export-search?" + qs;
@@ -541,7 +564,7 @@
           const fd = new FormData(); fd.append("secret_id", id);
           try { await A.fetchJSON("/api/delete-secret", { method: "POST", body: fd }); } catch (err) { A.toast(err.message); }
         }
-        selected.clear(); selectMode = false;
+        setSelectMode(false);
         A.toast("Deleted " + n + " OTP" + (n === 1 ? "" : "s"));
         fetchData();
       }

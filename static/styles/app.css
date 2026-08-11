@@ -452,7 +452,13 @@ html.dark-mode select.text-input {
 }
 .otp-section-head .sec-tool:hover { color: var(--accent); background: var(--header-bg); }
 html.show-company-icons .otp-section-head .sec-tool { display: flex; }
-.otp-section-head input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--accent); }
+.otp-section-head input[type="checkbox"] { width: 15px; height: 15px; margin: 0; cursor: pointer; accent-color: var(--accent); flex: none; }
+.otp-section-head .sec-check {
+  display: flex; align-items: center; overflow: hidden;
+  width: 0; opacity: 0;
+  transition: width 0.22s cubic-bezier(.4,0,.2,1), opacity 0.15s ease;
+}
+.select-mode .otp-section-head .sec-check { width: 18px; opacity: 1; }
 
 .otp-panel { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--row-bg); }
 .otp-cols {
@@ -461,8 +467,13 @@ html.show-company-icons .otp-section-head .sec-tool { display: flex; }
 }
 .otp-row-wrap { display: flex; align-items: stretch; border-top: 1px solid var(--border); transition: background 0.15s ease; }
 .otp-row-wrap:hover, .otp-row-wrap:hover .otp-row { background: color-mix(in srgb, var(--accent) 8%, var(--row-bg)); }
-.otp-row-check { flex: none; display: flex; align-items: center; padding-left: 14px; }
-.otp-row-check input, .otp-card input.card-check { width: 15px; height: 15px; cursor: pointer; accent-color: var(--accent); }
+.otp-row-check {
+  flex: none; display: flex; align-items: center; overflow: hidden; pointer-events: none;
+  width: 0; padding-left: 0; opacity: 0;
+  transition: width 0.22s cubic-bezier(.4,0,.2,1), padding-left 0.22s cubic-bezier(.4,0,.2,1), opacity 0.15s ease;
+}
+.select-mode .otp-row-check { width: 33px; padding-left: 14px; opacity: 1; pointer-events: auto; }
+.otp-row-check input, .otp-card input.card-check { width: 15px; height: 15px; cursor: pointer; accent-color: var(--accent); flex: none; }
 .otp-row {
   flex: 1; min-width: 0; display: grid; gap: 10px; padding: 9px 14px; align-items: center;
   font-size: 13px; transition: background 0.15s ease;
@@ -498,7 +509,12 @@ html.show-company-icons .otp-section-head .sec-tool { display: flex; }
   background: var(--row-bg); display: flex; flex-direction: column; gap: 10px; transition: background 0.15s ease;
 }
 .otp-card:hover { background: color-mix(in srgb, var(--accent) 8%, var(--row-bg)); }
-.otp-card .card-check { position: absolute; top: 10px; right: 10px; }
+.otp-card .card-check {
+  position: absolute; top: 10px; right: 10px; pointer-events: none;
+  opacity: 0; transform: scale(0.5);
+  transition: opacity 0.18s ease, transform 0.18s cubic-bezier(.4,0,.2,1);
+}
+.select-mode .otp-card .card-check { opacity: 1; transform: scale(1); pointer-events: auto; }
 .otp-card .nm { font-weight: 600; color: var(--text); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .otp-card .co { font-size: 12.5px; color: var(--text-faint); }
 .otp-card .em { font-size: 12.5px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
