@@ -184,28 +184,36 @@
   </div>
 </div>
 
-<!-- Update: full-page terminal wait screen -->
+<!-- Update: full-page wait screen -->
 <div class="update-overlay" id="update-overlay">
-  <div class="update-overlay-inner">
-    <div class="update-term">
-      <div class="update-term-bar">
-        <span class="update-term-dot r"></span><span class="update-term-dot y"></span><span class="update-term-dot g"></span>
-        <span class="update-term-bar-title">update.sh</span>
+  <canvas class="update-overlay-bg" id="update-overlay-bg"></canvas>
+
+  <div class="update-overlay-brand">
+    <div class="brand-icon"><span data-icon="lock"></span></div>
+    <span class="brand-name">OTP Manager</span>
+  </div>
+
+  <div class="update-overlay-content">
+    <div class="update-art" id="update-art"></div>
+
+    <div class="update-progress">
+      <div class="update-bar-row">
+        <span class="update-bar-text" id="update-bar-text"></span>
+        <span class="update-pct" id="update-pct">0%</span>
       </div>
-      <div class="update-term-body">
-        <div class="update-term-line">$ ./update.sh --to v<span id="update-term-version"></span></div>
-        <div class="update-term-steps" id="update-term-steps">
-          <div class="update-term-step" data-phase="stopping"><span class="mark">[ ]</span>stop server</div>
-          <div class="update-term-step" data-phase="updating"><span class="mark">[ ]</span>download &amp; install update</div>
-          <div class="update-term-step" data-phase="starting"><span class="mark">[ ]</span>restart server</div>
-        </div>
-        <div class="update-term-progress" id="update-term-progress"></div>
-        <div class="update-term-line dim" id="update-term-status"><span>&gt;</span> <span class="txt">initializing&hellip;</span><span class="update-term-cursor">&#9608;</span></div>
+      <div class="update-steps" id="update-steps">
+        <div class="update-step" data-phase="stopping"><span class="glyph">&middot;</span><span class="label">Stopping server</span><span class="detail"></span></div>
+        <div class="update-step" data-phase="updating"><span class="glyph">&middot;</span><span class="label">Downloading &amp; installing update</span><span class="detail"></span></div>
+        <div class="update-step" data-phase="starting"><span class="glyph">&middot;</span><span class="label">Restarting service</span><span class="detail"></span></div>
+      </div>
+      <div class="update-log-row" id="update-log-row">
+        <span id="update-log-text">initializing&hellip;</span>
+        <span class="update-log-cursor">&#9612;</span>
       </div>
     </div>
-    <div class="update-overlay-sub" id="update-overlay-sub">Please wait &mdash; this page will reload automatically once the update finishes.</div>
-    <button class="btn-outline update-overlay-close" id="update-overlay-close" type="button">Close</button>
   </div>
+
+  <button class="btn-outline update-overlay-close" id="update-overlay-close" type="button">Close</button>
 </div>
 {% endblock %}
 
@@ -278,15 +286,15 @@
     checkBtnLabel.textContent = "Check for Updates";
   });
 
-  /* ---- update now: stop -> update -> start, with a live terminal wait screen ---- */
+  /* ---- update now: stop -> update -> start, with a live full-page wait screen ---- */
   const updateOverlay = document.getElementById("update-overlay");
-  const updateOverlaySub = document.getElementById("update-overlay-sub");
   const updateOverlayClose = document.getElementById("update-overlay-close");
-  const updateTermVersion = document.getElementById("update-term-version");
-  const updateTermSteps = document.getElementById("update-term-steps");
-  const updateTermProgress = document.getElementById("update-term-progress");
-  const updateTermStatus = document.getElementById("update-term-status");
-  const updateTermStatusTxt = updateTermStatus.querySelector(".txt");
+  const updateArtEl = document.getElementById("update-art");
+  const updateBarTextEl = document.getElementById("update-bar-text");
+  const updatePctEl = document.getElementById("update-pct");
+  const updateStepsEl = document.getElementById("update-steps");
+  const updateLogRow = document.getElementById("update-log-row");
+  const updateLogTextEl = document.getElementById("update-log-text");
 
   const UPDATE_PHASES = ["stopping", "updating", "starting"];
   const UPDATE_PHASE_LABELS = {
@@ -294,27 +302,98 @@
     updating: "downloading update…",
     starting: "starting updated server…",
   };
+  const UPDATE_BAR_W = 26;
+
+  const ART_UPDATE = [
+    '░░░░░░░░      ░░░        ░░       ░░░░░░░░░        ░░░      ░░░░      ░░░  ░░░░░░░░░░░░░',
+    '▒▒▒▒▒▒▒  ▒▒▒▒  ▒▒▒▒▒  ▒▒▒▒▒  ▒▒▒▒  ▒▒▒▒▒▒▒▒▒▒▒  ▒▒▒▒▒  ▒▒▒▒  ▒▒  ▒▒▒▒  ▒▒  ▒▒▒▒▒▒▒▒▒▒▒▒▒',
+    '▓▓▓▓▓▓▓  ▓▓▓▓  ▓▓▓▓▓  ▓▓▓▓▓       ▓▓▓▓▓▓▓▓▓▓▓▓  ▓▓▓▓▓  ▓▓▓▓  ▓▓  ▓▓▓▓  ▓▓  ▓▓▓▓▓▓▓▓▓▓▓▓▓',
+    '███████  ████  █████  █████  █████████████████  █████  ████  ██  ████  ██  █████████████',
+    '████████      ██████  █████  █████████████████  ██████      ████      ███        ███████',
+  ];
+  updateArtEl.innerHTML = ART_UPDATE.map((row) => "<div>" + row + "</div>").join("");
 
   function setUpdateStatus(text, isError) {
-    updateTermStatusTxt.textContent = text;
-    updateTermStatus.classList.toggle("err", !!isError);
+    updateLogTextEl.textContent = text;
+    updateLogRow.classList.toggle("err", !!isError);
   }
 
   function setUpdateSteps(phase, isError) {
     const idx = UPDATE_PHASES.indexOf(phase);
     const done = phase === "done";
-    let filled = done ? UPDATE_PHASES.length : Math.max(0, idx);
-    updateTermSteps.querySelectorAll(".update-term-step").forEach((el, i) => {
-      const mark = el.querySelector(".mark");
-      el.classList.remove("done", "active", "err");
-      if (done || i < idx) { el.classList.add("done"); mark.textContent = "[x]"; }
-      else if (i === idx) { el.classList.add(isError ? "err" : "active"); mark.textContent = isError ? "[!]" : "[ ]"; }
-      else { mark.textContent = "[ ]"; }
+    const filled = done ? UPDATE_PHASES.length : Math.max(0, idx);
+    updateStepsEl.querySelectorAll(".update-step").forEach((el, i) => {
+      const glyph = el.querySelector(".glyph");
+      const detail = el.querySelector(".detail");
+      el.classList.remove("complete", "active", "err");
+      if (done || i < idx) { el.classList.add("complete"); glyph.textContent = "✓"; detail.textContent = "done"; }
+      else if (i === idx) { el.classList.add(isError ? "err" : "active"); glyph.textContent = isError ? "!" : "›"; detail.textContent = ""; }
+      else { glyph.textContent = "·"; detail.textContent = ""; }
     });
-    const width = 24;
-    const f = Math.round((filled / UPDATE_PHASES.length) * width);
-    updateTermProgress.textContent = "[" + "█".repeat(f) + "░".repeat(width - f) + "] " + Math.round((filled / UPDATE_PHASES.length) * 100) + "%";
+    const filledChars = Math.round((filled / UPDATE_PHASES.length) * UPDATE_BAR_W);
+    updateBarTextEl.textContent = "█".repeat(filledChars) + "░".repeat(UPDATE_BAR_W - filledChars);
+    updatePctEl.textContent = Math.round((filled / UPDATE_PHASES.length) * 100) + "%";
   }
+
+  let updateBgStop = null;
+  function startUpdateBg() {
+    const canvas = document.getElementById("update-overlay-bg");
+    if (!canvas || updateBgStop) return;
+    const ctx = canvas.getContext("2d");
+    const fs = 13;
+    let cols = 0, rows = 0;
+    const ramp = ".'`^:;~=+*ox%O0#@".split("");
+    function resize() {
+      canvas.width = canvas.offsetWidth; canvas.height = canvas.offsetHeight;
+      cols = Math.ceil(canvas.width / fs); rows = Math.ceil(canvas.height / fs);
+    }
+    resize();
+    window.addEventListener("resize", resize);
+    let raf = null, last = 0;
+    function draw(ts) {
+      raf = requestAnimationFrame(draw);
+      if (ts - last < 45) return;
+      last = ts;
+      const styles = getComputedStyle(document.documentElement);
+      const bg = styles.getPropertyValue("--app-bg").trim() || "#fafafa";
+      const accent = (styles.getPropertyValue("--accent").trim() || "#a15c93").slice(0, 7);
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.font = fs + "px ui-monospace, SFMono-Regular, Menlo, monospace";
+      const t = (ts / 1000) * 0.62;
+      const w = Math.max(12, Math.round(cols * 0.22));
+      const noise = (x, y) => {
+        let v = 0;
+        v += Math.sin(x * 0.31 + Math.cos(y * 0.19 - t * 1.1) * 2.2 + t * 0.9);
+        v += Math.sin(y * 0.24 - t * 1.7 + Math.sin(x * 0.41 + t * 0.6) * 1.8) * 0.9;
+        v += Math.sin((x * 0.6 + y * 0.33) - t * 2.3) * 0.55;
+        v += Math.sin(Math.hypot(x - w * 0.5, (y % 34) - 17) * 0.55 - t * 2.6) * 0.7;
+        return v / 3.15;
+      };
+      for (let y = 0; y < rows; y++) {
+        for (let bx = 0; bx < w; bx++) {
+          const n0 = noise(bx, y);
+          const edgeFade = Math.min(1, (w - bx) / (w * 0.62));
+          const v = Math.max(0, Math.min(1, (n0 + 0.35) * 1.35)) * edgeFade;
+          if (v < 0.08) continue;
+          const n = Math.floor(v * (ramp.length - 1));
+          if (n < 1) continue;
+          const a = Math.floor(22 + Math.pow(v, 0.8) * 200);
+          ctx.fillStyle = accent + Math.min(255, a).toString(16).padStart(2, "0");
+          const ch = ramp[n];
+          ctx.fillText(ch, bx * fs, y * fs + fs);
+          ctx.fillText(ch, (cols - 1 - bx) * fs, y * fs + fs);
+        }
+      }
+    }
+    raf = requestAnimationFrame(draw);
+    updateBgStop = () => {
+      if (raf) cancelAnimationFrame(raf);
+      window.removeEventListener("resize", resize);
+      updateBgStop = null;
+    };
+  }
+  function stopUpdateBg() { if (updateBgStop) updateBgStop(); }
 
   document.getElementById("update-now-btn").addEventListener("click", () => {
     document.getElementById("update-confirm-version").textContent = latestAvailableVersion || "?";
@@ -323,22 +402,21 @@
 
   updateOverlayClose.addEventListener("click", () => {
     updateOverlay.classList.remove("open");
+    stopUpdateBg();
   });
 
   document.getElementById("update-confirm-btn").addEventListener("click", async () => {
     A.closeOverlay("update-confirm-overlay");
     const triggerTs = Date.now() / 1000;
-    updateTermVersion.textContent = latestAvailableVersion || "?";
     setUpdateSteps("stopping", false);
     setUpdateStatus("initializing…", false);
-    updateOverlaySub.textContent = "Please wait — this page will reload automatically once the update finishes.";
     updateOverlayClose.style.display = "none";
     updateOverlay.classList.add("open");
+    startUpdateBg();
     try {
       await A.fetchJSON("/api/server/update-now", { method: "POST" });
     } catch (err) {
-      setUpdateStatus("error: " + err.message, true);
-      updateOverlaySub.textContent = "Could not start the update.";
+      setUpdateStatus("error: " + err.message + " — could not start the update", true);
       updateOverlayClose.style.display = "inline-flex";
       return;
     }
@@ -353,27 +431,23 @@
         if (upd && upd.ts >= triggerTs - 2) {
           if (upd.phase === "done") {
             setUpdateSteps("done", false);
-            setUpdateStatus("update complete — v" + (data.version || ""), false);
-            updateOverlaySub.textContent = "Reloading…";
+            setUpdateStatus("update complete — v" + (data.version || "") + " — reloading…", false);
             setTimeout(() => window.location.reload(), 1200);
             return;
           }
           if (upd.phase === "error") {
             setUpdateSteps(upd.phase, true);
-            setUpdateStatus("error: " + (upd.message || "update failed"), true);
-            updateOverlaySub.textContent = "Check the server logs for details.";
+            setUpdateStatus("error: " + (upd.message || "update failed") + " — check the server logs", true);
             updateOverlayClose.style.display = "inline-flex";
             return;
           }
           setUpdateSteps(upd.phase, false);
           setUpdateStatus(UPDATE_PHASE_LABELS[upd.phase] || "updating…", false);
-          updateOverlaySub.textContent = "Please wait — this page will reload automatically once the update finishes.";
         } else if (sawDip) {
           setUpdateStatus("server is back — finishing up…", false);
         }
         if (Date.now() > deadline) {
-          setUpdateStatus("taking longer than expected…", false);
-          updateOverlaySub.textContent = "The update is still running in the background. Feel free to check back in a bit.";
+          setUpdateStatus("taking longer than expected — still running in the background…", false);
           updateOverlayClose.style.display = "inline-flex";
         }
         setTimeout(() => pollUpdateStatus(triggerTs, deadline, sawDip), 1500);
