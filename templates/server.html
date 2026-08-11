@@ -408,36 +408,6 @@
     stopUpdateBg();
   });
 
-  /* ---- preview: run the wait screen against fake data, no server calls ---- */
-  function previewUpdateSequence(withError) {
-    updateOverlayClose.style.display = "none";
-    setUpdateSteps("stopping", false);
-    setUpdateStatus("initializing…", false);
-    updateOverlay.classList.add("open");
-    startUpdateBg();
-    const seq = [
-      [800, () => setUpdateSteps("stopping", false)],
-      [1800, () => { setUpdateSteps("updating", false); setUpdateStatus(UPDATE_PHASE_LABELS.updating, false); }],
-    ];
-    if (withError) {
-      seq.push([3000, () => {
-        setUpdateSteps("error", true);
-        setUpdateStatus("error: update package checksum mismatch — check the server logs", true);
-        updateOverlayClose.style.display = "inline-flex";
-      }]);
-    } else {
-      seq.push([2800, () => { setUpdateSteps("starting", false); setUpdateStatus(UPDATE_PHASE_LABELS.starting, false); }]);
-      seq.push([3800, () => {
-        setUpdateSteps("done", false);
-        setUpdateStatus("preview complete — this was a simulated run, nothing was updated", false);
-        updateOverlayClose.style.display = "inline-flex";
-      }]);
-    }
-    seq.forEach(([delay, fn]) => setTimeout(fn, delay));
-  }
-  document.getElementById("preview-update-btn").addEventListener("click", () => previewUpdateSequence(false));
-  document.getElementById("preview-update-error-btn").addEventListener("click", () => previewUpdateSequence(true));
-
   document.getElementById("update-confirm-btn").addEventListener("click", async () => {
     A.closeOverlay("update-confirm-overlay");
     const triggerTs = Date.now() / 1000;
