@@ -337,7 +337,7 @@
       } else {
         window.location.href = "/";
       }
-    } catch (err) { A.toast(err.message); }
+    } catch (err) { A.toast(err.message, "error"); }
   }
 
   submitBtn.addEventListener("click", () => submit(false));

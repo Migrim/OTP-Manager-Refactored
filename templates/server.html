@@ -263,7 +263,7 @@
       minWait,
     ]);
     if (outcome && outcome.__error) {
-      A.toast(outcome.__error.message);
+      A.toast(outcome.__error.message, "error");
     } else {
       const res = outcome;
       if (res.available) {
@@ -473,7 +473,7 @@
 
   document.getElementById("cfg-save").addEventListener("click", async () => {
     const port = parseInt(document.getElementById("cfg-port").value, 10);
-    if (!port || port < 1 || port > 65535) { A.toast("Please enter a valid port (1-65535)"); return; }
+    if (!port || port < 1 || port > 65535) { A.toast("Please enter a valid port (1-65535)", "error"); return; }
     try {
       const res = await A.fetchJSON("/api/server/config", {
         method: "POST",
@@ -484,7 +484,7 @@
         },
       });
       A.toast(res.message || "Server configuration saved");
-    } catch (err) { A.toast(err.message); }
+    } catch (err) { A.toast(err.message, "error"); }
   });
 
   document.getElementById("cli-copy").addEventListener("click", () => {
@@ -597,7 +597,7 @@
     socket.on("disconnect", () => setStatus("Reconnecting…"));
     socket.on("output", (data) => { term.write(data); revealTerminal(); });
     socket.on("exited", () => { setStatus("Session ended"); });
-    socket.on("error", (payload) => { A.toast((payload && payload.message) || "Console error"); });
+    socket.on("error", (payload) => { A.toast((payload && payload.message) || "Console error", "error"); });
   });
 
   function endSession() {

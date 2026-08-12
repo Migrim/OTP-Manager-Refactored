@@ -74,9 +74,9 @@
 <!-- Delete company modal -->
 <div class="overlay center" id="delete-company-overlay">
   <div class="modal">
-    <div class="modal-title lg">Delete this company?</div>
-    <div class="modal-sub" style="margin-bottom:18px">This removes <span id="delete-company-name"></span> and all of its OTP entries. This can't be undone.</div>
-    <div style="margin-bottom:22px">
+    <div class="modal-title">Delete this company?</div>
+    <div class="modal-sub" style="margin-bottom:16px">This removes <span id="delete-company-name"></span> and all of its OTP entries. This can't be undone.</div>
+    <div style="margin-bottom:18px">
       <label class="field-label-sm" style="margin-bottom:6px">Type "confirm" to proceed</label>
       <input class="text-input" id="delete-company-confirm-text" placeholder="confirm" autocomplete="off">
     </div>
@@ -180,7 +180,7 @@
 
   document.getElementById("company-submit").addEventListener("click", () => {
     const name = document.getElementById("company-name").value.trim();
-    if (!name) { A.toast("Please enter a name"); return; }
+    if (!name) { A.toast("Please enter a name", "error"); return; }
     const fields = {
       name: name,
       kundennummer: document.getElementById("company-kdnr").value.trim(),

@@ -82,9 +82,9 @@
 <!-- Delete user modal -->
 <div class="overlay center" id="delete-user-overlay">
   <div class="modal">
-    <div class="modal-title lg">Delete this user?</div>
-    <div class="modal-sub" style="margin-bottom:18px">This removes <span id="delete-user-name"></span>'s access permanently. This can't be undone.</div>
-    <div style="margin-bottom:22px">
+    <div class="modal-title">Delete this user?</div>
+    <div class="modal-sub" style="margin-bottom:16px">This removes <span id="delete-user-name"></span>'s access permanently. This can't be undone.</div>
+    <div style="margin-bottom:18px">
       <label class="field-label-sm" style="margin-bottom:6px">Type "confirm" to proceed</label>
       <input class="text-input" id="delete-user-confirm-text" placeholder="confirm" autocomplete="off">
     </div>
@@ -252,8 +252,8 @@
       postForm("/api/update-user-permissions", Object.assign({ user_id: editingId }, perms));
     } else {
       const password = document.getElementById("user-password").value;
-      if (name.length < 3) { A.toast("Name must be at least 3 characters"); return; }
-      if (!password) { A.toast("Please set a password"); return; }
+      if (name.length < 3) { A.toast("Name must be at least 3 characters", "error"); return; }
+      if (!password) { A.toast("Please set a password", "error"); return; }
       postForm("/api/create-user", Object.assign({ username: name, password: password }, perms));
     }
   });

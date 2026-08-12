@@ -16,6 +16,7 @@
     keysm: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="8" cy="15" r="3.2" stroke="currentColor" stroke-width="1.8"/><path d="M10.3 12.7L19 4M15.5 8.2l2.3 2.3M18.2 5.5l2.3 2.3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
     searchBig: '<svg width="36" height="36" viewBox="0 0 24 24" fill="none"><circle cx="10.5" cy="10.5" r="7" stroke="currentColor" stroke-width="1.6"/><path d="M20 20l-4.3-4.3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
     arrowUp: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    send: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 12h15M13 6l7 6-7 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     collapse: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="15" rx="3" stroke="currentColor" stroke-width="1.6"/><path d="M9.5 4.5v15" stroke="currentColor" stroke-width="1.6"/></svg>',
     info: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"/><path d="M12 11v5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="8" r="1" fill="currentColor"/></svg>',
     check: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M5 13l4.5 4.5L19.5 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -62,15 +63,160 @@
     });
   }
 
-  let toastEl = null, toastTimer = null;
-  function toast(msg) {
-    if (toastEl) toastEl.remove();
-    toastEl = document.createElement("div");
-    toastEl.className = "toast";
-    toastEl.textContent = msg;
-    document.body.appendChild(toastEl);
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { if (toastEl) { toastEl.remove(); toastEl = null; } }, 2200);
+  const TOAST_MAX = 4;
+  const TOAST_ICON = { success: "check", error: "xmark", info: "info" };
+  let toastViewport = null;
+  let activeConfirmToast = null;
+
+  /* FLIP-style reflow: only toasts whose position actually changes get an animation */
+  function snapshotToastRects(exclude) {
+    if (!toastViewport) return null;
+    const rects = new Map();
+    for (const child of toastViewport.children) {
+      if (child === exclude) continue;
+      rects.set(child, child.getBoundingClientRect());
+    }
+    return rects;
+  }
+  function playToastReflow(rects) {
+    if (!rects) return;
+    rects.forEach((firstRect, el) => {
+      if (!el.parentNode) return;
+      const dy = firstRect.top - el.getBoundingClientRect().top;
+      if (Math.abs(dy) < 0.5) return;
+      el.style.transition = "none";
+      el.style.transform = "translateY(" + dy + "px)";
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          el.style.transition = "transform 0.32s cubic-bezier(.22,1,.36,1)";
+          el.style.transform = "";
+          el.addEventListener("transitionend", function te(e) {
+            if (e.propertyName !== "transform") return;
+            el.style.transition = "";
+            el.removeEventListener("transitionend", te);
+          });
+        });
+      });
+    });
+  }
+
+  function mountToast(className, replaceEl) {
+    if (!toastViewport) {
+      toastViewport = document.createElement("div");
+      toastViewport.className = "toast-viewport";
+      document.body.appendChild(toastViewport);
+    }
+    const rects = snapshotToastRects(replaceEl);
+    if (replaceEl && replaceEl.parentNode) replaceEl.remove();
+    while (toastViewport.children.length >= TOAST_MAX) {
+      toastViewport.firstElementChild.remove();
+    }
+    const el = document.createElement("div");
+    el.className = className;
+    toastViewport.appendChild(el);
+    playToastReflow(rects);
+    return el;
+  }
+  function closeToast(el) {
+    if (el === activeConfirmToast) activeConfirmToast = null;
+    if (!el.parentNode || el.classList.contains("leaving")) return;
+    el.classList.add("leaving");
+    el.addEventListener("animationend", () => {
+      const rects = snapshotToastRects(el);
+      el.remove();
+      playToastReflow(rects);
+    }, { once: true });
+  }
+  function toast(msg, type) {
+    const el = mountToast("toast" + (type ? " " + type : ""));
+    const icoName = TOAST_ICON[type] || "info";
+    el.innerHTML =
+      '<span class="toast-ico">' + ICONS[icoName] + "</span>" +
+      '<span class="toast-msg"></span>' +
+      '<button class="toast-close" type="button" aria-label="Dismiss">' + ICONS.xmark + "</button>";
+    el.querySelector(".toast-msg").textContent = msg;
+
+    let timer;
+    const dismiss = () => { clearTimeout(timer); closeToast(el); };
+    timer = setTimeout(dismiss, 2600);
+    el.addEventListener("mouseenter", () => clearTimeout(timer));
+    el.addEventListener("mouseleave", () => { timer = setTimeout(dismiss, 1600); });
+    el.querySelector(".toast-close").addEventListener("click", dismiss);
+  }
+
+  /* persistent yes/no -> type-to-confirm toast; stays until resolved */
+  function confirmToast(message, opts) {
+    opts = opts || {};
+    const confirmWord = (opts.confirmWord || "CONFIRM").toUpperCase();
+    const el = mountToast("toast confirm", activeConfirmToast);
+    activeConfirmToast = el;
+    el.innerHTML =
+      '<div class="toast-confirm-head">' +
+        '<span class="toast-ico">' + ICONS.warn + "</span>" +
+        '<div class="toast-confirm-msg"></div>' +
+      "</div>" +
+      '<div class="toast-confirm-actions">' +
+        '<button type="button" class="toast-btn" data-act="no"><span class="toast-btn-ico">' + ICONS.xmark + '</span>No</button>' +
+        '<button type="button" class="toast-btn danger" data-act="yes"><span class="toast-btn-ico">' + ICONS.trash + '</span>Yes</button>' +
+      "</div>";
+    el.querySelector(".toast-confirm-msg").textContent = message;
+
+    const cancel = () => {
+      closeToast(el);
+      if (opts.onCancel) opts.onCancel();
+    };
+
+    el.querySelector('[data-act="no"]').addEventListener("click", cancel);
+
+    el.querySelector('[data-act="yes"]').addEventListener("click", () => {
+      const msgEl = el.querySelector(".toast-confirm-msg");
+      const actionsEl = el.querySelector(".toast-confirm-actions");
+      const siblingRects = snapshotToastRects();
+
+      msgEl.classList.add("toast-swap-out");
+      actionsEl.classList.add("toast-swap-out");
+
+      actionsEl.addEventListener("animationend", () => {
+        msgEl.textContent = "Type " + confirmWord + " to delete";
+        msgEl.classList.remove("toast-swap-out");
+        void msgEl.offsetWidth;
+        msgEl.classList.add("toast-swap-in");
+
+        actionsEl.outerHTML =
+          '<div class="toast-confirm-bar toast-swap-in">' +
+            '<button type="button" class="toast-bar-btn cancel" data-act="cancel" aria-label="Cancel">' + ICONS.xmark + "</button>" +
+            '<input type="text" class="toast-input" autocomplete="off" spellcheck="false" placeholder="' + confirmWord + '">' +
+            '<button type="button" class="toast-bar-btn submit" data-act="submit" disabled aria-label="Confirm delete">' + ICONS.send + "</button>" +
+          "</div>";
+        playToastReflow(siblingRects);
+
+        const bar = el.querySelector(".toast-confirm-bar");
+        const input = bar.querySelector(".toast-input");
+        const submitBtn = bar.querySelector('[data-act="submit"]');
+        input.focus();
+        input.addEventListener("input", () => {
+          submitBtn.disabled = input.value.trim().toUpperCase() !== confirmWord;
+        });
+        const submit = async () => {
+          if (submitBtn.disabled) return;
+          submitBtn.disabled = true;
+          input.disabled = true;
+          try {
+            await opts.onConfirm();
+            closeToast(el);
+          } catch (err) {
+            closeToast(el);
+            toast(err.message, "error");
+          }
+        };
+        bar.querySelector('[data-act="cancel"]').addEventListener("click", cancel);
+        input.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") submit();
+          else if (e.key === "Escape") cancel();
+        });
+        submitBtn.addEventListener("click", submit);
+      }, { once: true });
+    });
   }
 
   function copyText(text, label) {
@@ -577,7 +723,7 @@
   });
 
   window.App = {
-    ICONS, toast, copyText, hydrateIcons, digitsHTML, digitsHTMLUpdate, ringSVG, setRing, escapeHtml,
+    ICONS, toast, confirmToast, copyText, hydrateIcons, digitsHTML, digitsHTMLUpdate, ringSVG, setRing, escapeHtml,
     fetchJSON, openOverlay, closeOverlay, closeAllOverlays, applyAccent, setCookie, getCookie,
     cmdkOpen, attachAutocomplete, onPageLeave,
   };

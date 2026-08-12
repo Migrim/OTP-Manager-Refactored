@@ -222,7 +222,7 @@
       renderTable();
       updatedLabel();
       if (showToast) A.toast("Logs refreshed");
-    } catch (err) { if (showToast) A.toast(err.message); }
+    } catch (err) { if (showToast) A.toast(err.message, "error"); }
   }
 
   function setLive(v) {

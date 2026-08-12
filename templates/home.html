@@ -58,14 +58,14 @@
   </div>
 </div>
 
-<!-- Delete modal -->
-<div class="overlay center" id="delete-overlay">
+<!-- Bulk delete modal -->
+<div class="overlay center" id="bulk-delete-overlay">
   <div class="modal">
-    <div class="modal-title">Delete this secret?</div>
-    <div class="modal-sub">This will remove the OTP entry permanently. This can't be undone.</div>
+    <div class="modal-title">Delete <span id="bulk-delete-count">0</span> OTPs?</div>
+    <div class="modal-sub">This will remove the selected OTP entries permanently. This can't be undone.</div>
     <div class="modal-actions">
       <button class="btn-outline" data-close-overlay type="button">Cancel</button>
-      <button class="btn-danger" id="delete-confirm" type="button">Delete</button>
+      <button class="btn-danger" id="bulk-delete-confirm" type="button">Delete</button>
     </div>
   </div>
 </div>
@@ -100,7 +100,6 @@
   let selectMode = false;
   let query = "";
   let companyFilter = "";
-  let deleteId = null;
   let editEntry = null;
   let fetching = false;
   let sectionsKey = null;
@@ -533,44 +532,127 @@
       if (res.pinned) pinned.add(String(entry.id)); else pinned.delete(String(entry.id));
       A.toast(res.pinned ? "Pinned " + entry.name : "Unpinned " + entry.name);
       render();
-    } catch (err) { A.toast(err.message); }
+    } catch (err) { A.toast(err.message, "error"); }
   }
 
   /* ---------- bulk bar ---------- */
 
+  function selectAll() {
+    content.querySelectorAll("[data-select]").forEach(cb => selected.add(+cb.getAttribute("data-select")));
+    syncSelectionUI();
+    renderBulkBar();
+  }
+  function deselectAll() {
+    selected.clear();
+    syncSelectionUI();
+    renderBulkBar();
+  }
+  function openBulkMenu(anchorBtn) {
+    closeCtx();
+    const backdrop = document.createElement("div");
+    backdrop.className = "ctx-backdrop";
+    backdrop.addEventListener("click", closeCtx);
+    const menu = document.createElement("div");
+    menu.className = "ctx-menu bulk-menu";
+    const n = selected.size;
+    menu.innerHTML =
+      '<div class="ctx-status"><span class="bulk-count">' + n + '</span><span class="bulk-label">selected</span></div>' +
+      '<div class="ctx-sep"></div>' +
+      '<button class="ctx-item" data-act="select-all"><span class="ico">' + A.ICONS.check + "</span>Select all</button>" +
+      '<button class="ctx-item" data-act="deselect-all"><span class="ico">' + A.ICONS.xmark + "</span>Deselect all</button>";
+    document.body.appendChild(menu);
+    const rect = anchorBtn.getBoundingClientRect();
+    const menuW = menu.offsetWidth, menuH = menu.offsetHeight;
+    const anchorCx = rect.left + rect.width / 2;
+    let x = anchorCx - menuW / 2;
+    let placement = "above", y = rect.top - menuH - 12;
+    if (y < 8) { placement = "below"; y = rect.bottom + 12; }
+    if (x + menuW > window.innerWidth - 8) x = window.innerWidth - menuW - 8;
+    if (x < 8) x = 8;
+    menu.style.left = x + "px"; menu.style.top = y + "px";
+    menu.setAttribute("data-placement", placement);
+    menu.style.setProperty("--arrow-x", Math.max(14, Math.min(menuW - 14, anchorCx - x)) + "px");
+    menu.addEventListener("click", e2 => {
+      const btn = e2.target.closest("[data-act]");
+      if (!btn) return;
+      const act = btn.getAttribute("data-act");
+      closeCtx();
+      if (act === "select-all") selectAll();
+      else if (act === "deselect-all") deselectAll();
+    });
+    document.body.insertBefore(backdrop, menu);
+    ctxEls = [backdrop, menu];
+  }
+
   let bulkBar = null;
   function renderBulkBar() {
-    if (bulkBar) { bulkBar.remove(); bulkBar = null; }
-    if (!selected.size) return;
-    bulkBar = document.createElement("div");
-    bulkBar.className = "bulk-bar";
-    bulkBar.innerHTML =
-      '<span class="bulk-info"><span class="bulk-count">' + selected.size + '</span><span class="bulk-label">selected</span></span>' +
-      '<div class="bulk-sep"></div>' +
-      '<button class="bulk-btn" data-bulk="export"><span class="ico">' + A.ICONS.exportIco + "</span>Export</button>" +
-      (PERMS.canDelete ? '<button class="bulk-btn danger" data-bulk="delete"><span class="ico">' + A.ICONS.trash + "</span>Delete</button>" : "") +
-      '<button class="bulk-btn ghost" data-bulk="cancel" title="Cancel"><span class="ico">' + A.ICONS.xmark + "</span></button>";
-    bulkBar.addEventListener("click", async e => {
-      const btn = e.target.closest("[data-bulk]");
-      if (!btn) return;
-      const act = btn.getAttribute("data-bulk");
-      if (act === "cancel") { setSelectMode(false); }
-      else if (act === "export") {
-        const qs = [...selected].map(id => "secret_id=" + id).join("&");
-        window.location.href = "/api/export-search?" + qs;
-      } else if (act === "delete") {
-        const n = selected.size;
-        for (const id of [...selected]) {
-          const fd = new FormData(); fd.append("secret_id", id);
-          try { await A.fetchJSON("/api/delete-secret", { method: "POST", body: fd }); } catch (err) { A.toast(err.message); }
+    if (!selected.size) {
+      if (bulkBar) { bulkBar.remove(); bulkBar = null; }
+      /* selection hitting zero (deselect-all, unchecking the last row, ...)
+         should exit select mode too, so the row checkboxes hide along with
+         the bar instead of being left showing with nothing selected */
+      if (selectMode) { selectMode = false; content.classList.remove("select-mode"); }
+      return;
+    }
+    /* bar contents don't depend on the count, so once it's mounted, leave the
+       node alone — recreating it would replay the enter animation on every
+       selection change or unrelated re-render (e.g. an OTP code rotating) */
+    if (!bulkBar) {
+      bulkBar = document.createElement("div");
+      bulkBar.className = "bulk-bar";
+      bulkBar.innerHTML =
+        '<button class="bulk-btn ghost" data-bulk="menu" title="More"><span class="ico">' + A.ICONS.dots + "</span></button>" +
+        '<button class="bulk-btn" data-bulk="export"><span class="ico">' + A.ICONS.exportIco + "</span>Export</button>" +
+        (PERMS.canDelete ? '<button class="bulk-btn danger" data-bulk="delete"><span class="ico">' + A.ICONS.trash + "</span>Delete</button>" : "") +
+        '<button class="bulk-btn ghost" data-bulk="cancel" title="Cancel"><span class="ico">' + A.ICONS.xmark + "</span></button>";
+      bulkBar.addEventListener("click", e => {
+        const btn = e.target.closest("[data-bulk]");
+        if (!btn) return;
+        const act = btn.getAttribute("data-bulk");
+        if (act === "menu") { openBulkMenu(btn); }
+        else if (act === "cancel") { setSelectMode(false); }
+        else if (act === "export") {
+          const qs = [...selected].map(id => "secret_id=" + id).join("&");
+          window.location.href = "/api/export-search?" + qs;
+        } else if (act === "delete") {
+          openBulkDelete();
         }
-        setSelectMode(false);
-        A.toast("Deleted " + n + " OTP" + (n === 1 ? "" : "s"));
-        fetchData();
-      }
-    });
-    document.body.appendChild(bulkBar);
+      });
+      document.body.appendChild(bulkBar);
+    }
+    updateBulkDeleteState();
   }
+
+  /* extra guard against wiping out an entire company by accident: once every
+     currently listed OTP is selected, the delete button goes inert until the
+     user deliberately deselects at least one */
+  function updateBulkDeleteState() {
+    if (!bulkBar) return;
+    const delBtn = bulkBar.querySelector('[data-bulk="delete"]');
+    if (!delBtn) return;
+    const total = content.querySelectorAll("[data-select]").length;
+    const allSelected = total > 0 && selected.size === total;
+    delBtn.disabled = allSelected;
+    delBtn.title = allSelected ? "Deselect at least one OTP to delete" : "";
+  }
+
+  function openBulkDelete() {
+    document.getElementById("bulk-delete-count").textContent = selected.size;
+    A.openOverlay("bulk-delete-overlay");
+  }
+
+  document.getElementById("bulk-delete-confirm").addEventListener("click", async () => {
+    const ids = [...selected];
+    const n = ids.length;
+    A.closeOverlay("bulk-delete-overlay");
+    for (const id of ids) {
+      const fd = new FormData(); fd.append("secret_id", id);
+      try { await A.fetchJSON("/api/delete-secret", { method: "POST", body: fd }); } catch (err) { A.toast(err.message, "error"); }
+    }
+    setSelectMode(false);
+    A.toast("Deleted " + n + " OTP" + (n === 1 ? "" : "s"));
+    fetchData();
+  });
 
   /* ---------- edit / delete ---------- */
 
@@ -606,23 +688,22 @@
       A.closeOverlay("edit-overlay");
       A.toast("OTP updated");
       fetchData();
-    } catch (err) { A.toast(err.message); }
+    } catch (err) { A.toast(err.message, "error"); }
   });
 
-  function openDelete(id) { deleteId = id; A.openOverlay("delete-overlay"); }
-
-  document.getElementById("delete-confirm").addEventListener("click", async () => {
-    if (deleteId == null) return;
-    const fd = new FormData(); fd.append("secret_id", deleteId);
-    try {
-      await A.fetchJSON("/api/delete-secret", { method: "POST", body: fd });
-      A.closeOverlay("delete-overlay");
-      A.toast("OTP deleted");
-      selected.delete(deleteId);
-      deleteId = null;
-      fetchData();
-    } catch (err) { A.toast(err.message); }
-  });
+  function openDelete(id) {
+    const entry = entryById(id);
+    if (!entry) return;
+    A.confirmToast('Delete "' + entry.name + '"?', {
+      onConfirm: async () => {
+        const fd = new FormData(); fd.append("secret_id", id);
+        await A.fetchJSON("/api/delete-secret", { method: "POST", body: fd });
+        A.toast("OTP deleted", "success");
+        selected.delete(id);
+        fetchData();
+      },
+    });
+  }
 
   /* ---------- back to top + blur on inactive ---------- */
 

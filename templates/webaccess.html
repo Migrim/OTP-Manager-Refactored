@@ -68,7 +68,7 @@
       c.enabled = res.enabled ? 1 : 0;
       A.toast((c.enabled ? "Enabled" : "Disabled") + " web access for " + c.name);
       render();
-    } catch (err) { A.toast(err.message); }
+    } catch (err) { A.toast(err.message, "error"); }
   });
 
   document.getElementById("webaccess-search").addEventListener("input", e => { search = e.target.value; render(); });

@@ -176,7 +176,7 @@
     try {
       await A.fetchJSON("/api/account/avatar", { method: "POST", body: fd });
       window.location.reload();
-    } catch (err) { A.toast(err.message); }
+    } catch (err) { A.toast(err.message, "error"); }
   }
 
   avatarDrop.addEventListener("click", () => avatarInput.click());
@@ -194,7 +194,7 @@
     try {
       await A.fetchJSON("/api/account/avatar", { method: "DELETE" });
       window.location.reload();
-    } catch (err) { A.toast(err.message); }
+    } catch (err) { A.toast(err.message, "error"); }
   });
 
   renderToggles();
