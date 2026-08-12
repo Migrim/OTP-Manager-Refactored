@@ -79,6 +79,8 @@
     hide_codes_by_default: !!SERVER.hide_codes_by_default,
     hide_secret_field: !!SERVER.hide_secret_field,
     blur_on_inactive: !!SERVER.blur_on_inactive,
+    show_pinned_in_sidebar: !!SERVER.show_pinned_in_sidebar,
+    only_pinned_in_sidebar: !!SERVER.only_pinned_in_sidebar,
   };
 
   const DISPLAY = [
@@ -86,11 +88,13 @@
     { key: "show_emails", label: "Show Emails", desc: "Displays the email address associated with the OTP." },
     { key: "show_including_admin_on_top", label: 'Show "admin" entries first', desc: 'Entries whose name contains "admin" will appear at the top — both on the home screen and in company search results.' },
     { key: "show_search_and_link", label: "Show company link & search icons", desc: "Shows a link icon and a search icon next to each company section title on the home screen for quick navigation." },
+    { key: "show_pinned_in_sidebar", label: "Show pinned secrets in sidebar", desc: "Lists your pinned OTP secrets under the navigation links in the sidebar, with the current code shown next to each name." },
+    { key: "only_pinned_in_sidebar", label: "Only show pinned in sidebar", desc: "Removes the pinned section from the home screen — pinned secrets are only listed in the sidebar." },
   ];
   const SECURITY = [
     { key: "hide_codes_by_default", label: "Hide OTP codes by default", desc: 'OTP codes are masked as "hidden". Click any code to reveal it. The copy button always copies the real code.' },
     { key: "hide_secret_field", label: "Hide secret keys from cards", desc: "Removes the secret key field entirely from OTP cards on the home screen." },
-    { key: "blur_on_inactive", label: "Blur Secret-Cards when inactive", desc: "Blur OTP containers when you are inactive for longer than a minute to protect your data from prying eyes." },
+    { key: "blur_on_inactive", label: "Hide secrets when inactive", desc: "Scrambles names, codes, and secret fields — on the home screen and in the sidebar's pinned list — when you are inactive for longer than a minute, to protect your data from prying eyes." },
   ];
 
   function cardHTML(item) {

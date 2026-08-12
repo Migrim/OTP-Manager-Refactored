@@ -5,7 +5,7 @@
 
 {% block page %}
 <div class="page">
-  <div class="page-topbar">
+  <div class="page-topbar" id="webaccess-topbar">
     <div class="topbar-search">
       <span class="ico" data-icon="search"></span>
       <input type="text" id="webaccess-search" placeholder="Search companies…" autocomplete="off">
@@ -17,10 +17,11 @@
     <div style="max-width:800px;margin:0 auto">
       <div class="table-panel" id="webaccess-list" style="display:none"></div>
       <div class="empty-state" id="webaccess-empty" style="display:none">
-        <span class="ico" data-icon="globe"></span>
-        <div class="txt" id="webaccess-empty-txt">No companies yet</div>
+        <span class="ico" data-icon="search"></span>
+        <div class="txt">No companies match your search</div>
       </div>
     </div>
+    <div id="webaccess-empty-vault" style="display:none"></div>
   </div>
 </div>
 {% endblock %}
@@ -38,15 +39,34 @@
   let search = "";
   const list = document.getElementById("webaccess-list");
   const empty = document.getElementById("webaccess-empty");
+  const emptyVault = document.getElementById("webaccess-empty-vault");
+  const topbar = document.getElementById("webaccess-topbar");
 
   function render() {
     const hasAny = COMPANIES.length > 0;
+
+    A.emptyBgStop();
+    topbar.style.display = hasAny ? "" : "none";
+
+    if (!hasAny) {
+      list.style.display = "none";
+      empty.style.display = "none";
+      emptyVault.style.display = "";
+      emptyVault.innerHTML = A.emptyVaultHTML({
+        icon: "globe",
+        title: "No companies yet",
+        desc: "Web access lets a company log in with its own credentials. Add a company first, then enable access here.",
+        actions: [{ label: "Go to Companies", icon: "building", act: "companies", primary: true }],
+      });
+      A.emptyBgStart(emptyVault.querySelector(".empty-vault-bg"));
+      return;
+    }
+    emptyVault.style.display = "none";
+
     const q = search.trim().toLowerCase();
     const filtered = q ? COMPANIES.filter(c => c.name.toLowerCase().includes(q)) : COMPANIES;
     list.style.display = filtered.length ? "" : "none";
     empty.style.display = filtered.length ? "none" : "flex";
-    document.getElementById("webaccess-empty-txt").textContent = hasAny ? "No companies match your search" : "No companies yet";
-    empty.querySelector(".ico").innerHTML = A.ICONS[hasAny ? "search" : "globe"];
     list.innerHTML = filtered.map(c =>
       '<div class="table-row" style="display:flex;align-items:center;gap:12px">' +
       '<div class="row-title" style="flex:1;min-width:0">' + A.escapeHtml(c.name) + "</div>" +
@@ -73,6 +93,11 @@
 
   document.getElementById("webaccess-search").addEventListener("input", e => { search = e.target.value; render(); });
   A.attachAutocomplete(document.getElementById("webaccess-search"), () => COMPANIES.map(c => c.name));
+
+  emptyVault.addEventListener("click", e => {
+    if (e.target.closest('[data-empty-act="companies"]')) window.location.href = "/companies";
+  });
+  if (A.onPageLeave) A.onPageLeave(() => A.emptyBgStop());
 
   render();
 })();

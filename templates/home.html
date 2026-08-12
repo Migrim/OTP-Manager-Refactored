@@ -5,7 +5,7 @@
 
 {% block page %}
 <div class="page">
-  <div class="page-topbar">
+  <div class="page-topbar" id="home-topbar">
     <div class="topbar-inner">
       <div class="topbar-search">
         <span class="ico" data-icon="search"></span>
@@ -78,6 +78,7 @@
   const PERMS = {
     canEdit: {{ can_edit|tojson }},
     canDelete: {{ can_delete|tojson }},
+    canAdd: {{ can_add_secrets|tojson }},
   };
   const SETTINGS = {{ user_settings|tojson }};
   const LAYOUT = (A.getCookie("layout") === "cards") ? "cards" : "list";
@@ -86,6 +87,7 @@
   const HIDE_CODES = !!SETTINGS.hide_codes_by_default;
   const SIMPLE_TIMER = !!SETTINGS.show_timer;
   const ADMIN_FIRST = !!SETTINGS.show_including_admin_on_top;
+  const ONLY_PINNED_SIDEBAR = !!SETTINGS.only_pinned_in_sidebar;
   const PERIOD = 30;
 
   let secrets = [];
@@ -107,6 +109,7 @@
 
   const content = document.getElementById("home-content");
   const scroller = document.getElementById("home-scroll");
+  const topbar = document.getElementById("home-topbar");
   const searchInput = document.getElementById("home-search");
   const filterSelect = document.getElementById("company-filter");
 
@@ -154,7 +157,7 @@
     }
     const digits = codeVisible(e) ? A.digitsHTML(e.current_code, animateDigits) : '<span class="digit" style="letter-spacing:2px">••••••</span>';
     return '<div class="' + (card ? "card-code-row" : "otp-code-cell") + '">' +
-      '<span class="otp-code" data-code-of="' + e.id + '" data-code="' + (codeVisible(e) ? A.escapeHtml(e.current_code) : "") + '" title="' + (codeVisible(e) ? "Copy code" : "Click to reveal") + '"' +
+      '<span class="otp-code" data-code-of="' + e.id + '" data-code="' + (codeVisible(e) ? A.escapeHtml(e.current_code) : "") + '" data-obscure-group title="' + (codeVisible(e) ? "Copy code" : "Click to reveal") + '"' +
       (card ? ' style="font-size:17px"' : "") + ">" + digits + "</span>" + timerHTML() + "</div>";
   }
 
@@ -229,8 +232,8 @@
   }
 
   function computeSections(filtered) {
-    const pinnedEntries = sortEntries(filtered.filter(e => pinned.has(String(e.id))));
-    const rest = filtered.filter(e => !pinned.has(String(e.id)));
+    const pinnedEntries = ONLY_PINNED_SIDEBAR ? [] : sortEntries(filtered.filter(e => pinned.has(String(e.id))));
+    const rest = ONLY_PINNED_SIDEBAR ? filtered : filtered.filter(e => !pinned.has(String(e.id)));
     const byCompany = {};
     rest.forEach(e => {
       const c = e.company_name || "No company";
@@ -249,7 +252,24 @@
     });
   }
 
+  function searchEmptyHTML() {
+    return '<div class="empty-state"><span class="ico">' + A.ICONS.searchBig + '</span><div class="txt">No OTPs match your search</div></div>';
+  }
+
+  function vaultEmptyHTML() {
+    const actions = [];
+    if (PERMS.canAdd) actions.push({ label: "Add your first OTP", icon: "plus", act: "add", primary: true });
+    actions.push({ label: "Import from file", icon: "backup", act: "import" });
+    return A.emptyVaultHTML({
+      icon: "lockBig",
+      title: "No secrets yet",
+      desc: "Add your first OTP secret and this vault starts generating codes. Everything stays encrypted on this machine.",
+      actions: actions,
+    });
+  }
+
   function render() {
+    A.emptyBgStop();
     const filtered = secrets.filter(matches);
     const { pinnedEntries, byCompany, names } = computeSections(filtered);
 
@@ -257,13 +277,15 @@
     if (pinnedEntries.length) html += sectionHTML("__pinned__", pinnedEntries, true);
     names.forEach(n => { html += sectionHTML(n, sortEntries(byCompany[n]), false); });
     if (!filtered.length) {
-      html += '<div class="empty-state"><span class="ico">' + A.ICONS.searchBig + '</span><div class="txt">No OTPs match your search</div></div>';
+      html += secrets.length ? searchEmptyHTML() : vaultEmptyHTML();
     }
     content.innerHTML = html;
     sectionsKey = sectionsKeyOf(pinnedEntries, names, byCompany);
     animateDigits = false;
     updateTimers();
     renderBulkBar();
+    topbar.style.display = secrets.length ? "" : "none";
+    if (!secrets.length) A.emptyBgStart(content.querySelector(".empty-vault-bg"));
   }
 
   /* only touches the digits that actually changed, instead of rebuilding the table */
@@ -345,7 +367,7 @@
     tickRaf = requestAnimationFrame(tick);
   }
   tickRaf = requestAnimationFrame(tick);
-  if (A.onPageLeave) A.onPageLeave(() => cancelAnimationFrame(tickRaf));
+  if (A.onPageLeave) A.onPageLeave(() => { cancelAnimationFrame(tickRaf); A.emptyBgStop(); });
 
   /* ---------- interactions ---------- */
 
@@ -381,6 +403,13 @@
   function entryById(id) { return secrets.find(e => String(e.id) === String(id)); }
 
   content.addEventListener("click", e => {
+    const emptyAct = e.target.closest("[data-empty-act]");
+    if (emptyAct) {
+      const act = emptyAct.getAttribute("data-empty-act");
+      if (act === "add") window.location.href = "/add";
+      else if (act === "import") A.toast("Import from file isn't available yet");
+      return;
+    }
     const codeEl = e.target.closest("[data-code-of]");
     if (codeEl) {
       const entry = entryById(codeEl.getAttribute("data-code-of"));
@@ -712,23 +741,6 @@
     backBtn.style.display = scroller.scrollTop > 320 ? "flex" : "none";
   });
   backBtn.addEventListener("click", () => scroller.scrollTo({ top: 0, behavior: "smooth" }));
-
-  if (SETTINGS.blur_on_inactive) {
-    let idleTimer = null;
-    const idleEvents = ["mousemove", "mousedown", "keydown", "scroll", "touchstart"];
-    const arm = () => {
-      document.documentElement.classList.remove("blur-active");
-      clearTimeout(idleTimer);
-      idleTimer = setTimeout(() => document.documentElement.classList.add("blur-active"), 60000);
-    };
-    idleEvents.forEach(ev => window.addEventListener(ev, arm, { passive: true }));
-    arm();
-    if (A.onPageLeave) A.onPageLeave(() => {
-      clearTimeout(idleTimer);
-      idleEvents.forEach(ev => window.removeEventListener(ev, arm));
-      document.documentElement.classList.remove("blur-active");
-    });
-  }
 
   fetchData();
 })();

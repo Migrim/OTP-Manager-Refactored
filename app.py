@@ -276,8 +276,6 @@ app.register_blueprint(api_bp, url_prefix="/api")
 VERSION_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "VERSION")
 INDEX_TEMPLATE_PRESENT = os.path.isfile(os.path.join(app.template_folder or "templates", "index.html"))
 
-_DB_MISSING_COLS = get_missing_columns()
-
 def get_app_version():
     try:
         with open(VERSION_PATH, "r", encoding="utf-8") as f:
@@ -373,6 +371,8 @@ def row_to_settings(row):
         "hide_codes_by_default": int(row[19] or 0),
         "hide_secret_field": int(row[20] or 0),
         "show_search_and_link": int(row[21] or 0),
+        "show_pinned_in_sidebar": int(row[22] or 0),
+        "only_pinned_in_sidebar": int(row[23] or 0),
     }
 
 def _is_rate_limited(ip: str) -> float | None:
@@ -409,7 +409,9 @@ def page_not_found(e):
 
 @app.before_request
 def block_on_schema_mismatch():
-    if _DB_MISSING_COLS and request.endpoint != "static":
+    if request.endpoint == "static":
+        return
+    if get_missing_columns():
         template_path = os.path.join(app.template_folder or "templates", "db_upgrade.html")
         with open(template_path, "r", encoding="utf-8") as f:
             html = f.read()
@@ -439,7 +441,7 @@ def load_user():
                     can_delete_companies, can_add_secrets, can_add_users,
                     pinned, show_timer, show_otp_type, show_emails, show_company,
                     blur_on_inactive, show_including_admin_on_top, hide_codes_by_default, hide_secret_field,
-                    show_search_and_link
+                    show_search_and_link, show_pinned_in_sidebar, only_pinned_in_sidebar
                 FROM users
                 WHERE id = ?
             """, (g.user_id,))
@@ -472,6 +474,8 @@ def load_user():
                     "hide_codes_by_default": int(row[19] or 0),
                     "hide_secret_field": int(row[20] or 0),
                     "show_search_and_link": int(row[21] or 0),
+                    "show_pinned_in_sidebar": int(row[22] or 0),
+                    "only_pinned_in_sidebar": int(row[23] or 0),
                 }
 
 @app.context_processor
@@ -665,7 +669,7 @@ def settings():
                     can_delete_companies, can_add_secrets, can_add_users,
                     pinned, show_timer, show_otp_type, show_emails, show_company,
                     blur_on_inactive, show_including_admin_on_top, hide_codes_by_default,
-                    hide_secret_field, show_search_and_link
+                    hide_secret_field, show_search_and_link, show_pinned_in_sidebar, only_pinned_in_sidebar
                 FROM users WHERE id = ?
             """, (session["user_id"],))
         row = cursor.fetchone()
@@ -685,6 +689,8 @@ def update_settings():
         "hide_codes_by_default": 1 if request.form.get("hide_codes_by_default") in ("on", "true", "1") else 0,
         "hide_secret_field": 1 if request.form.get("hide_secret_field") in ("on", "true", "1") else 0,
         "show_search_and_link": 1 if request.form.get("show_search_and_link") in ("on", "true", "1") else 0,
+        "show_pinned_in_sidebar": 1 if request.form.get("show_pinned_in_sidebar") in ("on", "true", "1") else 0,
+        "only_pinned_in_sidebar": 1 if request.form.get("only_pinned_in_sidebar") in ("on", "true", "1") else 0,
     }
     try:
         with sqlite3.connect(DB_PATH) as db:
@@ -700,7 +706,9 @@ def update_settings():
                     show_including_admin_on_top = ?,
                     hide_codes_by_default = ?,
                     hide_secret_field = ?,
-                    show_search_and_link = ?
+                    show_search_and_link = ?,
+                    show_pinned_in_sidebar = ?,
+                    only_pinned_in_sidebar = ?
                 WHERE id = ?
                 """,
                 (
@@ -713,6 +721,8 @@ def update_settings():
                     payload["hide_codes_by_default"],
                     payload["hide_secret_field"],
                     payload["show_search_and_link"],
+                    payload["show_pinned_in_sidebar"],
+                    payload["only_pinned_in_sidebar"],
                     g.user_id,
                 ),
             )
@@ -961,6 +971,8 @@ _SCHEMA_COLUMN_DEFAULTS = {
     "users.hide_codes_by_default": "INTEGER DEFAULT 0",
     "users.hide_secret_field": "INTEGER DEFAULT 0",
     "users.show_search_and_link": "INTEGER DEFAULT 0",
+    "users.show_pinned_in_sidebar": "INTEGER DEFAULT 0",
+    "users.only_pinned_in_sidebar": "INTEGER DEFAULT 0",
     "companies.login_enabled": "INTEGER DEFAULT 0",
 }
 

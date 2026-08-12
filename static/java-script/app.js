@@ -296,6 +296,80 @@
       .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
 
+  /* ---------- full-page empty state (icon, heading, description, actions, animated bg) ---------- */
+
+  function emptyVaultHTML(opts) {
+    const actions = (opts.actions || []).map(a =>
+      '<button class="' + (a.primary ? "btn-accent lg" : "btn-outline lg") + '" data-empty-act="' + escapeHtml(a.act) + '" type="button">' +
+      '<span style="width:14px;height:14px;display:flex">' + (ICONS[a.icon] || "") + "</span>" + escapeHtml(a.label) + "</button>"
+    ).join("");
+    return '<div class="empty-vault"><canvas class="empty-vault-bg"></canvas>' +
+      '<div class="empty-vault-inner">' +
+      '<div class="empty-vault-text">' +
+      '<span class="empty-vault-icon">' + (ICONS[opts.icon] || "") + "</span>" +
+      "<h1 class=\"empty-vault-title\">" + escapeHtml(opts.title) + "</h1>" +
+      '<p class="empty-vault-desc">' + escapeHtml(opts.desc) + "</p>" +
+      "</div>" +
+      '<div class="empty-vault-actions">' + actions + "</div>" +
+      "</div></div>";
+  }
+
+  let emptyBgRaf = null;
+  let emptyBgCleanup = null;
+  function emptyBgStop() {
+    if (emptyBgRaf) cancelAnimationFrame(emptyBgRaf);
+    emptyBgRaf = null;
+    if (emptyBgCleanup) { emptyBgCleanup(); emptyBgCleanup = null; }
+  }
+  function emptyBgStart(canvas) {
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const fs = 13;
+    const ramp = ".'`^:;~=+*ox%O0#@".split("");
+    const accent = getCookie("accent") || "#a15c93";
+    let cols = 0, rows = 0;
+    const resize = () => {
+      canvas.width = canvas.offsetWidth; canvas.height = canvas.offsetHeight;
+      cols = Math.ceil(canvas.width / fs); rows = Math.ceil(canvas.height / fs);
+    };
+    resize();
+    window.addEventListener("resize", resize);
+    emptyBgCleanup = () => window.removeEventListener("resize", resize);
+    let last = 0;
+    const draw = (ts) => {
+      emptyBgRaf = requestAnimationFrame(draw);
+      if (ts - last < 45) return;
+      last = ts;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.font = fs + "px ui-monospace, SFMono-Regular, Menlo, monospace";
+      const t = ts / 1000 * 0.62;
+      const w = Math.max(12, Math.round(cols * 0.22));
+      const noise = (x, y) => {
+        let v = 0;
+        v += Math.sin(x * 0.31 + Math.cos(y * 0.19 - t * 1.1) * 2.2 + t * 0.9);
+        v += Math.sin(y * 0.24 - t * 1.7 + Math.sin(x * 0.41 + t * 0.6) * 1.8) * 0.9;
+        v += Math.sin((x * 0.6 + y * 0.33) - t * 2.3) * 0.55;
+        v += Math.sin(Math.hypot(x - w * 0.5, (y % 34) - 17) * 0.55 - t * 2.6) * 0.7;
+        return v / 3.15;
+      };
+      for (let y = 0; y < rows; y++) {
+        for (let bx = 0; bx < w; bx++) {
+          const edgeFade = Math.min(1, (w - bx) / (w * 0.62));
+          const v = Math.max(0, Math.min(1, (noise(bx, y) + 0.35) * 1.35)) * edgeFade;
+          if (v < 0.08) continue;
+          const n = Math.floor(v * (ramp.length - 1));
+          if (n < 1) continue;
+          const a = Math.floor(22 + Math.pow(v, 0.8) * 200);
+          ctx.fillStyle = accent + Math.min(255, a).toString(16).padStart(2, "0");
+          const ch = ramp[n];
+          ctx.fillText(ch, bx * fs, y * fs + fs);
+          ctx.fillText(ch, (cols - 1 - bx) * fs, y * fs + fs);
+        }
+      }
+    };
+    emptyBgRaf = requestAnimationFrame(draw);
+  }
+
   async function fetchJSON(url, opts) {
     const o = Object.assign({ headers: {} }, opts || {});
     o.headers["X-Requested-With"] = "XMLHttpRequest";
@@ -528,6 +602,8 @@
       curNav.innerHTML = newNav.innerHTML;
       const newDot = curNav.querySelector("#update-dot");
       if (newDot && dotVisible) newDot.style.display = "inline-block";
+      if (sidebarPinned.secrets) sidebarPinnedRender();
+      sidebarPinnedFetch();
 
       const pageScripts = document.getElementById("page-scripts");
       if (pageScripts) {
@@ -701,6 +777,114 @@
     else if (e.key === "Enter") { if (cmdk.items[cmdk.index]) cmdkSelect(cmdk.items[cmdk.index]); }
   });
 
+  /* ---------- idle code obfuscation (replaces the old full-panel blur) ---------- */
+
+  const SCRAMBLE_DIGITS = "0123456789";
+  function scrambleDigits(len) {
+    let s = "";
+    for (let i = 0; i < len; i++) s += SCRAMBLE_DIGITS[(Math.random() * SCRAMBLE_DIGITS.length) | 0];
+    return s;
+  }
+
+  let idleHidden = false;
+  let idleArmTimer = null;
+  let scrambleInterval = null;
+
+  function obscureDigits() {
+    const leaves = [];
+    document.querySelectorAll("[data-obscure-group] .digit").forEach(d => leaves.push(d));
+    return leaves;
+  }
+
+  function obscureTick() {
+    obscureDigits().forEach(el => {
+      if (el.dataset.real === undefined) el.dataset.real = el.textContent;
+      el.textContent = scrambleDigits(el.dataset.real.length || 1);
+    });
+  }
+
+  function restoreObscured() {
+    document.querySelectorAll("[data-obscure-group] .digit[data-real]").forEach(el => {
+      el.textContent = el.dataset.real;
+      delete el.dataset.real;
+    });
+  }
+
+  function setIdleHidden(v) {
+    if (idleHidden === v) return;
+    idleHidden = v;
+    document.documentElement.classList.toggle("idle-hidden", v);
+    if (v) {
+      obscureTick();
+      scrambleInterval = setInterval(obscureTick, 80);
+    } else {
+      clearInterval(scrambleInterval);
+      scrambleInterval = null;
+      restoreObscured();
+    }
+  }
+
+  function armIdleGuard() {
+    setIdleHidden(false);
+    clearTimeout(idleArmTimer);
+    idleArmTimer = setTimeout(() => setIdleHidden(true), 60000);
+  }
+
+  function initIdleGuard() {
+    if (!document.documentElement.classList.contains("blur-on-inactive")) return;
+    const events = ["mousemove", "mousedown", "keydown", "scroll", "touchstart"];
+    events.forEach(ev => window.addEventListener(ev, armIdleGuard, { passive: true }));
+    armIdleGuard();
+  }
+
+  /* ---------- sidebar pinned secrets ---------- */
+
+  const sidebarPinned = { secrets: null, fetchedAt: 0, baseRemaining: 30, refreshing: false };
+
+  function sidebarPinnedRender() {
+    const el = document.getElementById("sidebar-pinned");
+    if (!el) return;
+    const list = sidebarPinned.secrets || [];
+    el.innerHTML = list.map(s =>
+      '<button class="sidebar-pin-row" data-pin-id="' + s.id + '" type="button" title="' + escapeHtml(s.name) + '">' +
+      '<span class="sidebar-pin-name">' + escapeHtml(s.name) + "</span>" +
+      (s.current_code
+        ? '<span class="sidebar-pin-code" data-obscure-group>' + digitsHTML(s.current_code, false) + "</span>"
+        : '<span class="sidebar-pin-error" title="Can\'t generate OTP code #ERR-004"><span class="ico">' + ICONS.warn + "</span> error</span>") +
+      "</button>"
+    ).join("");
+  }
+
+  async function sidebarPinnedFetch() {
+    if (sidebarPinned.refreshing || !document.getElementById("sidebar-pinned")) return;
+    sidebarPinned.refreshing = true;
+    try {
+      const [pinnedIds, secrets] = await Promise.all([
+        fetchJSON("/api/user-pinned"),
+        fetchJSON("/api/secrets"),
+      ]);
+      const idSet = new Set((pinnedIds || []).map(String));
+      sidebarPinned.secrets = (secrets || []).filter(s => idSet.has(String(s.id)));
+      sidebarPinned.fetchedAt = Date.now();
+      sidebarPinned.baseRemaining = sidebarPinned.secrets.length
+        ? Math.max(0, Math.min(30, sidebarPinned.secrets[0].seconds_remaining)) : 30;
+      sidebarPinnedRender();
+    } catch (e) { /* not critical */ } finally { sidebarPinned.refreshing = false; }
+  }
+
+  document.addEventListener("click", e => {
+    const row = e.target.closest(".sidebar-pin-row");
+    if (!row) return;
+    const secret = (sidebarPinned.secrets || []).find(s => String(s.id) === row.getAttribute("data-pin-id"));
+    if (secret && secret.current_code) copyText(secret.current_code, "Copied code: " + secret.current_code);
+  });
+
+  setInterval(() => {
+    if (!document.getElementById("sidebar-pinned")) return;
+    const remaining = sidebarPinned.baseRemaining - (Date.now() - sidebarPinned.fetchedAt) / 1000;
+    if (!sidebarPinned.fetchedAt || remaining <= 0) sidebarPinnedFetch();
+  }, 1000);
+
   /* ---------- boot ---------- */
 
   document.addEventListener("DOMContentLoaded", () => {
@@ -720,11 +904,14 @@
       toast(el.textContent.trim());
       el.remove();
     });
+
+    sidebarPinnedFetch();
+    initIdleGuard();
   });
 
   window.App = {
     ICONS, toast, confirmToast, copyText, hydrateIcons, digitsHTML, digitsHTMLUpdate, ringSVG, setRing, escapeHtml,
     fetchJSON, openOverlay, closeOverlay, closeAllOverlays, applyAccent, setCookie, getCookie,
-    cmdkOpen, attachAutocomplete, onPageLeave,
+    cmdkOpen, attachAutocomplete, onPageLeave, emptyVaultHTML, emptyBgStart, emptyBgStop,
   };
 })();

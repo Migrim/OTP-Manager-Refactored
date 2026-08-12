@@ -5,7 +5,7 @@
 
 {% block page %}
 <div class="page">
-  <div class="page-topbar">
+  <div class="page-topbar" id="companies-topbar">
     <div class="topbar-search">
       <span class="ico" data-icon="search"></span>
       <input type="text" id="companies-search" placeholder="Search companies…" autocomplete="off">
@@ -27,9 +27,10 @@
       <div class="table-panel" id="companies-table"></div>
       <div class="empty-state" id="companies-empty" style="display:none">
         <span class="ico" data-icon="search"></span>
-        <div class="txt" id="companies-empty-txt">No companies match your search</div>
+        <div class="txt">No companies match your search</div>
       </div>
     </div>
+    <div id="companies-empty-vault" style="display:none"></div>
   </div>
 </div>
 
@@ -110,20 +111,43 @@
   };
 
   let search = "";
+  const emptyVault = document.getElementById("companies-empty-vault");
+  const topbar = document.getElementById("companies-topbar");
 
   function renderTable() {
     const table = document.getElementById("companies-table");
     const head = document.getElementById("companies-table-head");
+    const emptyState = document.getElementById("companies-empty");
     const hasAny = COMPANIES.length > 0;
-    head.style.display = hasAny ? "" : "none";
-    table.style.display = hasAny ? "" : "none";
+
+    A.emptyBgStop();
+    topbar.style.display = hasAny ? "" : "none";
+
+    if (!hasAny) {
+      head.style.display = "none";
+      table.style.display = "none";
+      emptyState.style.display = "none";
+      emptyVault.style.display = "";
+      const actions = [];
+      if (PERMS.canAdd) actions.push({ label: "Add your first company", icon: "plus", act: "add", primary: true });
+      emptyVault.innerHTML = A.emptyVaultHTML({
+        icon: "building",
+        title: "No companies yet",
+        desc: "Group your OTP secrets by client. Add a company to start organizing them.",
+        actions: actions,
+      });
+      A.emptyBgStart(emptyVault.querySelector(".empty-vault-bg"));
+      return;
+    }
+    emptyVault.style.display = "none";
+
+    head.style.display = "";
+    table.style.display = "";
     const q = search.trim().toLowerCase();
     const filtered = q
       ? COMPANIES.filter(c => c.name.toLowerCase().includes(q) || String(c.kundennummer).toLowerCase().includes(q))
       : COMPANIES;
-    document.getElementById("companies-empty").style.display = filtered.length ? "none" : "flex";
-    document.getElementById("companies-empty-txt").textContent = hasAny ? "No companies match your search" : "No companies yet";
-    document.querySelector("#companies-empty .ico").innerHTML = A.ICONS[hasAny ? "search" : "building"];
+    emptyState.style.display = filtered.length ? "none" : "flex";
     table.innerHTML = filtered.map(c =>
       '<div class="table-row" style="grid-template-columns:120px 1.6fr 1fr 140px 96px">' +
       '<div class="row-dim mono" style="font-size:13px">' + (c.kundennummer !== "" ? A.escapeHtml(String(c.kundennummer)) : "CO-" + (1000 + c.id)) + "</div>" +
@@ -229,6 +253,11 @@
 
   document.getElementById("companies-search").addEventListener("input", e => { search = e.target.value; renderTable(); });
   A.attachAutocomplete(document.getElementById("companies-search"), () => COMPANIES.map(c => c.name));
+
+  emptyVault.addEventListener("click", e => {
+    if (e.target.closest('[data-empty-act="add"]')) openCompanyDrawer(null);
+  });
+  if (A.onPageLeave) A.onPageLeave(() => A.emptyBgStop());
 
   renderTable();
 })();

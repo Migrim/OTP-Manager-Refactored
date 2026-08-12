@@ -242,7 +242,8 @@ def upgrade_database():
         "pinned", "can_delete", "can_edit", "can_add_companies",
         "can_delete_companies", "can_add_secrets", "can_add_users",
         "blur_on_inactive", "show_including_admin_on_top",
-        "hide_codes_by_default", "hide_secret_field", "show_search_and_link"
+        "hide_codes_by_default", "hide_secret_field", "show_search_and_link",
+        "show_pinned_in_sidebar", "only_pinned_in_sidebar"
     ]
 
     if any(col not in columns for col in required_columns):
@@ -274,7 +275,9 @@ def upgrade_database():
                 show_including_admin_on_top INTEGER DEFAULT 0,
                 hide_codes_by_default INTEGER DEFAULT 0,
                 hide_secret_field INTEGER DEFAULT 0,
-                show_search_and_link INTEGER DEFAULT 0
+                show_search_and_link INTEGER DEFAULT 0,
+                show_pinned_in_sidebar INTEGER DEFAULT 0,
+                only_pinned_in_sidebar INTEGER DEFAULT 0
             )
         """)
 
@@ -288,9 +291,10 @@ def upgrade_database():
                 can_delete_companies, can_add_secrets, can_add_users,
                 pinned, show_timer, show_otp_type, show_emails, show_company,
                 blur_on_inactive, show_including_admin_on_top,
-                hide_codes_by_default, hide_secret_field, show_search_and_link
+                hide_codes_by_default, hide_secret_field, show_search_and_link,
+                show_pinned_in_sidebar, only_pinned_in_sidebar
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
 
         migrated = 0
@@ -319,7 +323,9 @@ def upgrade_database():
                 int(data.get("show_including_admin_on_top", 0) or 0),
                 int(data.get("hide_codes_by_default", 0) or 0),
                 int(data.get("hide_secret_field", 0) or 0),
-                int(data.get("show_search_and_link", 0) or 0)
+                int(data.get("show_search_and_link", 0) or 0),
+                int(data.get("show_pinned_in_sidebar", 0) or 0),
+                int(data.get("only_pinned_in_sidebar", 0) or 0)
             ))
             migrated += 1
 
@@ -352,6 +358,14 @@ def upgrade_database():
         cur.execute("ALTER TABLE users ADD COLUMN show_search_and_link INTEGER DEFAULT 0")
         print(f"  {green('✓')} Added column: {gray('show_search_and_link')}")
         changed = True
+    if "show_pinned_in_sidebar" not in columns:
+        cur.execute("ALTER TABLE users ADD COLUMN show_pinned_in_sidebar INTEGER DEFAULT 0")
+        print(f"  {green('✓')} Added column: {gray('show_pinned_in_sidebar')}")
+        changed = True
+    if "only_pinned_in_sidebar" not in columns:
+        cur.execute("ALTER TABLE users ADD COLUMN only_pinned_in_sidebar INTEGER DEFAULT 0")
+        print(f"  {green('✓')} Added column: {gray('only_pinned_in_sidebar')}")
+        changed = True
 
     # Remove deprecated columns via full table rebuild
     deprecated = [c for c in ("show_content_titles", "alert_color", "text_color") if c in columns]
@@ -383,7 +397,9 @@ def upgrade_database():
                 show_including_admin_on_top INTEGER DEFAULT 0,
                 hide_codes_by_default INTEGER DEFAULT 0,
                 hide_secret_field INTEGER DEFAULT 0,
-                show_search_and_link INTEGER DEFAULT 0
+                show_search_and_link INTEGER DEFAULT 0,
+                show_pinned_in_sidebar INTEGER DEFAULT 0,
+                only_pinned_in_sidebar INTEGER DEFAULT 0
             )
         """)
         keep = [
@@ -393,6 +409,7 @@ def upgrade_database():
             "pinned", "show_timer", "show_otp_type", "show_emails", "show_company",
             "blur_on_inactive", "show_including_admin_on_top",
             "hide_codes_by_default", "hide_secret_field", "show_search_and_link",
+            "show_pinned_in_sidebar", "only_pinned_in_sidebar",
         ]
         cols_to_copy = [c for c in keep if c in old_columns]
         col_list = ", ".join(cols_to_copy)
@@ -553,7 +570,8 @@ def check_schema_needs_update():
         "pinned", "can_delete", "can_edit", "can_add_companies",
         "can_delete_companies", "can_add_secrets", "can_add_users",
         "blur_on_inactive", "show_including_admin_on_top",
-        "hide_codes_by_default", "hide_secret_field", "show_search_and_link"
+        "hide_codes_by_default", "hide_secret_field", "show_search_and_link",
+        "show_pinned_in_sidebar", "only_pinned_in_sidebar"
     ]
     deprecated_cols   = ["show_content_titles", "alert_color", "text_color"]
     deprecated_tables = ["statistics"]

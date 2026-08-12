@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en"
-      class="{{ 'dark-mode' if request.cookies.get('theme') == 'dark' else '' }} {{ 'sidebar-closed' if request.cookies.get('sidebar') == 'closed' else '' }} {{ 'show-company-icons' if user_settings.get('show_search_and_link') else '' }}">
+      class="{{ 'dark-mode' if request.cookies.get('theme') == 'dark' else '' }} {{ 'sidebar-closed' if request.cookies.get('sidebar') == 'closed' else '' }} {{ 'show-company-icons' if user_settings.get('show_search_and_link') else '' }} {{ 'blur-on-inactive' if user_settings.get('blur_on_inactive') else '' }}">
 <head>
     <meta charset="UTF-8">
     <script>
@@ -76,6 +76,11 @@
         <span class="nav-ico" data-icon="wrench"></span><span class="nav-label">Server Config</span>
         <span class="nav-dot" id="update-dot" style="display:none"></span>
       </a>
+      {% endif %}
+
+      {% if user_settings.get('show_pinned_in_sidebar') %}
+      <div class="sidebar-pinned-sep"></div>
+      <div class="sidebar-pinned" id="sidebar-pinned"></div>
       {% endif %}
     </nav>
 
