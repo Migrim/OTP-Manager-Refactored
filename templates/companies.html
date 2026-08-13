@@ -22,7 +22,11 @@
   <div class="page-scroll">
     <div style="max-width:960px;margin:0 auto;display:flex;flex-direction:column;gap:10px">
       <div class="table-head" id="companies-table-head" style="grid-template-columns:120px 1.6fr 1fr 140px 96px">
-        <div>Company ID</div><div>Name</div><div>OTPs</div><div>Web Access</div><div></div>
+        <div class="sort-col" data-sort="kundennummer">Company ID<span class="sort-ico">⇅</span></div>
+        <div class="sort-col" data-sort="name">Name<span class="sort-ico">⇅</span></div>
+        <div class="sort-col" data-sort="count">OTPs<span class="sort-ico">⇅</span></div>
+        <div class="sort-col" data-sort="login_enabled">Web Access<span class="sort-ico">⇅</span></div>
+        <div></div>
       </div>
       <div class="table-panel" id="companies-table"></div>
       <div class="empty-state" id="companies-empty" style="display:none">
@@ -75,9 +79,38 @@
   };
 
   let search = "";
+  let sortKey = null;
+  let sortDir = "asc";
   const emptyVault = document.getElementById("companies-empty-vault");
   const topbar = document.getElementById("companies-topbar");
   const pageScroll = emptyVault.closest(".page-scroll");
+
+  function sortValue(c, key) {
+    if (key === "kundennummer") return c.kundennummer !== "" ? c.kundennummer : "CO-" + (1000 + c.id);
+    return c[key];
+  }
+
+  function sortCompanies(list) {
+    if (!sortKey) return list;
+    const arr = list.slice();
+    arr.sort((a, b) => {
+      const va = sortValue(a, sortKey), vb = sortValue(b, sortKey);
+      const cmp = typeof va === "number" && typeof vb === "number"
+        ? va - vb
+        : String(va).localeCompare(String(vb), undefined, { numeric: true, sensitivity: "base" });
+      return sortDir === "desc" ? -cmp : cmp;
+    });
+    return arr;
+  }
+
+  function updateSortIndicators() {
+    document.querySelectorAll("#companies-table-head .sort-col").forEach(col => {
+      const active = col.getAttribute("data-sort") === sortKey;
+      const ico = col.querySelector(".sort-ico");
+      ico.textContent = active ? (sortDir === "desc" ? "↓" : "↑") : "⇅";
+      col.classList.toggle("active", active);
+    });
+  }
 
   function renderTable() {
     const table = document.getElementById("companies-table");
@@ -114,7 +147,8 @@
       ? COMPANIES.filter(c => c.name.toLowerCase().includes(q) || String(c.kundennummer).toLowerCase().includes(q))
       : COMPANIES;
     emptyState.style.display = filtered.length ? "none" : "flex";
-    table.innerHTML = filtered.map(c =>
+    updateSortIndicators();
+    table.innerHTML = sortCompanies(filtered).map(c =>
       '<div class="table-row" style="grid-template-columns:120px 1.6fr 1fr 140px 96px">' +
       '<div class="row-dim mono" style="font-size:13px">' + (c.kundennummer !== "" ? A.escapeHtml(String(c.kundennummer)) : "CO-" + (1000 + c.id)) + "</div>" +
       '<div class="row-title">' + A.escapeHtml(c.name) + "</div>" +
@@ -190,6 +224,19 @@
       delText.value = ""; delBtn.disabled = true;
       A.openOverlay("delete-company-overlay");
     }
+  });
+
+  document.getElementById("companies-table-head").addEventListener("click", e => {
+    const col = e.target.closest(".sort-col");
+    if (!col) return;
+    const key = col.getAttribute("data-sort");
+    if (sortKey === key) {
+      sortDir = sortDir === "asc" ? "desc" : "asc";
+    } else {
+      sortKey = key;
+      sortDir = "asc";
+    }
+    renderTable();
   });
 
   document.getElementById("companies-search").addEventListener("input", e => { search = e.target.value; renderTable(); });
