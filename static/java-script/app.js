@@ -1124,13 +1124,21 @@
   }
 
   document.addEventListener("keydown", e => {
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+    if ((e.metaKey || e.ctrlKey || (!IS_MAC && e.altKey)) && e.key.toLowerCase() === "k") {
       e.preventDefault();
       if (cmdk.open) cmdkClose(); else cmdkOpen();
       return;
     }
     if (!cmdk.open) return;
     if (e.key === "Escape") { cmdkClose(); return; }
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "c" && cmdk.input.selectionStart === cmdk.input.selectionEnd) {
+      const item = cmdk.items[cmdk.index];
+      if (item && item.badge) {
+        e.preventDefault();
+        copyText(item.badge, "Copied code: " + item.badge);
+      }
+      return;
+    }
     if (e.key === "ArrowDown") { e.preventDefault(); if (cmdk.items.length) { cmdk.index = (cmdk.index + 1) % cmdk.items.length; cmdkHighlight(); } }
     else if (e.key === "ArrowUp") { e.preventDefault(); if (cmdk.items.length) { cmdk.index = (cmdk.index - 1 + cmdk.items.length) % cmdk.items.length; cmdkHighlight(); } }
     else if (e.key === "Enter") { if (cmdk.items[cmdk.index]) cmdkSelect(cmdk.items[cmdk.index]); }
@@ -1417,6 +1425,10 @@
 
   document.addEventListener("DOMContentLoaded", () => {
     hydrateIcons();
+    const searchKbd = document.getElementById("home-search-kbd");
+    if (searchKbd) searchKbd.innerHTML = IS_MAC ? "&#8984;K" : "Alt+K";
+    const copyHint = document.getElementById("cmdk-copy-hint");
+    if (copyHint) copyHint.innerHTML = COPY_KEY_LABEL + " Copy code";
     cmdkMount();
 
     const themeBtn = document.getElementById("theme-toggle");
