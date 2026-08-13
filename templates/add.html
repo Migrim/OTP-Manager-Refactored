@@ -363,7 +363,7 @@
   submitAnotherBtn.addEventListener("click", () => submit(true));
   refresh();
 
-  A.emptyBgStart(document.getElementById("add-bg"));
+  A.emptyBgStart(document.getElementById("add-bg"), 1.4);
   if (A.onPageLeave) A.onPageLeave(() => A.emptyBgStop());
 })();
 </script>

@@ -1024,29 +1024,34 @@ html.dark-mode .toast-btn:hover { filter: brightness(1.2); }
 
 .console-connecting {
   position: absolute; inset: 0; display: none; place-items: center; z-index: 2;
-  background-color: var(--side-bg);
-  background-image: radial-gradient(ellipse at 50% 45%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 62%);
+  overflow: hidden; background: var(--side-bg);
 }
-.console-connecting-inner { display: flex; flex-direction: column; align-items: center; gap: 22px; padding: 0 24px; text-align: center; }
-.console-progress {
-  position: relative; width: 220px; height: 6px; border-radius: 999px; overflow: hidden; flex: none;
-  background: color-mix(in srgb, var(--accent) 14%, var(--app-bg));
+.console-connecting-bg { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0.35; }
+.console-connecting-card {
+  position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 16px;
+  width: 320px; max-width: calc(100% - 48px); box-sizing: border-box; padding: 26px 24px;
+  background: var(--side-bg); border: 1px solid var(--border); border-radius: 14px;
 }
+.console-connecting-spinner .console-connecting-blade {
+  fill: var(--accent);
+  animation: consoleBladeFade 1s linear infinite;
+}
+@keyframes consoleBladeFade { 0% { opacity: 1; } 100% { opacity: 0.15; } }
+.console-connecting-heading { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.console-connecting-title { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; color: var(--text); }
+.console-connecting-host {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px;
+  color: var(--text-faint); letter-spacing: 0.03em;
+}
+.console-progress { width: 100%; height: 3px; border-radius: 2px; overflow: hidden; flex: none; background: var(--input-bg); }
 .console-progress-bar {
-  position: absolute; top: 0; left: -35%; width: 35%; height: 100%; border-radius: 999px;
-  background: var(--accent);
-  animation: consoleBounce 1.3s ease-in-out infinite alternate;
+  height: 100%; width: 0%; border-radius: 2px; background: var(--accent);
+  transition: width 0.8s cubic-bezier(0.22, 0.61, 0.36, 1);
 }
-@keyframes consoleBounce { from { left: -35%; } to { left: 100%; } }
-.console-connecting-label {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 16px; font-weight: 600;
-  color: var(--text); display: flex; align-items: center; gap: 1px;
+.console-connecting-status {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px;
+  color: var(--text-dim); min-height: 15px;
 }
-.console-connecting-dots span { animation: consoleDotBlink 1.2s infinite; opacity: 0; }
-.console-connecting-dots span:nth-child(2) { animation-delay: 0.2s; }
-.console-connecting-dots span:nth-child(3) { animation-delay: 0.4s; }
-@keyframes consoleDotBlink { 0%, 100% { opacity: 0; } 30%, 60% { opacity: 1; } }
-.console-connecting-sub { font-size: 12.5px; color: var(--text-faint); margin-top: -8px; }
 
 /* server update: full-page wait screen (from "Update Dialog.dc") */
 .update-overlay {

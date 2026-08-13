@@ -106,13 +106,11 @@
 
       <!-- Remote console -->
       <div class="task-card">
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="width:16px;height:16px;display:flex;color:var(--text-dim)" data-icon="terminal"></span>
-          <div class="task-title">Remote Console</div>
-          <span id="console-status" style="margin-left:auto;font-size:11.5px;font-weight:600;color:var(--text-faint)">Disconnected</span>
-        </div>
-        <div style="font-size:12.5px;color:var(--text-dim);line-height:1.5">Drive the terminal dashboard above directly from the browser, without SSH access to the machine. One shared session at a time &mdash; other admins who connect see the same screen.</div>
-        <div style="display:flex;justify-content:flex-end">
+        <div class="task-main">
+          <div style="flex:1;min-width:0">
+            <div class="task-title">Remote Console</div>
+            <div class="task-desc">Opens a terminal session in your browser.</div>
+          </div>
           <button class="btn-accent" id="console-connect" type="button" style="padding:9px 16px">Connect</button>
         </div>
       </div>
@@ -134,14 +132,17 @@
   </div>
   <div class="console-fp-body">
     <div class="console-connecting" id="console-connecting">
-      <div class="console-connecting-inner">
+      <canvas class="console-connecting-bg" id="console-connecting-bg"></canvas>
+      <div class="console-connecting-card">
+        <svg class="console-connecting-spinner" id="console-connecting-spinner" width="34" height="34" viewBox="0 0 34 34"></svg>
+        <div class="console-connecting-heading">
+          <div class="console-connecting-title">Connecting to remote console</div>
+          <div class="console-connecting-host" id="console-connecting-host"></div>
+        </div>
         <div class="console-progress">
-          <div class="console-progress-bar"></div>
+          <div class="console-progress-bar" id="console-progress-bar"></div>
         </div>
-        <div class="console-connecting-label">
-          <span id="console-connecting-text">Opening secure channel</span><span class="console-connecting-dots"><span>.</span><span>.</span><span>.</span></span>
-        </div>
-        <div class="console-connecting-sub">Attaching to the server&rsquo;s shell over a live session</div>
+        <div class="console-connecting-status" id="console-connecting-text">resolving host &hellip;</div>
       </div>
     </div>
     <div id="console-term"></div>
@@ -346,6 +347,8 @@
     const fs = 13;
     let cols = 0, rows = 0;
     const ramp = ".'`^:;~=+*ox%O0#@".split("");
+    const rawIntensity = window.APP_USER_SETTINGS && window.APP_USER_SETTINGS.bg_animation_intensity;
+    const intensity = Number.isFinite(rawIntensity) ? Math.max(0, Math.min(200, rawIntensity)) / 100 : 1;
     function resize() {
       canvas.width = canvas.offsetWidth; canvas.height = canvas.offsetHeight;
       cols = Math.ceil(canvas.width / fs); rows = Math.ceil(canvas.height / fs);
@@ -377,9 +380,9 @@
         for (let bx = 0; bx < w; bx++) {
           const n0 = noise(bx, y);
           const edgeFade = Math.min(1, (w - bx) / (w * 0.62));
-          const v = Math.max(0, Math.min(1, (n0 + 0.35) * 1.35)) * edgeFade;
+          const v = Math.max(0, Math.min(1, (n0 + 0.35) * 1.35)) * edgeFade * intensity;
           if (v < 0.08) continue;
-          const n = Math.floor(v * (ramp.length - 1));
+          const n = Math.min(ramp.length - 1, Math.floor(v * (ramp.length - 1)));
           if (n < 1) continue;
           const a = Math.floor(22 + Math.pow(v, 0.8) * 200);
           ctx.fillStyle = accent + Math.min(255, a).toString(16).padStart(2, "0");
@@ -522,7 +525,6 @@
 
   /* ---- remote console ---- */
   const termEl = document.getElementById("console-term");
-  const statusEl = document.getElementById("console-status");
   const connectBtn = document.getElementById("console-connect");
   const pageEl = document.getElementById("server-page");
   const fullpageEl = document.getElementById("console-fullpage");
@@ -530,16 +532,149 @@
   const fpEndBtn = document.getElementById("console-fp-end");
   const connectingEl = document.getElementById("console-connecting");
   const connectingTextEl = document.getElementById("console-connecting-text");
+  const connectingHostEl = document.getElementById("console-connecting-host");
+  const connectingProgressEl = document.getElementById("console-progress-bar");
+  const connectingSpinnerEl = document.getElementById("console-connecting-spinner");
   let term = null, fitAddon = null, socket = null, revealTimer = null, connectStartedAt = 0;
   const MIN_CONNECTING_MS = 1400;
 
+  for (let i = 0; i < 12; i++) {
+    const blade = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    blade.setAttribute("class", "console-connecting-blade");
+    blade.setAttribute("x", "16"); blade.setAttribute("y", "3");
+    blade.setAttribute("width", "2"); blade.setAttribute("height", "8"); blade.setAttribute("rx", "1");
+    blade.setAttribute("transform", "rotate(" + (i * 30) + " 17 17)");
+    blade.style.animationDelay = (-i / 12).toFixed(3) + "s";
+    connectingSpinnerEl.appendChild(blade);
+  }
+
+  const CONNECT_STEPS = [
+    "resolving host …",
+    "opening secure channel …",
+    "authenticating session …",
+    "attaching console stream …",
+  ];
+  let connectStepIndex = -1;
+  function setConnectStep(i) {
+    if (i < connectStepIndex) return;
+    connectStepIndex = i;
+    connectingTextEl.textContent = CONNECT_STEPS[i];
+    connectingProgressEl.style.width = (((i + 1) / CONNECT_STEPS.length) * 100) + "%";
+  }
+
   function setStatus(text, color) {
-    statusEl.textContent = text;
-    statusEl.style.color = color || "var(--text-faint)";
     fpStatusEl.textContent = text;
     fpStatusEl.style.color = color || "var(--text-faint)";
   }
-  function setConnectingText(text) { connectingTextEl.textContent = text; }
+
+  let connectingBgStop = null;
+  function startConnectingBg() {
+    const canvas = document.getElementById("console-connecting-bg");
+    if (!canvas || connectingBgStop) return;
+    const ctx = canvas.getContext("2d");
+    const fs = 13;
+    let cols = 0, rows = 0;
+    const ramp = ".'`^:;~=+*ox%O0#@".split("");
+    const style = (window.APP_USER_SETTINGS && window.APP_USER_SETTINGS.bg_animation_style) || "turbulence";
+    const rawIntensity = window.APP_USER_SETTINGS && window.APP_USER_SETTINGS.bg_animation_intensity;
+    const intensity = Number.isFinite(rawIntensity) ? Math.max(0, Math.min(200, rawIntensity)) / 100 : 1;
+    function resize() {
+      canvas.width = canvas.offsetWidth; canvas.height = canvas.offsetHeight;
+      cols = Math.ceil(canvas.width / fs); rows = Math.ceil(canvas.height / fs);
+    }
+    resize();
+    window.addEventListener("resize", resize);
+
+    /* elliptical radial falloff + cubic smoothstep, same treatment as the empty-state bg */
+    function clearAt(x, y) {
+      const cx = cols / 2, cy = rows / 2;
+      const rx = cols * 0.21, ry = rows * 0.33;
+      const d = Math.hypot((x - cx) / rx, (y - cy) / ry);
+      const t = Math.min(1, Math.max(0, (d - 0.6) / (1.3 - 0.6)));
+      return t * t * (3 - 2 * t);
+    }
+    function put(accent, x, y, v) {
+      v *= intensity;
+      if (v < 0.1) return;
+      const n = Math.min(ramp.length - 1, Math.floor(v * (ramp.length - 1)));
+      if (n < 1) return;
+      ctx.fillStyle = accent + Math.min(255, Math.floor(18 + v * 190)).toString(16).padStart(2, "0");
+      ctx.fillText(ramp[n], x * fs, y * fs + fs);
+    }
+    function drawContours(ts, accent) {
+      const t = ts / 1000 * 0.4;
+      const cx = cols / 2, cy = rows / 2;
+      for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+          const fx = x * 0.5, fy = y * 0.9;
+          const field = Math.sin(fx * 0.16 + t * 0.8) + Math.sin(fy * 0.15 - t * 0.6)
+                      + Math.sin((fx + fy) * 0.11 + t * 1.1) + Math.sin(Math.hypot(fx - cx * 0.5, fy - cy) * 0.13 - t * 0.9);
+          let v = 1 - Math.abs(((field / 4) * 3) % 1 - 0.5) * 2;
+          v = Math.pow(Math.max(0, v), 3.2) * clearAt(x, y);
+          put(accent, x, y, v);
+        }
+      }
+    }
+    function drawStreaks(ts, accent) {
+      const t = ts / 1000 * 0.45;
+      for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+          const u = x * 0.5 + y * 0.9;
+          let v = Math.sin(u * 0.22 - t * 2.0 + Math.sin(y * 0.11 + t * 0.7) * 1.6) * 0.6 + Math.sin(u * 0.07 + t * 0.9) * 0.4;
+          v = Math.pow((v + 1) / 2, 2.2) * clearAt(x, y);
+          put(accent, x, y, v);
+        }
+      }
+    }
+    function drawTurbulence(ts, accent) {
+      const t = ts / 1000 * 0.62;
+      const w = Math.max(12, Math.round(cols * 0.22));
+      const noise = (x, y) => {
+        let v = 0;
+        v += Math.sin(x * 0.31 + Math.cos(y * 0.19 - t * 1.1) * 2.2 + t * 0.9);
+        v += Math.sin(y * 0.24 - t * 1.7 + Math.sin(x * 0.41 + t * 0.6) * 1.8) * 0.9;
+        v += Math.sin((x * 0.6 + y * 0.33) - t * 2.3) * 0.55;
+        v += Math.sin(Math.hypot(x - w * 0.5, (y % 34) - 17) * 0.55 - t * 2.6) * 0.7;
+        return v / 3.15;
+      };
+      for (let y = 0; y < rows; y++) {
+        for (let bx = 0; bx < w; bx++) {
+          const edgeFade = Math.min(1, (w - bx) / (w * 0.62));
+          const v = Math.max(0, Math.min(1, (noise(bx, y) + 0.35) * 1.35)) * edgeFade * intensity;
+          if (v < 0.08) continue;
+          const n = Math.min(ramp.length - 1, Math.floor(v * (ramp.length - 1)));
+          if (n < 1) continue;
+          const a = Math.floor(22 + Math.pow(v, 0.8) * 200);
+          ctx.fillStyle = accent + Math.min(255, a).toString(16).padStart(2, "0");
+          const ch = ramp[n];
+          ctx.fillText(ch, bx * fs, y * fs + fs);
+          ctx.fillText(ch, (cols - 1 - bx) * fs, y * fs + fs);
+        }
+      }
+    }
+    const drawFrame = style === "contours" ? drawContours : style === "streaks" ? drawStreaks : drawTurbulence;
+
+    let raf = null, last = 0;
+    function draw(ts) {
+      raf = requestAnimationFrame(draw);
+      if (ts - last < 32) return;
+      last = ts;
+      const styles = getComputedStyle(document.documentElement);
+      const bg = styles.getPropertyValue("--side-bg").trim() || "#ffffff";
+      const accent = (styles.getPropertyValue("--accent").trim() || "#a15c93").slice(0, 7);
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.font = fs + "px ui-monospace, SFMono-Regular, Menlo, monospace";
+      drawFrame(ts, accent);
+    }
+    raf = requestAnimationFrame(draw);
+    connectingBgStop = () => {
+      if (raf) cancelAnimationFrame(raf);
+      window.removeEventListener("resize", resize);
+      connectingBgStop = null;
+    };
+  }
+  function stopConnectingBg() { if (connectingBgStop) connectingBgStop(); }
 
   function sendResize() {
     if (socket && socket.connected && term) {
@@ -551,10 +686,12 @@
     pageEl.style.display = "none";
     fullpageEl.style.display = "flex";
     connectingEl.style.display = "grid";
+    startConnectingBg();
   }
   function closeFullpage() {
     pageEl.style.display = "";
     fullpageEl.style.display = "none";
+    stopConnectingBg();
   }
   function revealTerminal() {
     if (connectingEl.style.display === "none" || revealTimer) return;
@@ -572,8 +709,11 @@
     if (socket) return;
     connectBtn.style.display = "none";
     connectStartedAt = Date.now();
+    connectStepIndex = -1;
+    connectingHostEl.textContent = window.location.host;
     openFullpage();
-    setConnectingText("Opening secure channel");
+    setConnectStep(0);
+    setTimeout(() => setConnectStep(1), 250);
     setStatus("Connecting…");
 
     if (!term) {
@@ -591,7 +731,8 @@
 
     socket = io("/console");
     socket.on("connect", () => {
-      setConnectingText("Attaching to shell");
+      setConnectStep(2);
+      setTimeout(() => setConnectStep(3), 200);
       revealTerminal();
     });
     socket.on("disconnect", () => setStatus("Reconnecting…"));

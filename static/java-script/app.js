@@ -322,8 +322,9 @@
     emptyBgRaf = null;
     if (emptyBgCleanup) { emptyBgCleanup(); emptyBgCleanup = null; }
   }
-  function emptyBgStart(canvas) {
+  function emptyBgStart(canvas, holeScale) {
     if (!canvas) return;
+    holeScale = holeScale || 1;
     const ctx = canvas.getContext("2d");
     const fs = 13;
     const ramp = ".'`^:;~=+*ox%O0#@".split("");
@@ -340,11 +341,15 @@
     window.addEventListener("resize", resize);
     emptyBgCleanup = () => window.removeEventListener("resize", resize);
 
-    /* shared by contours/streaks: fades intensity out toward the center, where content sits */
+    /* shared by contours/streaks: fades intensity out toward the center, where content sits.
+       Elliptical radial falloff with a cubic smoothstep gives a soft, round vignette edge
+       instead of the boxy/diamond seam a straight linear falloff produces on the coarse grid. */
     function clearAt(x, y) {
       const cx = cols / 2, cy = rows / 2;
-      const holeX = cols * 0.19, holeY = rows * 0.30;
-      return Math.min(1, Math.max(0, (Math.abs(x - cx) / holeX - 1) * 1.1 + (Math.abs(y - cy) / holeY - 1) * 0.9));
+      const rx = cols * 0.21 * holeScale, ry = rows * 0.33 * holeScale;
+      const d = Math.hypot((x - cx) / rx, (y - cy) / ry);
+      const t = Math.min(1, Math.max(0, (d - 0.6) / (1.3 - 0.6)));
+      return t * t * (3 - 2 * t);
     }
     function put(x, y, v) {
       v *= intensity;
@@ -410,7 +415,7 @@
     let last = 0;
     const draw = (ts) => {
       emptyBgRaf = requestAnimationFrame(draw);
-      if (ts - last < 45) return;
+      if (ts - last < 32) return;
       last = ts;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.font = fs + "px ui-monospace, SFMono-Regular, Menlo, monospace";
@@ -607,7 +612,7 @@
   /* ---------- empty-page background style picker (settings preview) ---------- */
 
   const EMPTY_BG_STYLES = [
-    { value: "contours", label: "Contours" },
+    { value: "contours", label: "Topography" },
     { value: "streaks", label: "Streaks" },
     { value: "turbulence", label: "Turbulence" },
   ];
