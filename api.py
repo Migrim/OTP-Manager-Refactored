@@ -494,10 +494,34 @@ def update_user_permissions():
     logger.info(f"{u(getattr(g, 'user_id', None))} updated permissions for {user_ref(user_id=target_id, username=row[0])} duration_ms={dt}")
     return redirect("/users")
 
+@api_bp.route("/check-company", methods=["GET"])
+def check_company():
+    name = (request.args.get("name") or "").strip()
+    kundennummer = (request.args.get("kundennummer") or "").strip()
+    exclude_id = request.args.get("exclude_id")
+    result = {"name_taken": False, "kundennummer_taken": False}
+    with sqlite3.connect(DB_PATH) as db:
+        c = db.cursor()
+        if name:
+            if exclude_id:
+                c.execute("SELECT 1 FROM companies WHERE name = ? AND company_id != ?", (name, exclude_id))
+            else:
+                c.execute("SELECT 1 FROM companies WHERE name = ?", (name,))
+            result["name_taken"] = c.fetchone() is not None
+        if kundennummer:
+            if exclude_id:
+                c.execute("SELECT 1 FROM companies WHERE kundennummer = ? AND company_id != ?", (kundennummer, exclude_id))
+            else:
+                c.execute("SELECT 1 FROM companies WHERE kundennummer = ?", (kundennummer,))
+            result["kundennummer_taken"] = c.fetchone() is not None
+    return jsonify(result)
+
 @api_bp.route("/create-company", methods=["POST"])
 def create_company():
     if not current_user_has_permission("can_add_companies"):
         logger.warning(f"{u(getattr(g, 'user_id', None))} create_company result=forbidden_missing_permission")
+        if wants_json_response():
+            return jsonify({"error": "Missing permission: can_add_companies"}), 403
         flash("You do not have permission to add companies.", "error")
         return redirect("/companies")
     t0 = time.perf_counter()
@@ -509,16 +533,29 @@ def create_company():
         logger.warning(f"{u(getattr(g, 'user_id', None))} create_company result=missing_name")
         return jsonify({"error": "Missing name"}), 400
     hashed_password = bcrypt.generate_password_hash(password).decode("utf-8") if password else None
-    with sqlite3.connect(DB_PATH) as db:
-        cursor = db.cursor()
-        cursor.execute(
-            "INSERT INTO companies (name, kundennummer, password, login_enabled) VALUES (?, ?, ?, ?)",
-            (name, kundennummer, hashed_password, login_enabled),
-        )
-        db.commit()
-        new_id = cursor.lastrowid
+    try:
+        with sqlite3.connect(DB_PATH) as db:
+            cursor = db.cursor()
+            cursor.execute(
+                "INSERT INTO companies (name, kundennummer, password, login_enabled) VALUES (?, ?, ?, ?)",
+                (name, kundennummer, hashed_password, login_enabled),
+            )
+            db.commit()
+            new_id = cursor.lastrowid
+    except sqlite3.IntegrityError as e:
+        msg = "Kundennummer already in use" if "kundennummer" in str(e) else "A company with this name already exists"
+        logger.warning(f"{u(getattr(g, 'user_id', None))} create_company result=duplicate name={name} kundennummer={kundennummer}")
+        if wants_json_response():
+            return jsonify({"error": msg}), 409
+        flash(msg, "error")
+        return redirect("/companies")
     dt = round((time.perf_counter() - t0) * 1000)
     logger.info(f"{u(getattr(g, 'user_id', None))} created company {name} with id {new_id} duration_ms={dt}")
+    if wants_json_response():
+        return jsonify({"company": {
+            "id": new_id, "name": name, "kundennummer": kundennummer,
+            "count": 0, "login_enabled": login_enabled,
+        }})
     return redirect("/companies")
 
 @api_bp.route("/delete-company", methods=["POST"])
@@ -549,6 +586,8 @@ def delete_company():
 def edit_company():
     if not current_user_has_permission("can_edit"):
         logger.warning(f"{u(getattr(g, 'user_id', None))} edit_company result=forbidden_missing_permission")
+        if wants_json_response():
+            return jsonify({"error": "Missing permission: can_edit"}), 403
         flash("You do not have permission to edit companies.", "error")
         return redirect("/companies")
     t0 = time.perf_counter()
@@ -570,22 +609,35 @@ def edit_company():
     if password:
         hashed_password = bcrypt.generate_password_hash(password).decode("utf-8")
 
-    with sqlite3.connect(DB_PATH) as db:
-        cursor = db.cursor()
-        if hashed_password:
-            cursor.execute(
-                "UPDATE companies SET name = ?, kundennummer = ?, password = ?, login_enabled = ? WHERE company_id = ?",
-                (name, kundennummer, hashed_password, login_enabled, company_id),
-            )
-        else:
-            cursor.execute(
-                "UPDATE companies SET name = ?, kundennummer = ?, login_enabled = ? WHERE company_id = ?",
-                (name, kundennummer, login_enabled, company_id),
-            )
-        db.commit()
+    try:
+        with sqlite3.connect(DB_PATH) as db:
+            cursor = db.cursor()
+            if hashed_password:
+                cursor.execute(
+                    "UPDATE companies SET name = ?, kundennummer = ?, password = ?, login_enabled = ? WHERE company_id = ?",
+                    (name, kundennummer, hashed_password, login_enabled, company_id),
+                )
+            else:
+                cursor.execute(
+                    "UPDATE companies SET name = ?, kundennummer = ?, login_enabled = ? WHERE company_id = ?",
+                    (name, kundennummer, login_enabled, company_id),
+                )
+            db.commit()
+    except sqlite3.IntegrityError as e:
+        msg = "Kundennummer already in use" if "kundennummer" in str(e) else "A company with this name already exists"
+        logger.warning(f"{u(getattr(g, 'user_id', None))} edit_company result=duplicate id={company_id} name={name} kundennummer={kundennummer}")
+        if wants_json_response():
+            return jsonify({"error": msg}), 409
+        flash(msg, "error")
+        return redirect("/companies")
 
     dt = round((time.perf_counter() - t0) * 1000)
     logger.info(f"{u(getattr(g, 'user_id', None))} updated company {get_company_name(company_id)} [{company_id}] duration_ms={dt}")
+    if wants_json_response():
+        return jsonify({"company": {
+            "id": int(company_id), "name": name, "kundennummer": kundennummer,
+            "login_enabled": login_enabled,
+        }})
     return redirect("/companies")
 
 @api_bp.route("/delete-secret", methods=["POST"])

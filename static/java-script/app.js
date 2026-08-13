@@ -23,6 +23,7 @@
     xmark: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
     logs: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
     refresh: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 12a8 8 0 0113.9-5.4M20 12a8 8 0 01-13.9 5.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M18 3v4h-4M6 21v-4h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    sparkle: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2l2.4 7.6L22 12l-7.6 2.4L12 22l-2.4-7.6L2 12l7.6-2.4L12 2z" fill="currentColor"/></svg>',
     globe: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18" stroke="currentColor" stroke-width="1.6"/></svg>',
     shield: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>',
     calendar: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="3.5" y="5" width="17" height="16" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M3.5 9.5h17M8 3v3.5M16 3v3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
@@ -41,7 +42,7 @@
     pin: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 21s6-5.6 6-10.6A6 6 0 006 10.4C6 15.4 12 21 12 21z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="10.2" r="2" stroke="currentColor" stroke-width="1.5"/></svg>',
     pinFilled: '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s6-5.6 6-10.6A6 6 0 006 10.4C6 15.4 12 21 12 21z"/></svg>',
     warn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 3l10 18H2L12 3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 10v4M12 17h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
-    lock: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="5" y="10.5" width="14" height="10" rx="2" stroke="#fff" stroke-width="1.8"/><path d="M8 10.5V8a4 4 0 018 0v2.5" stroke="#fff" stroke-width="1.8"/><circle cx="12" cy="15.3" r="1.3" fill="#fff"/></svg>',
+    lock: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="5" y="10.5" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M8 10.5V8a4 4 0 018 0v2.5" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="15.3" r="1.3" fill="currentColor"/></svg>',
     lockBig: '<svg width="36" height="36" viewBox="0 0 24 24" fill="none"><rect x="4.5" y="10.5" width="15" height="10.5" rx="2.4" stroke="currentColor" stroke-width="1.5"/><path d="M7.7 10.5V8a4.3 4.3 0 018.6 0v2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="14.9" r="1.35" fill="currentColor"/><path d="M12 16.25v2.1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
     eye: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M1.5 12S5 5 12 5s10.5 7 10.5 7-3.5 7-10.5 7S1.5 12 1.5 12z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.6"/></svg>',
     eyeOff: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M3 3l18 18M10.6 10.7a3 3 0 004 4M7 6.4C4.4 8 2.5 12 2.5 12S6 19 12 19c2 0 3.6-.5 4.9-1.3M17.5 15.6C20 14 21.5 12 21.5 12S18.7 6.7 13.6 5.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -327,6 +328,9 @@
     const fs = 13;
     const ramp = ".'`^:;~=+*ox%O0#@".split("");
     const accent = getCookie("accent") || "#a15c93";
+    const style = (window.APP_USER_SETTINGS && window.APP_USER_SETTINGS.bg_animation_style) || "turbulence";
+    const rawIntensity = window.APP_USER_SETTINGS && window.APP_USER_SETTINGS.bg_animation_intensity;
+    const intensity = Number.isFinite(rawIntensity) ? Math.max(0, Math.min(200, rawIntensity)) / 100 : 1;
     let cols = 0, rows = 0;
     const resize = () => {
       canvas.width = canvas.offsetWidth; canvas.height = canvas.offsetHeight;
@@ -335,13 +339,47 @@
     resize();
     window.addEventListener("resize", resize);
     emptyBgCleanup = () => window.removeEventListener("resize", resize);
-    let last = 0;
-    const draw = (ts) => {
-      emptyBgRaf = requestAnimationFrame(draw);
-      if (ts - last < 45) return;
-      last = ts;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.font = fs + "px ui-monospace, SFMono-Regular, Menlo, monospace";
+
+    /* shared by contours/streaks: fades intensity out toward the center, where content sits */
+    function clearAt(x, y) {
+      const cx = cols / 2, cy = rows / 2;
+      const holeX = cols * 0.19, holeY = rows * 0.30;
+      return Math.min(1, Math.max(0, (Math.abs(x - cx) / holeX - 1) * 1.1 + (Math.abs(y - cy) / holeY - 1) * 0.9));
+    }
+    function put(x, y, v) {
+      v *= intensity;
+      if (v < 0.1) return;
+      const n = Math.min(ramp.length - 1, Math.floor(v * (ramp.length - 1)));
+      if (n < 1) return;
+      ctx.fillStyle = accent + Math.min(255, Math.floor(18 + v * 190)).toString(16).padStart(2, "0");
+      ctx.fillText(ramp[n], x * fs, y * fs + fs);
+    }
+    function drawContours(ts) {
+      const t = ts / 1000 * 0.4;
+      const cx = cols / 2, cy = rows / 2;
+      for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+          const fx = x * 0.5, fy = y * 0.9;
+          const field = Math.sin(fx * 0.16 + t * 0.8) + Math.sin(fy * 0.15 - t * 0.6)
+                      + Math.sin((fx + fy) * 0.11 + t * 1.1) + Math.sin(Math.hypot(fx - cx * 0.5, fy - cy) * 0.13 - t * 0.9);
+          let v = 1 - Math.abs(((field / 4) * 3) % 1 - 0.5) * 2;
+          v = Math.pow(Math.max(0, v), 3.2) * clearAt(x, y);
+          put(x, y, v);
+        }
+      }
+    }
+    function drawStreaks(ts) {
+      const t = ts / 1000 * 0.45;
+      for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+          const u = x * 0.5 + y * 0.9;
+          let v = Math.sin(u * 0.22 - t * 2.0 + Math.sin(y * 0.11 + t * 0.7) * 1.6) * 0.6 + Math.sin(u * 0.07 + t * 0.9) * 0.4;
+          v = Math.pow((v + 1) / 2, 2.2) * clearAt(x, y);
+          put(x, y, v);
+        }
+      }
+    }
+    function drawTurbulence(ts) {
       const t = ts / 1000 * 0.62;
       const w = Math.max(12, Math.round(cols * 0.22));
       const noise = (x, y) => {
@@ -355,9 +393,9 @@
       for (let y = 0; y < rows; y++) {
         for (let bx = 0; bx < w; bx++) {
           const edgeFade = Math.min(1, (w - bx) / (w * 0.62));
-          const v = Math.max(0, Math.min(1, (noise(bx, y) + 0.35) * 1.35)) * edgeFade;
+          const v = Math.max(0, Math.min(1, (noise(bx, y) + 0.35) * 1.35)) * edgeFade * intensity;
           if (v < 0.08) continue;
-          const n = Math.floor(v * (ramp.length - 1));
+          const n = Math.min(ramp.length - 1, Math.floor(v * (ramp.length - 1)));
           if (n < 1) continue;
           const a = Math.floor(22 + Math.pow(v, 0.8) * 200);
           ctx.fillStyle = accent + Math.min(255, a).toString(16).padStart(2, "0");
@@ -366,6 +404,17 @@
           ctx.fillText(ch, (cols - 1 - bx) * fs, y * fs + fs);
         }
       }
+    }
+    const drawFrame = style === "contours" ? drawContours : style === "streaks" ? drawStreaks : drawTurbulence;
+
+    let last = 0;
+    const draw = (ts) => {
+      emptyBgRaf = requestAnimationFrame(draw);
+      if (ts - last < 45) return;
+      last = ts;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.font = fs + "px ui-monospace, SFMono-Regular, Menlo, monospace";
+      drawFrame(ts);
     };
     emptyBgRaf = requestAnimationFrame(draw);
   }
@@ -385,6 +434,299 @@
       throw new Error(msg);
     }
     return data;
+  }
+
+  /* ---------- ascii style picker (login background) ---------- */
+
+  const ASCII_STYLE_KEY = "otp-login-ascii-style";
+  const ASCII_STYLES = [
+    { value: "off", label: "Off" },
+    { value: "matrix", label: "Matrix rain" },
+    { value: "starfield", label: "Starfield warp" },
+    { value: "wave", label: "Plasma wave" },
+    { value: "ripple", label: "Ripple pulse" },
+  ];
+  const ASCII_RAMP = " .:-=+*#%@".split("");
+  const ASCII_RAIN_CHARS = "01アイウエオカキクケコサシスセソ$#%&+=<>~*".split("");
+  const ASCII_PREVIEW_FONT = 5;
+
+  function asciiStyleGet() {
+    try { return localStorage.getItem(ASCII_STYLE_KEY) || "ripple"; } catch (e) { return "ripple"; }
+  }
+  function asciiStyleSet(style) {
+    try { localStorage.setItem(ASCII_STYLE_KEY, style); } catch (e) {}
+  }
+  function asciiAccentColor() {
+    return (getComputedStyle(document.documentElement).getPropertyValue("--accent") || "#a15c93").trim();
+  }
+  function asciiBgColor() {
+    return (getComputedStyle(document.documentElement).getPropertyValue("--app-bg") || "#fafafa").trim();
+  }
+
+  function asciiOptListHTML(selected) {
+    return ASCII_STYLES.map(s => {
+      const thumb = s.value === "off"
+        ? '<span class="ascii-thumb ascii-thumb-off">&ndash;</span>'
+        : '<canvas class="ascii-thumb" data-preview="' + s.value + '"></canvas>';
+      return '<label class="ascii-opt' + (s.value === selected ? " selected" : "") + '" data-style="' + s.value + '">' +
+        '<input type="radio" name="asciiStyle" value="' + s.value + '"' + (s.value === selected ? " checked" : "") + '>' +
+        thumb + '<span class="ascii-opt-name">' + s.label + "</span></label>";
+    }).join("");
+  }
+
+  function asciiPreviewInitState(canvas, style) {
+    canvas.width = canvas.offsetWidth;
+    canvas.height = canvas.offsetHeight;
+    const pCols = Math.floor(canvas.width / ASCII_PREVIEW_FONT);
+    const pRows = Math.floor(canvas.height / ASCII_PREVIEW_FONT);
+    const state = { canvas, ctx: canvas.getContext("2d"), cols: pCols, rows: pRows, lastTick: 0 };
+    if (style === "matrix") {
+      state.drops = new Array(pCols).fill(0).map(() => Math.floor(Math.random() * -20));
+    } else if (style === "starfield") {
+      state.stars = [];
+      for (let i = 0; i < 22; i++) state.stars.push({ a: Math.random() * Math.PI * 2, r: Math.random() * 16, speed: 0.6 + Math.random() * 1.4 });
+    }
+    return state;
+  }
+
+  function asciiDrawPreviewMatrix(s) {
+    const ctx = s.ctx, accent = asciiAccentColor(), w = s.canvas.width, h = s.canvas.height;
+    ctx.fillStyle = asciiBgColor() + "30";
+    ctx.fillRect(0, 0, w, h);
+    ctx.font = ASCII_PREVIEW_FONT + "px ui-monospace, SFMono-Regular, Menlo, monospace";
+    for (let i = 0; i < s.cols; i++) {
+      const ch = ASCII_RAIN_CHARS[Math.floor(Math.random() * ASCII_RAIN_CHARS.length)];
+      ctx.fillStyle = accent + (s.drops[i] < 1 ? "ff" : "4a");
+      ctx.fillText(ch, i * ASCII_PREVIEW_FONT, s.drops[i] * ASCII_PREVIEW_FONT);
+      if (s.drops[i] * ASCII_PREVIEW_FONT > h && Math.random() > 0.93) s.drops[i] = 0;
+      s.drops[i]++;
+    }
+  }
+  function asciiDrawPreviewStarfield(s) {
+    const ctx = s.ctx, accent = asciiAccentColor(), w = s.canvas.width, h = s.canvas.height;
+    ctx.fillStyle = asciiBgColor() + "30";
+    ctx.fillRect(0, 0, w, h);
+    const cx = w / 2, cy = h / 2;
+    ctx.font = ASCII_PREVIEW_FONT + "px ui-monospace, SFMono-Regular, Menlo, monospace";
+    for (let i = 0; i < s.stars.length; i++) {
+      const st = s.stars[i];
+      st.r += st.speed;
+      if (st.r > Math.max(cx, cy) * 1.3) { st.r = 4; st.a = Math.random() * Math.PI * 2; }
+      const x = cx + Math.cos(st.a) * st.r;
+      const y = cy + Math.sin(st.a) * st.r * 0.7;
+      const ch = st.r > 20 ? "*" : st.r > 9 ? "+" : ".";
+      ctx.fillStyle = accent + (st.r > 20 ? "ff" : st.r > 9 ? "aa" : "55");
+      ctx.fillText(ch, x, y);
+    }
+  }
+  function asciiDrawPreviewWave(s, ts) {
+    const ctx = s.ctx, accent = asciiAccentColor();
+    ctx.fillStyle = asciiBgColor();
+    ctx.fillRect(0, 0, s.canvas.width, s.canvas.height);
+    ctx.font = ASCII_PREVIEW_FONT + "px ui-monospace, SFMono-Regular, Menlo, monospace";
+    const t = ts / 700;
+    for (let ry = 0; ry < s.rows; ry++) {
+      for (let rx = 0; rx < s.cols; rx++) {
+        const v = Math.sin(rx * 0.5 + t) + Math.cos(ry * 0.5 + t * 1.3) + Math.sin((rx + ry) * 0.3 + t * 0.8);
+        const n = Math.max(0, Math.min(ASCII_RAMP.length - 1, Math.floor((v + 3) / 6 * ASCII_RAMP.length)));
+        if (n === 0) continue;
+        ctx.fillStyle = accent + Math.floor(20 + (n / ASCII_RAMP.length) * 60).toString(16).padStart(2, "0");
+        ctx.fillText(ASCII_RAMP[n], rx * ASCII_PREVIEW_FONT, ry * ASCII_PREVIEW_FONT + ASCII_PREVIEW_FONT);
+      }
+    }
+  }
+  function asciiDrawPreviewRipple(s, ts) {
+    const ctx = s.ctx, accent = asciiAccentColor();
+    ctx.fillStyle = asciiBgColor();
+    ctx.fillRect(0, 0, s.canvas.width, s.canvas.height);
+    ctx.font = ASCII_PREVIEW_FONT + "px ui-monospace, SFMono-Regular, Menlo, monospace";
+    const cx = s.cols / 2, cy = s.rows / 2;
+    const maxD = Math.hypot(cx, cy);
+    const t = ts / 900;
+    for (let ry = 0; ry < s.rows; ry++) {
+      for (let rx = 0; rx < s.cols; rx++) {
+        const d = Math.hypot(rx - cx, (ry - cy) * 1.6);
+        const wave = Math.sin(d * 0.7 - t * 2.2);
+        const fade = Math.max(0, 1 - d / maxD);
+        const v = (wave * 0.5 + 0.5) * fade;
+        const n = Math.floor(v * (ASCII_RAMP.length - 1));
+        if (n <= 0) continue;
+        ctx.fillStyle = accent + Math.floor(v * 200).toString(16).padStart(2, "0");
+        ctx.fillText(ASCII_RAMP[n], rx * ASCII_PREVIEW_FONT, ry * ASCII_PREVIEW_FONT + ASCII_PREVIEW_FONT);
+      }
+    }
+  }
+
+  /* Renders the style list (with animated thumbnails) into `container` and wires
+     selection. Animation only runs between start()/stop() so callers can pause it
+     while the picker is hidden (e.g. a closed dropdown). */
+  function asciiMountStylePicker(container, opts) {
+    opts = opts || {};
+    container.innerHTML = asciiOptListHTML(asciiStyleGet());
+
+    const canvases = {};
+    container.querySelectorAll(".ascii-thumb[data-preview]").forEach(el => {
+      canvases[el.getAttribute("data-preview")] = el;
+    });
+
+    let previews = null;
+    let frame = null;
+    function tick(ts) {
+      frame = requestAnimationFrame(tick);
+      if (previews.matrix && ts - previews.matrix.lastTick > 90) { previews.matrix.lastTick = ts; asciiDrawPreviewMatrix(previews.matrix); }
+      if (previews.starfield && ts - previews.starfield.lastTick > 55) { previews.starfield.lastTick = ts; asciiDrawPreviewStarfield(previews.starfield); }
+      if (previews.wave && ts - previews.wave.lastTick > 70) { previews.wave.lastTick = ts; asciiDrawPreviewWave(previews.wave, ts); }
+      if (previews.ripple && ts - previews.ripple.lastTick > 70) { previews.ripple.lastTick = ts; asciiDrawPreviewRipple(previews.ripple, ts); }
+    }
+    function start() {
+      if (frame) return;
+      // (re)measure now: the container may have been hidden (e.g. a closed
+      // dropdown) at mount time, when offsetWidth/offsetHeight would read 0.
+      previews = {};
+      Object.keys(canvases).forEach(style => { previews[style] = asciiPreviewInitState(canvases[style], style); });
+      frame = requestAnimationFrame(tick);
+    }
+    function stop() { if (frame) { cancelAnimationFrame(frame); frame = null; } }
+
+    function markSelected(style) {
+      container.querySelectorAll(".ascii-opt").forEach(opt => {
+        opt.classList.toggle("selected", opt.getAttribute("data-style") === style);
+      });
+    }
+    container.querySelectorAll("input[name=asciiStyle]").forEach(r => {
+      r.addEventListener("change", () => {
+        asciiStyleSet(r.value);
+        markSelected(r.value);
+        if (opts.onChange) opts.onChange(r.value);
+      });
+    });
+
+    return { start, stop };
+  }
+
+  /* ---------- empty-page background style picker (settings preview) ---------- */
+
+  const EMPTY_BG_STYLES = [
+    { value: "contours", label: "Contours" },
+    { value: "streaks", label: "Streaks" },
+    { value: "turbulence", label: "Turbulence" },
+  ];
+  const EMPTY_BG_RAMP = ".'`^:;~=+*ox%O0#@".split("");
+  const EMPTY_BG_PREVIEW_FONT = 5;
+
+  function emptyBgPreviewInitState(canvas) {
+    canvas.width = canvas.offsetWidth;
+    canvas.height = canvas.offsetHeight;
+    return {
+      canvas, ctx: canvas.getContext("2d"), lastTick: 0,
+      cols: Math.floor(canvas.width / EMPTY_BG_PREVIEW_FONT),
+      rows: Math.floor(canvas.height / EMPTY_BG_PREVIEW_FONT),
+    };
+  }
+  function emptyBgPreviewPut(s, x, y, v, accent) {
+    if (v < 0.1) return;
+    const n = Math.min(EMPTY_BG_RAMP.length - 1, Math.floor(v * (EMPTY_BG_RAMP.length - 1)));
+    if (n < 1) return;
+    s.ctx.fillStyle = accent + Math.min(255, Math.floor(18 + v * 190)).toString(16).padStart(2, "0");
+    s.ctx.fillText(EMPTY_BG_RAMP[n], x * EMPTY_BG_PREVIEW_FONT, y * EMPTY_BG_PREVIEW_FONT + EMPTY_BG_PREVIEW_FONT);
+  }
+  function emptyBgPreviewBegin(s) {
+    s.ctx.clearRect(0, 0, s.canvas.width, s.canvas.height);
+    s.ctx.font = EMPTY_BG_PREVIEW_FONT + "px ui-monospace, SFMono-Regular, Menlo, monospace";
+  }
+
+  function emptyBgDrawContoursPreview(s, ts, intensity) {
+    emptyBgPreviewBegin(s);
+    const accent = asciiAccentColor(), t = ts / 1000 * 0.4, cols = s.cols, rows = s.rows, cx = cols / 2, cy = rows / 2;
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        const fx = x * 0.5, fy = y * 0.9;
+        const field = Math.sin(fx * 0.16 + t * 0.8) + Math.sin(fy * 0.15 - t * 0.6)
+                    + Math.sin((fx + fy) * 0.11 + t * 1.1) + Math.sin(Math.hypot(fx - cx * 0.5, fy - cy) * 0.13 - t * 0.9);
+        let v = 1 - Math.abs(((field / 4) * 3) % 1 - 0.5) * 2;
+        v = Math.pow(Math.max(0, v), 3.2) * intensity;
+        emptyBgPreviewPut(s, x, y, v, accent);
+      }
+    }
+  }
+  function emptyBgDrawStreaksPreview(s, ts, intensity) {
+    emptyBgPreviewBegin(s);
+    const accent = asciiAccentColor(), t = ts / 1000 * 0.45, cols = s.cols, rows = s.rows;
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        const u = x * 0.5 + y * 0.9;
+        let v = Math.sin(u * 0.22 - t * 2.0 + Math.sin(y * 0.11 + t * 0.7) * 1.6) * 0.6 + Math.sin(u * 0.07 + t * 0.9) * 0.4;
+        v = Math.pow((v + 1) / 2, 2.2) * intensity;
+        emptyBgPreviewPut(s, x, y, v, accent);
+      }
+    }
+  }
+  function emptyBgDrawTurbulencePreview(s, ts, intensity) {
+    emptyBgPreviewBegin(s);
+    const accent = asciiAccentColor(), t = ts / 1000 * 0.62, cols = s.cols, rows = s.rows;
+    const noise = (x, y) => {
+      let v = 0;
+      v += Math.sin(x * 0.31 + Math.cos(y * 0.19 - t * 1.1) * 2.2 + t * 0.9);
+      v += Math.sin(y * 0.24 - t * 1.7 + Math.sin(x * 0.41 + t * 0.6) * 1.8) * 0.9;
+      v += Math.sin((x * 0.6 + y * 0.33) - t * 2.3) * 0.55;
+      v += Math.sin(Math.hypot(x - cols * 0.5, y - rows * 0.5) * 0.55 - t * 2.6) * 0.7;
+      return v / 3.15;
+    };
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        const v = Math.max(0, Math.min(1, (noise(x, y) + 0.35) * 1.35)) * intensity;
+        emptyBgPreviewPut(s, x, y, v, accent);
+      }
+    }
+  }
+
+  function emptyBgOptListHTML(selected) {
+    return EMPTY_BG_STYLES.map(s =>
+      '<label class="ascii-opt' + (s.value === selected ? " selected" : "") + '" data-style="' + s.value + '">' +
+      '<input type="radio" name="bgAnimStyle" value="' + s.value + '"' + (s.value === selected ? " checked" : "") + '>' +
+      '<canvas class="ascii-thumb" data-bg-preview="' + s.value + '"></canvas>' +
+      '<span class="ascii-opt-name">' + s.label + "</span></label>"
+    ).join("");
+  }
+
+  /* Same shape as asciiStyle.mount, but selection/persistence is left to the caller
+     since this style is saved server-side via the settings form, not localStorage. */
+  function emptyBgMountStylePicker(container, selected, onChange) {
+    container.innerHTML = emptyBgOptListHTML(selected);
+
+    const canvases = {};
+    container.querySelectorAll("canvas[data-bg-preview]").forEach(el => {
+      canvases[el.getAttribute("data-bg-preview")] = el;
+    });
+
+    let previews = null;
+    let frame = null;
+    let intensity = 1;
+    function tick(ts) {
+      frame = requestAnimationFrame(tick);
+      if (previews.contours && ts - previews.contours.lastTick > 70) { previews.contours.lastTick = ts; emptyBgDrawContoursPreview(previews.contours, ts, intensity); }
+      if (previews.streaks && ts - previews.streaks.lastTick > 70) { previews.streaks.lastTick = ts; emptyBgDrawStreaksPreview(previews.streaks, ts, intensity); }
+      if (previews.turbulence && ts - previews.turbulence.lastTick > 70) { previews.turbulence.lastTick = ts; emptyBgDrawTurbulencePreview(previews.turbulence, ts, intensity); }
+    }
+    function start() {
+      if (frame) return;
+      previews = {};
+      Object.keys(canvases).forEach(style => { previews[style] = emptyBgPreviewInitState(canvases[style]); });
+      frame = requestAnimationFrame(tick);
+    }
+    function stop() { if (frame) { cancelAnimationFrame(frame); frame = null; } }
+    function setIntensity(v) { intensity = v; }
+
+    container.querySelectorAll("input[name=bgAnimStyle]").forEach(r => {
+      r.addEventListener("change", () => {
+        container.querySelectorAll(".ascii-opt").forEach(opt => {
+          opt.classList.toggle("selected", opt.getAttribute("data-style") === r.value);
+        });
+        if (onChange) onChange(r.value);
+      });
+    });
+
+    return { start, stop, setIntensity };
   }
 
   /* ---------- ghost-text autocomplete ---------- */
@@ -510,8 +852,20 @@
       btn.querySelector(".side-label").textContent = dark ? "Light Mode" : "Dark Mode";
     }
   }
+  function accentRelLuminance(hex) {
+    hex = hex.replace("#", "");
+    if (hex.length === 3) hex = hex.split("").map(c => c + c).join("");
+    const num = parseInt(hex, 16);
+    const r = (num >> 16 & 255) / 255, g = (num >> 8 & 255) / 255, b = (num & 255) / 255;
+    const lin = c => c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  }
+  function accentForeground(color) {
+    return accentRelLuminance(color) > 0.179 ? "#16181d" : "#ffffff";
+  }
   function applyAccent(color) {
     document.documentElement.style.setProperty("--accent", color);
+    document.documentElement.style.setProperty("--accent-fg", accentForeground(color));
     setCookie("accent", color);
   }
   function toggleSidebar() {
@@ -885,6 +1239,175 @@
     if (!sidebarPinned.fetchedAt || remaining <= 0) sidebarPinnedFetch();
   }, 1000);
 
+  /* ---------- shared "add / edit company" drawer (templates/_company_drawer.html) ----------
+     Any page that includes that partial can call App.companyDrawer.open(...) and get the
+     exact same markup/behavior — one place to change if the drawer ever needs to adjust. */
+  const companyDrawer = (function () {
+    let editingId = null;
+    let webAccessOn = false;
+    let onDone = null;
+    let bound = false;
+    let checkTimer = null;
+    let checkToken = 0;
+
+    function bind() {
+      if (bound) return;
+      const webBtn = document.getElementById("company-webaccess");
+      const submitBtn = document.getElementById("company-submit");
+      const nameInput = document.getElementById("company-name");
+      const kdnrInput = document.getElementById("company-kdnr");
+      const kdnrFillBtn = document.getElementById("company-kdnr-fill");
+      if (!webBtn || !submitBtn) return;
+      bound = true;
+      webBtn.addEventListener("click", () => {
+        webAccessOn = !webAccessOn;
+        webBtn.classList.toggle("on", webAccessOn);
+      });
+      if (kdnrFillBtn && kdnrInput) {
+        kdnrFillBtn.addEventListener("click", () => {
+          kdnrInput.value = guessedKdnr();
+          updateKdnrFillState();
+          scheduleCheck();
+        });
+        kdnrInput.addEventListener("input", updateKdnrFillState);
+      }
+      nameInput.addEventListener("input", () => { hideFieldError("name"); scheduleCheck(); });
+      if (kdnrInput) kdnrInput.addEventListener("input", () => { hideFieldError("kdnr"); scheduleCheck(); });
+      submitBtn.addEventListener("click", submit);
+    }
+
+    function updateSubmitState() {
+      const submitBtn = document.getElementById("company-submit");
+      if (!submitBtn) return;
+      submitBtn.disabled = !!document.querySelector("#company-overlay .input-error-x.show");
+    }
+
+    function hideFieldError(field) {
+      const el = document.getElementById("company-" + field + "-error");
+      const pop = document.getElementById("company-" + field + "-popover");
+      if (el) el.classList.remove("show");
+      if (pop) pop.textContent = "";
+      updateSubmitState();
+    }
+
+    function clearFieldErrors() {
+      checkToken++;
+      clearTimeout(checkTimer);
+      hideFieldError("name");
+      hideFieldError("kdnr");
+    }
+
+    function showFieldError(field, message) {
+      const el = document.getElementById("company-" + field + "-error");
+      const pop = document.getElementById("company-" + field + "-popover");
+      if (!el || !pop) { toast(message, "error"); return; }
+      pop.textContent = message;
+      el.classList.add("show");
+      updateSubmitState();
+    }
+
+    /* debounced live duplicate check while typing — hits /api/check-company so the
+       red X (and its popover) appears without waiting for a submit round-trip */
+    function scheduleCheck() {
+      clearTimeout(checkTimer);
+      checkTimer = setTimeout(runCheck, 350);
+    }
+
+    async function runCheck() {
+      const token = ++checkToken;
+      const name = document.getElementById("company-name").value.trim();
+      const kdnr = document.getElementById("company-kdnr").value.trim();
+      if (!name && !kdnr) return;
+      const params = new URLSearchParams();
+      if (name) params.set("name", name);
+      if (kdnr) params.set("kundennummer", kdnr);
+      if (editingId != null) params.set("exclude_id", editingId);
+      let data;
+      try {
+        data = await fetchJSON("/api/check-company?" + params.toString());
+      } catch (e) { return; }
+      if (token !== checkToken) return;
+      if (name && data.name_taken) showFieldError("name", 'A company named "' + name + '" already exists');
+      if (kdnr && data.kundennummer_taken) showFieldError("kdnr", 'Kundennummer "' + kdnr + '" is already in use');
+    }
+
+    /* mirrors the "CO-" + (1000 + c.id) placeholder shown for companies without a
+       customer number (see companies.html) — predicts the id a new company will get
+       by looking at ids already present in the DOM (company select, companies table). */
+    function guessNextCompanyId() {
+      const ids = [];
+      document.querySelectorAll("#add-company option[value]").forEach(o => {
+        const v = parseInt(o.value, 10);
+        if (!Number.isNaN(v)) ids.push(v);
+      });
+      document.querySelectorAll("[data-view]").forEach(el => {
+        const v = parseInt(el.getAttribute("data-view"), 10);
+        if (!Number.isNaN(v)) ids.push(v);
+      });
+      return ids.length ? Math.max(...ids) + 1 : 1;
+    }
+
+    function guessedKdnr() {
+      return "CO-" + (1000 + guessNextCompanyId());
+    }
+
+    function updateKdnrFillState() {
+      const kdnrInput = document.getElementById("company-kdnr");
+      const kdnrFillBtn = document.getElementById("company-kdnr-fill");
+      if (!kdnrInput || !kdnrFillBtn) return;
+      const alreadyCorrect = kdnrInput.value.trim() === guessedKdnr();
+      kdnrFillBtn.disabled = alreadyCorrect;
+      kdnrFillBtn.title = alreadyCorrect
+        ? "Already set to the auto-generated customer number"
+        : "Fill in the next auto-generated customer number";
+    }
+
+    async function submit() {
+      clearFieldErrors();
+      const name = document.getElementById("company-name").value.trim();
+      if (!name) { toast("Please enter a name", "error"); return; }
+      const fd = new FormData();
+      fd.append("name", name);
+      fd.append("kundennummer", document.getElementById("company-kdnr").value.trim());
+      fd.append("password", document.getElementById("company-password").value);
+      if (webAccessOn) fd.append("login_enabled", "on");
+      const isEdit = editingId != null;
+      if (isEdit) fd.append("company_id", editingId);
+      try {
+        const data = await fetchJSON(isEdit ? "/api/edit-company" : "/api/create-company", { method: "POST", body: fd });
+        closeOverlay("company-overlay");
+        if (onDone) onDone(data.company, isEdit);
+      } catch (err) {
+        if (/kundennummer/i.test(err.message)) showFieldError("kdnr", err.message);
+        else if (/name/i.test(err.message)) showFieldError("name", err.message);
+        else toast(err.message, "error");
+      }
+    }
+
+    function open(company, onSuccess) {
+      if (!document.getElementById("company-overlay")) return;
+      bind();
+      clearFieldErrors();
+      editingId = company ? company.id : null;
+      onDone = onSuccess || null;
+      document.getElementById("company-drawer-title").textContent = company ? "Edit Company" : "Add Company";
+      const sub = document.getElementById("company-drawer-sub");
+      sub.style.display = company ? "block" : "none";
+      if (company) sub.textContent = "Manage details for " + company.name;
+      document.getElementById("company-name").value = company ? company.name : "";
+      document.getElementById("company-kdnr").value = company ? (company.kundennummer || "") : "";
+      updateKdnrFillState();
+      document.getElementById("company-password").value = "";
+      document.getElementById("company-password").placeholder = company ? "Leave empty to keep current password" : "Optional — leave empty to skip";
+      webAccessOn = company ? !!company.login_enabled : false;
+      document.getElementById("company-webaccess").classList.toggle("on", webAccessOn);
+      document.getElementById("company-submit").textContent = company ? "Save changes" : "Add Company";
+      openOverlay("company-overlay");
+    }
+
+    return { open };
+  })();
+
   /* ---------- boot ---------- */
 
   document.addEventListener("DOMContentLoaded", () => {
@@ -912,6 +1435,8 @@
   window.App = {
     ICONS, toast, confirmToast, copyText, hydrateIcons, digitsHTML, digitsHTMLUpdate, ringSVG, setRing, escapeHtml,
     fetchJSON, openOverlay, closeOverlay, closeAllOverlays, applyAccent, setCookie, getCookie,
-    cmdkOpen, attachAutocomplete, onPageLeave, emptyVaultHTML, emptyBgStart, emptyBgStop,
+    cmdkOpen, attachAutocomplete, onPageLeave, emptyVaultHTML, emptyBgStart, emptyBgStop, companyDrawer,
+    asciiStyle: { get: asciiStyleGet, set: asciiStyleSet, mount: asciiMountStylePicker },
+    emptyBgStyle: { mount: emptyBgMountStylePicker },
   };
 })();

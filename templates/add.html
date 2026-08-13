@@ -5,20 +5,9 @@
 
 {% block page %}
 <div class="page">
-  <div class="page-topbar">
-    <div class="page-title">Add new OTP for<span id="add-company-label" style="color:var(--accent)"></span></div>
-    <div class="topbar-spacer"></div>
-    <div class="clear-reveal" id="add-clear-reveal">
-      <div>
-        <div class="topbar-sep"></div>
-        <button class="topbar-btn danger" id="add-clear" type="button">Clear</button>
-      </div>
-    </div>
-    <div class="topbar-sep"></div>
-    <a href="/" class="topbar-btn"><span style="width:13px;height:13px;display:flex" data-icon="xmark"></span>Cancel</a>
-  </div>
-
-  <div class="form-page-wrap">
+  <div class="add-otp-panel">
+    <canvas class="add-otp-panel-bg" id="add-bg"></canvas>
+    <div class="form-page-wrap">
     <div class="form-col">
       <div>
         <div class="field-head">
@@ -47,11 +36,11 @@
           <label class="field-label">Secret</label>
           <span class="info-tip">
             <span style="width:15px;height:15px;display:flex" data-icon="info"></span>
-            <span class="tip-pop">Base32 A&ndash;Z, 2&ndash;7. Padding '=' allowed. 16-32 chars.</span>
+            <span class="tip-pop">Base32 (A&ndash;Z, 2&ndash;7), 16&ndash;128 characters. Trailing '=' padding is optional and ignored.</span>
           </span>
         </div>
         <div class="input-wrap">
-          <input class="text-input mono padded" id="add-secret" placeholder="Paste your OTP secret here" autocomplete="off" spellcheck="false">
+          <input class="text-input mono padded" id="add-secret" placeholder="Paste your secret here" autocomplete="off" spellcheck="false">
           <span class="input-check" id="check-secret" style="display:none"></span>
         </div>
         <div class="preview-wrap" id="preview-wrap">
@@ -86,21 +75,37 @@
 
       <div>
         <label class="field-label">Company</label>
-        <select class="text-input" id="add-company">
-          <option value="">Select Company</option>
-          {% for company in companies %}
-          <option value="{{ company[0] }}">{{ company[1] }}</option>
-          {% endfor %}
-        </select>
+        <div style="display:flex;gap:8px;align-items:stretch">
+          <select class="text-input" id="add-company" style="flex:1">
+            <option value="">Select Company</option>
+            {% for company in companies %}
+            <option value="{{ company[0] }}">{{ company[1] }}</option>
+            {% endfor %}
+          </select>
+          {% if can_add_companies %}
+          <button class="btn-outline" id="add-company-new" type="button" title="Add company"
+                  style="flex:none;border-radius:10px;justify-content:center">
+            <span style="width:14px;height:14px;display:flex" data-icon="plus"></span>
+          </button>
+          {% endif %}
+        </div>
       </div>
 
       <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:8px">
+        <div class="clear-reveal" id="add-clear-reveal">
+          <div><button class="btn-outline lg" id="add-clear" type="button"><span style="width:13px;height:13px;display:flex" data-icon="xmark"></span>Clear</button></div>
+        </div>
         <button class="btn-accent lg" id="add-submit" type="button" disabled>Add</button>
         <button class="btn-outline lg" id="add-submit-another" type="button" disabled>Add &amp; Add Another</button>
       </div>
     </div>
+    </div>
   </div>
 </div>
+
+{% if can_add_companies %}
+{% include "_company_drawer.html" %}
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
@@ -111,6 +116,22 @@
   const emailEl = document.getElementById("add-email");
   const secretEl = document.getElementById("add-secret");
   const companyEl = document.getElementById("add-company");
+  const companyNewBtn = document.getElementById("add-company-new");
+  if (companyNewBtn) {
+    companyNewBtn.addEventListener("click", () => {
+      A.companyDrawer.open(null, (company) => {
+        const opt = document.createElement("option");
+        opt.value = company.id;
+        opt.textContent = company.name;
+        const options = [...companyEl.options].filter(o => o.value !== "");
+        const insertBefore = options.find(o => o.textContent.localeCompare(company.name) > 0);
+        companyEl.insertBefore(opt, insertBefore || null);
+        companyEl.value = company.id;
+        companyEl.dispatchEvent(new Event("change"));
+        A.toast("Company added");
+      });
+    });
+  }
   const submitBtn = document.getElementById("add-submit");
   const submitAnotherBtn = document.getElementById("add-submit-another");
   const previewWrap = document.getElementById("preview-wrap");
@@ -294,8 +315,6 @@
     const ok = validName(n) && validEmail(e) && validSecret(s) && companyEl.value !== "";
     submitBtn.disabled = !ok;
     submitAnotherBtn.disabled = !ok;
-    document.getElementById("add-company-label").textContent =
-      companyEl.value !== "" ? '"' + companyEl.options[companyEl.selectedIndex].text + '"' : "";
     const hasContent = n !== "" || e !== "" || s !== "" || companyEl.value !== "";
     document.getElementById("add-clear-reveal").classList.toggle("open", hasContent);
   }
@@ -343,6 +362,9 @@
   submitBtn.addEventListener("click", () => submit(false));
   submitAnotherBtn.addEventListener("click", () => submit(true));
   refresh();
+
+  A.emptyBgStart(document.getElementById("add-bg"));
+  if (A.onPageLeave) A.onPageLeave(() => A.emptyBgStop());
 })();
 </script>
 {% endblock %}

@@ -373,6 +373,8 @@ def row_to_settings(row):
         "show_search_and_link": int(row[21] or 0),
         "show_pinned_in_sidebar": int(row[22] or 0),
         "only_pinned_in_sidebar": int(row[23] or 0),
+        "bg_animation_style": row[24] or "turbulence",
+        "bg_animation_intensity": int(row[25]) if row[25] is not None else 100,
     }
 
 def _is_rate_limited(ip: str) -> float | None:
@@ -441,7 +443,8 @@ def load_user():
                     can_delete_companies, can_add_secrets, can_add_users,
                     pinned, show_timer, show_otp_type, show_emails, show_company,
                     blur_on_inactive, show_including_admin_on_top, hide_codes_by_default, hide_secret_field,
-                    show_search_and_link, show_pinned_in_sidebar, only_pinned_in_sidebar
+                    show_search_and_link, show_pinned_in_sidebar, only_pinned_in_sidebar, bg_animation_style,
+                    bg_animation_intensity
                 FROM users
                 WHERE id = ?
             """, (g.user_id,))
@@ -476,6 +479,8 @@ def load_user():
                     "show_search_and_link": int(row[21] or 0),
                     "show_pinned_in_sidebar": int(row[22] or 0),
                     "only_pinned_in_sidebar": int(row[23] or 0),
+                    "bg_animation_style": row[24] or "turbulence",
+                    "bg_animation_intensity": int(row[25]) if row[25] is not None else 100,
                 }
 
 @app.context_processor
@@ -669,7 +674,8 @@ def settings():
                     can_delete_companies, can_add_secrets, can_add_users,
                     pinned, show_timer, show_otp_type, show_emails, show_company,
                     blur_on_inactive, show_including_admin_on_top, hide_codes_by_default,
-                    hide_secret_field, show_search_and_link, show_pinned_in_sidebar, only_pinned_in_sidebar
+                    hide_secret_field, show_search_and_link, show_pinned_in_sidebar, only_pinned_in_sidebar,
+                    bg_animation_style, bg_animation_intensity
                 FROM users WHERE id = ?
             """, (session["user_id"],))
         row = cursor.fetchone()
@@ -679,6 +685,12 @@ def settings():
 @app.route("/update-settings", methods=["POST"])
 @login_required
 def update_settings():
+    try:
+        bg_animation_intensity = int(request.form.get("bg_animation_intensity", 100))
+    except (TypeError, ValueError):
+        bg_animation_intensity = 100
+    bg_animation_intensity = max(0, min(200, bg_animation_intensity))
+
     payload = {
         "show_timer": 1 if request.form.get("show_timer") in ("on", "true", "1") else 0,
         "show_otp_type": 1 if request.form.get("show_otp_type") in ("on", "true", "1") else 0,
@@ -691,6 +703,9 @@ def update_settings():
         "show_search_and_link": 1 if request.form.get("show_search_and_link") in ("on", "true", "1") else 0,
         "show_pinned_in_sidebar": 1 if request.form.get("show_pinned_in_sidebar") in ("on", "true", "1") else 0,
         "only_pinned_in_sidebar": 1 if request.form.get("only_pinned_in_sidebar") in ("on", "true", "1") else 0,
+        "bg_animation_style": request.form.get("bg_animation_style")
+            if request.form.get("bg_animation_style") in ("contours", "streaks", "turbulence") else "turbulence",
+        "bg_animation_intensity": bg_animation_intensity,
     }
     try:
         with sqlite3.connect(DB_PATH) as db:
@@ -708,7 +723,9 @@ def update_settings():
                     hide_secret_field = ?,
                     show_search_and_link = ?,
                     show_pinned_in_sidebar = ?,
-                    only_pinned_in_sidebar = ?
+                    only_pinned_in_sidebar = ?,
+                    bg_animation_style = ?,
+                    bg_animation_intensity = ?
                 WHERE id = ?
                 """,
                 (
@@ -723,6 +740,8 @@ def update_settings():
                     payload["show_search_and_link"],
                     payload["show_pinned_in_sidebar"],
                     payload["only_pinned_in_sidebar"],
+                    payload["bg_animation_style"],
+                    payload["bg_animation_intensity"],
                     g.user_id,
                 ),
             )
@@ -973,6 +992,8 @@ _SCHEMA_COLUMN_DEFAULTS = {
     "users.show_search_and_link": "INTEGER DEFAULT 0",
     "users.show_pinned_in_sidebar": "INTEGER DEFAULT 0",
     "users.only_pinned_in_sidebar": "INTEGER DEFAULT 0",
+    "users.bg_animation_style": "TEXT DEFAULT 'turbulence'",
+    "users.bg_animation_intensity": "INTEGER DEFAULT 100",
     "companies.login_enabled": "INTEGER DEFAULT 0",
 }
 

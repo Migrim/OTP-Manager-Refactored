@@ -41,12 +41,14 @@
   const empty = document.getElementById("webaccess-empty");
   const emptyVault = document.getElementById("webaccess-empty-vault");
   const topbar = document.getElementById("webaccess-topbar");
+  const pageScroll = emptyVault.closest(".page-scroll");
 
   function render() {
     const hasAny = COMPANIES.length > 0;
 
     A.emptyBgStop();
     topbar.style.display = hasAny ? "" : "none";
+    pageScroll.classList.toggle("no-anim", !hasAny);
 
     if (!hasAny) {
       list.style.display = "none";

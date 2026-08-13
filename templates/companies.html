@@ -34,43 +34,7 @@
   </div>
 </div>
 
-<!-- Add / edit company drawer -->
-<div class="overlay drawer-side" id="company-overlay">
-  <div class="drawer">
-    <div class="drawer-head">
-      <div>
-        <div class="drawer-title" id="company-drawer-title">Add Company</div>
-        <div class="drawer-sub" id="company-drawer-sub" style="display:none"></div>
-      </div>
-      <button class="drawer-x" data-close-overlay type="button">&#10005;</button>
-    </div>
-
-    <label class="field-label-sm" style="margin-top:16px">Name</label>
-    <input class="text-input" id="company-name" placeholder="e.g. Acme Corp" autocomplete="off">
-
-    <label class="field-label-sm" style="margin-top:14px">Kundennummer</label>
-    <input class="text-input" id="company-kdnr" placeholder="e.g. 10234" autocomplete="off">
-
-    <label class="field-label-sm" style="margin-top:14px">Password</label>
-    <input class="text-input" type="password" id="company-password" placeholder="Account password" autocomplete="new-password">
-
-    <div style="margin-top:22px">
-      <div class="perm-section-title" style="margin-top:0">Web Access</div>
-      <div class="perm-row">
-        <button class="perm-switch" id="company-webaccess" type="button"><span class="knob"></span></button>
-        <div>
-          <div class="perm-label">Enable web access</div>
-          <div class="perm-desc">Allows this company to log in through web access with the credentials above.</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="drawer-actions">
-      <button class="btn-outline lg" data-close-overlay type="button">Cancel</button>
-      <button class="btn-accent lg" id="company-submit" type="button">Add Company</button>
-    </div>
-  </div>
-</div>
+{% include "_company_drawer.html" %}
 
 <!-- Delete company modal -->
 <div class="overlay center" id="delete-company-overlay">
@@ -113,6 +77,7 @@
   let search = "";
   const emptyVault = document.getElementById("companies-empty-vault");
   const topbar = document.getElementById("companies-topbar");
+  const pageScroll = emptyVault.closest(".page-scroll");
 
   function renderTable() {
     const table = document.getElementById("companies-table");
@@ -122,6 +87,7 @@
 
     A.emptyBgStop();
     topbar.style.display = hasAny ? "" : "none";
+    pageScroll.classList.toggle("no-anim", !hasAny);
 
     if (!hasAny) {
       head.style.display = "none";
@@ -162,28 +128,19 @@
     ).join("");
   }
 
-  let editingId = null;
-  let webAccessOn = true;
-  const webBtn = document.getElementById("company-webaccess");
-  webBtn.addEventListener("click", () => {
-    webAccessOn = !webAccessOn;
-    webBtn.classList.toggle("on", webAccessOn);
-  });
-
   function openCompanyDrawer(c) {
-    editingId = c ? c.id : null;
-    document.getElementById("company-drawer-title").textContent = c ? "Edit Company" : "Add Company";
-    const sub = document.getElementById("company-drawer-sub");
-    sub.style.display = c ? "block" : "none";
-    if (c) sub.textContent = "Manage details for " + c.name;
-    document.getElementById("company-name").value = c ? c.name : "";
-    document.getElementById("company-kdnr").value = c ? c.kundennummer : "";
-    document.getElementById("company-password").value = "";
-    document.getElementById("company-password").placeholder = c ? "Leave empty to keep current password" : "Account password";
-    webAccessOn = c ? !!c.login_enabled : true;
-    webBtn.classList.toggle("on", webAccessOn);
-    document.getElementById("company-submit").textContent = c ? "Save changes" : "Add Company";
-    A.openOverlay("company-overlay");
+    A.companyDrawer.open(c, (company, wasEdit) => {
+      if (wasEdit) {
+        const existing = COMPANIES.find(x => x.id === company.id);
+        if (existing) Object.assign(existing, company);
+        A.toast("Company updated");
+      } else {
+        COMPANIES.push(Object.assign({ count: 0 }, company));
+        A.toast("Company added");
+      }
+      COMPANIES.sort((a, b) => a.name.localeCompare(b.name));
+      renderTable();
+    });
   }
 
   const addBtn = document.getElementById("open-add-company");
@@ -201,22 +158,6 @@
     document.body.appendChild(form);
     form.submit();
   }
-
-  document.getElementById("company-submit").addEventListener("click", () => {
-    const name = document.getElementById("company-name").value.trim();
-    if (!name) { A.toast("Please enter a name", "error"); return; }
-    const fields = {
-      name: name,
-      kundennummer: document.getElementById("company-kdnr").value.trim(),
-      password: document.getElementById("company-password").value,
-      login_enabled: webAccessOn,
-    };
-    if (editingId != null) {
-      postForm("/api/edit-company", Object.assign({ company_id: editingId }, fields));
-    } else {
-      postForm("/api/create-company", fields);
-    }
-  });
 
   let deleteCompanyId = null;
   const delText = document.getElementById("delete-company-confirm-text");

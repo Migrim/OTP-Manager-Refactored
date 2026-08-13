@@ -113,7 +113,9 @@ def init_db():
                 hide_secret_field INTEGER DEFAULT 0,
                 show_search_and_link INTEGER DEFAULT 0,
                 show_pinned_in_sidebar INTEGER DEFAULT 0,
-                only_pinned_in_sidebar INTEGER DEFAULT 0
+                only_pinned_in_sidebar INTEGER DEFAULT 0,
+                bg_animation_style TEXT DEFAULT 'turbulence',
+                bg_animation_intensity INTEGER DEFAULT 100
             )
         """)
         db.commit()
@@ -136,6 +138,7 @@ _REQUIRED_USER_COLUMNS = [
     "can_add_secrets", "can_add_users", "blur_on_inactive",
     "show_including_admin_on_top", "hide_codes_by_default", "hide_secret_field",
     "show_search_and_link", "show_pinned_in_sidebar", "only_pinned_in_sidebar",
+    "bg_animation_style", "bg_animation_intensity",
 ]
 
 _REQUIRED_TABLE_COLUMNS = {

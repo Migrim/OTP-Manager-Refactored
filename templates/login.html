@@ -27,11 +27,7 @@
       <div class="auth-settings-menu" id="auth-settings-menu">
         <div class="arrow"></div>
         <div class="heading">Ascii background</div>
-        <label><input type="radio" name="asciiStyle" value="off">Off</label>
-        <label><input type="radio" name="asciiStyle" value="matrix">Matrix rain</label>
-        <label><input type="radio" name="asciiStyle" value="starfield">Starfield warp</label>
-        <label><input type="radio" name="asciiStyle" value="wave">Plasma wave</label>
-        <label><input type="radio" name="asciiStyle" value="ripple">Ripple pulse</label>
+        <div class="ascii-opt-list" id="ascii-style-list"></div>
       </div>
     </div>
     <button type="button" class="auth-icon-btn" id="auth-theme-toggle" title="Toggle theme"></button>
@@ -87,15 +83,8 @@
     '███████  ████  █████  █████  █████████████████  █████  ████  ██  ████  ██  █████████████',
     '████████      ██████  █████  █████████████████  ██████      ████      ███        ███████',
   ];
-  var ASCII_KEY = 'otp-login-ascii-style';
   var ASCII_RAMP = ' .:-=+*#%@'.split('');
 
-  function getAsciiStyle() {
-    try { return localStorage.getItem(ASCII_KEY) || 'ripple'; } catch (e) { return 'ripple'; }
-  }
-  function saveAsciiStyle(style) {
-    try { localStorage.setItem(ASCII_KEY, style); } catch (e) {}
-  }
   function currentAccent() {
     return (getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#a15c93').trim();
   }
@@ -203,7 +192,7 @@
 
   function draw(ts) {
     frame = requestAnimationFrame(draw);
-    var style = getAsciiStyle();
+    var style = window.App.asciiStyle.get();
     if (style === 'matrix') drawMatrix(ts);
     else if (style === 'starfield') drawStarfield(ts);
     else if (style === 'wave') drawWave(ts);
@@ -220,14 +209,9 @@
     }
   }
 
-  var initialAsciiStyle = getAsciiStyle();
-  applyAsciiStyle(initialAsciiStyle);
-  document.querySelectorAll('#auth-settings-menu input[name=asciiStyle]').forEach(function (r) {
-    r.checked = r.value === initialAsciiStyle;
-    r.addEventListener('change', function () {
-      saveAsciiStyle(r.value);
-      applyAsciiStyle(r.value);
-    });
+  applyAsciiStyle(window.App.asciiStyle.get());
+  var asciiPicker = window.App.asciiStyle.mount(document.getElementById('ascii-style-list'), {
+    onChange: applyAsciiStyle,
   });
 
   /* ---------- settings dropdown ---------- */
@@ -236,11 +220,13 @@
   var settingsMenu = document.getElementById('auth-settings-menu');
   settingsBtn.addEventListener('click', function (e) {
     e.stopPropagation();
-    settingsMenu.classList.toggle('open');
+    var open = settingsMenu.classList.toggle('open');
+    if (open) asciiPicker.start(); else asciiPicker.stop();
   });
   document.addEventListener('click', function (e) {
     if (settingsMenu.classList.contains('open') && !settingsMenu.contains(e.target) && e.target !== settingsBtn) {
       settingsMenu.classList.remove('open');
+      asciiPicker.stop();
     }
   });
 

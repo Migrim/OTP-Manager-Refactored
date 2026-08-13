@@ -1,0 +1,52 @@
+<!-- Add / edit company drawer — shared by companies.html and add.html, kept in sync via this single partial -->
+<div class="overlay drawer-side" id="company-overlay">
+  <div class="drawer">
+    <div class="drawer-head">
+      <div>
+        <div class="drawer-title" id="company-drawer-title">Add Company</div>
+        <div class="drawer-sub" id="company-drawer-sub" style="display:none"></div>
+      </div>
+      <button class="drawer-x" data-close-overlay type="button">&#10005;</button>
+    </div>
+
+    <label class="field-label-sm" style="margin-top:16px">Name</label>
+    <div class="input-wrap">
+      <input class="text-input padded" id="company-name" placeholder="e.g. Acme Corp" autocomplete="off">
+      <span class="input-error-x" id="company-name-error" tabindex="0">
+        <span data-icon="xmark"></span>
+        <span class="field-popover" id="company-name-popover"></span>
+      </span>
+    </div>
+
+    <label class="field-label-sm" style="margin-top:14px">Customer Number</label>
+    <div class="input-wrap">
+      <input class="text-input padded" id="company-kdnr" placeholder="e.g. 10234" autocomplete="off">
+      <span class="input-error-x" id="company-kdnr-error" tabindex="0">
+        <span data-icon="xmark"></span>
+        <span class="field-popover" id="company-kdnr-popover"></span>
+      </span>
+      <button class="input-fill-btn" id="company-kdnr-fill" type="button" title="Fill in the next auto-generated customer number">
+        <span style="width:20px;height:20px;display:flex" data-icon="sparkle"></span>
+      </button>
+    </div>
+
+    <label class="field-label-sm" style="margin-top:14px">Password <span style="opacity:0.6;font-style:italic;font-weight:500">(optional)</span></label>
+    <input class="text-input" type="password" id="company-password" placeholder="Optional — leave empty to skip" autocomplete="new-password">
+
+    <div style="margin-top:22px">
+      <div class="perm-section-title" style="margin-top:0">Web Access</div>
+      <div class="perm-row">
+        <button class="perm-switch" id="company-webaccess" type="button"><span class="knob"></span></button>
+        <div>
+          <div class="perm-label">Enable web access</div>
+          <div class="perm-desc">Allows this company to log in through web access with the credentials above.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="drawer-actions">
+      <button class="btn-outline lg" data-close-overlay type="button">Cancel</button>
+      <button class="btn-accent lg" id="company-submit" type="button">Add Company</button>
+    </div>
+  </div>
+</div>

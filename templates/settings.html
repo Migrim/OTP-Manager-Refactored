@@ -28,14 +28,47 @@
         </div>
       </div>
 
-      <div class="setting-card" style="margin-bottom:14px;align-items:center">
-        <div style="flex:1">
-          <div class="set-label">Accent color</div>
-          <div class="set-desc">Sets the highlight color used across buttons, toggles, and progress indicators.</div>
+      <div class="setting-card setting-card-stack" style="margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="flex:1">
+            <div class="set-label">Background animation</div>
+            <div class="set-desc">Style of the animated background shown on empty pages and the Add OTP screen.</div>
+          </div>
+          <div class="bg-intensity-row">
+            <span class="bg-intensity-label">Intensity</span>
+            <input type="range" id="bg-intensity" class="bg-intensity-slider" min="0" max="200" step="5">
+            <span class="bg-intensity-value" id="bg-intensity-value"></span>
+          </div>
         </div>
-        <div style="display:flex;align-items:center;gap:10px;flex:none">
-          <div style="display:flex;gap:8px" id="swatches"></div>
-          <input type="color" id="accent-custom" style="width:32px;height:32px;padding:0;border:1px solid var(--border);border-radius:8px;background:none;cursor:pointer">
+        <div class="setting-card-sep"></div>
+        <div class="ascii-opt-list ascii-opt-list-grid" id="bg-style-control"></div>
+      </div>
+
+      <div class="setting-card setting-card-stack" style="margin-bottom:14px">
+        <div>
+          <div class="set-label">Login screen background</div>
+          <div class="set-desc">Ascii animation shown behind the sign-in card.</div>
+        </div>
+        <div class="setting-card-sep"></div>
+        <div class="ascii-opt-list ascii-opt-list-grid" id="ascii-style-list-settings"></div>
+      </div>
+
+      <div class="setting-card setting-card-stack" style="margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="flex:1">
+            <div class="set-label">Accent color</div>
+            <div class="set-desc">Sets the highlight color used across buttons, toggles, and progress indicators.</div>
+          </div>
+          <div style="display:flex;gap:8px;flex:none" id="swatches"></div>
+        </div>
+        <div class="setting-card-sep"></div>
+        <div style="display:flex;align-items:center;gap:14px">
+          <button class="switch" id="accent-custom-switch" type="button"><span class="knob"></span></button>
+          <div style="flex:1">
+            <div class="set-label">Use custom accent color</div>
+            <div class="set-desc">Overrides the presets above with a color you pick yourself.</div>
+          </div>
+          <input type="color" id="accent-custom" class="accent-custom" title="Custom color" style="flex:none">
         </div>
       </div>
 
@@ -82,6 +115,8 @@
     blur_on_inactive: !!SERVER.blur_on_inactive,
     show_pinned_in_sidebar: !!SERVER.show_pinned_in_sidebar,
     only_pinned_in_sidebar: !!SERVER.only_pinned_in_sidebar,
+    bg_animation_style: SERVER.bg_animation_style || "turbulence",
+    bg_animation_intensity: Number.isFinite(SERVER.bg_animation_intensity) ? SERVER.bg_animation_intensity : 100,
   };
 
   const DISPLAY = [
@@ -169,25 +204,76 @@
   document.getElementById("layout-list").addEventListener("click", () => { A.setCookie("layout", "list"); renderLayout(); });
   document.getElementById("layout-cards").addEventListener("click", () => { A.setCookie("layout", "cards"); renderLayout(); });
 
+  /* background animation style */
+  const bgStylePicker = A.emptyBgStyle.mount(document.getElementById("bg-style-control"), state.bg_animation_style, v => {
+    state.bg_animation_style = v;
+  });
+  bgStylePicker.start();
+  if (A.onPageLeave) A.onPageLeave(() => bgStylePicker.stop());
+
+  /* background animation intensity */
+  const bgIntensityInput = document.getElementById("bg-intensity");
+  const bgIntensityValue = document.getElementById("bg-intensity-value");
+  function renderBgIntensity() {
+    bgIntensityInput.value = state.bg_animation_intensity;
+    bgIntensityValue.textContent = state.bg_animation_intensity + "%";
+  }
+  bgIntensityInput.addEventListener("input", () => {
+    state.bg_animation_intensity = parseInt(bgIntensityInput.value, 10) || 0;
+    bgIntensityValue.textContent = state.bg_animation_intensity + "%";
+    if (bgStylePicker.setIntensity) bgStylePicker.setIntensity(state.bg_animation_intensity / 100);
+  });
+  renderBgIntensity();
+  if (bgStylePicker.setIntensity) bgStylePicker.setIntensity(state.bg_animation_intensity / 100);
+
   /* accent */
   const SWATCH_COLORS = ["#a15c93", "#5b6fd8", "#3b8fca", "#2fa662", "#d1832f", "#d1524f"];
-  function currentAccent() { return A.getCookie("accent") || "#a15c93"; }
+  function accentMode() { return A.getCookie("accent-mode") === "custom" ? "custom" : "preset"; }
+  function presetAccent() {
+    const v = (A.getCookie("accent-preset") || "").toLowerCase();
+    return SWATCH_COLORS.includes(v) ? v : SWATCH_COLORS[0];
+  }
+  function customAccent() {
+    const v = A.getCookie("accent-custom-color") || "";
+    return /^#[0-9a-fA-F]{6}$/.test(v) ? v : SWATCH_COLORS[0];
+  }
   function renderSwatches() {
-    const cur = currentAccent().toLowerCase();
+    const isCustom = accentMode() === "custom";
+    const preset = presetAccent();
+    const custom = customAccent();
+
     document.getElementById("swatches").innerHTML = SWATCH_COLORS.map(c =>
-      '<button class="swatch' + (cur === c ? " active" : "") + '" data-color="' + c + '" title="' + c + '" type="button" style="background:' + c +
-      (cur === c ? ";outline:2px solid " + c : "") + '"></button>'
+      '<button class="swatch' + (!isCustom && preset === c ? " active" : "") + '" data-color="' + c + '" title="' + c + '" type="button"' +
+      (isCustom ? " disabled" : "") + ' style="background:' + c +
+      (!isCustom && preset === c ? ";outline:2px solid " + c : "") + '"></button>'
     ).join("");
-    document.getElementById("accent-custom").value = cur;
+
+    const customInput = document.getElementById("accent-custom");
+    customInput.value = custom;
+    customInput.disabled = !isCustom;
+    customInput.classList.toggle("active", isCustom);
+    customInput.style.outline = isCustom ? "2px solid " + custom : "";
+
+    document.getElementById("accent-custom-switch").classList.toggle("on", isCustom);
   }
   document.getElementById("swatches").addEventListener("click", e => {
     const sw = e.target.closest("[data-color]");
-    if (!sw) return;
-    A.applyAccent(sw.getAttribute("data-color"));
+    if (!sw || sw.disabled) return;
+    const c = sw.getAttribute("data-color");
+    A.setCookie("accent-preset", c);
+    A.applyAccent(c);
     renderSwatches();
   });
   document.getElementById("accent-custom").addEventListener("input", e => {
-    A.applyAccent(e.target.value);
+    const c = e.target.value;
+    A.setCookie("accent-custom-color", c);
+    if (accentMode() === "custom") A.applyAccent(c);
+    renderSwatches();
+  });
+  document.getElementById("accent-custom-switch").addEventListener("click", () => {
+    const next = accentMode() === "custom" ? "preset" : "custom";
+    A.setCookie("accent-mode", next);
+    A.applyAccent(next === "custom" ? customAccent() : presetAccent());
     renderSwatches();
   });
 
@@ -196,11 +282,18 @@
     const form = document.createElement("form");
     form.method = "POST"; form.action = "/update-settings";
     Object.entries(state).forEach(([k, v]) => {
+      if (k === "bg_animation_style" || k === "bg_animation_intensity") return;
       if (!v) return;
       const input = document.createElement("input");
       input.type = "hidden"; input.name = k; input.value = "on";
       form.appendChild(input);
     });
+    const bgStyleInput = document.createElement("input");
+    bgStyleInput.type = "hidden"; bgStyleInput.name = "bg_animation_style"; bgStyleInput.value = state.bg_animation_style;
+    form.appendChild(bgStyleInput);
+    const bgIntensityInputHidden = document.createElement("input");
+    bgIntensityInputHidden.type = "hidden"; bgIntensityInputHidden.name = "bg_animation_intensity"; bgIntensityInputHidden.value = state.bg_animation_intensity;
+    form.appendChild(bgIntensityInputHidden);
     document.body.appendChild(form);
     form.submit();
   });
@@ -237,6 +330,11 @@
       window.location.reload();
     } catch (err) { A.toast(err.message, "error"); }
   });
+
+  /* login screen ascii background */
+  const asciiPicker = A.asciiStyle.mount(document.getElementById("ascii-style-list-settings"));
+  asciiPicker.start();
+  if (A.onPageLeave) A.onPageLeave(() => asciiPicker.stop());
 
   renderToggles();
   renderLayout();

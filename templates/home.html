@@ -285,6 +285,7 @@
     updateTimers();
     renderBulkBar();
     topbar.style.display = secrets.length ? "" : "none";
+    scroller.classList.toggle("no-anim", !filtered.length && !secrets.length);
     if (!secrets.length) A.emptyBgStart(content.querySelector(".empty-vault-bg"));
   }
 

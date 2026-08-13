@@ -9,11 +9,21 @@
                 var m = document.cookie.match(/(?:^|; )accent=([^;]*)/);
                 if (m) {
                     var v = decodeURIComponent(m[1]);
-                    if (/^#[0-9a-fA-F]{3,8}$/.test(v)) document.documentElement.style.setProperty("--accent", v);
+                    if (/^#[0-9a-fA-F]{3,8}$/.test(v)) {
+                        document.documentElement.style.setProperty("--accent", v);
+                        var hex = v.replace("#", "");
+                        if (hex.length === 3) hex = hex.split("").map(function (c) { return c + c; }).join("");
+                        var num = parseInt(hex, 16);
+                        var r = (num >> 16 & 255) / 255, g = (num >> 8 & 255) / 255, b = (num & 255) / 255;
+                        var lin = function (c) { return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+                        var L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+                        document.documentElement.style.setProperty("--accent-fg", L > 0.179 ? "#16181d" : "#ffffff");
+                    }
                 }
             } catch (e) {}
         })();
     </script>
+    <script>window.APP_USER_SETTINGS = {{ user_settings|tojson }};</script>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}One-Auth - OTP Tool{% endblock %}</title>
     <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
