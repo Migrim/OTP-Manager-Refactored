@@ -153,12 +153,12 @@
     activeConfirmToast = el;
     el.innerHTML =
       '<div class="toast-confirm-head">' +
-        '<span class="toast-ico">' + ICONS.warn + "</span>" +
+        '<span class="toast-ico">' + (opts.icon || ICONS.warn) + "</span>" +
         '<div class="toast-confirm-msg"></div>' +
       "</div>" +
       '<div class="toast-confirm-actions">' +
-        '<button type="button" class="toast-btn" data-act="no"><span class="toast-btn-ico">' + ICONS.xmark + '</span>No</button>' +
-        '<button type="button" class="toast-btn danger" data-act="yes"><span class="toast-btn-ico">' + ICONS.trash + '</span>Yes</button>' +
+        '<button type="button" class="toast-btn" data-act="no"><span class="toast-btn-ico">' + ICONS.xmark + '</span>' + (opts.noLabel || "No") + '</button>' +
+        '<button type="button" class="toast-btn danger" data-act="yes"><span class="toast-btn-ico">' + (opts.yesIcon || ICONS.trash) + '</span>' + (opts.yesLabel || "Yes") + '</button>' +
       "</div>";
     el.querySelector(".toast-confirm-msg").textContent = message;
 
@@ -170,6 +170,18 @@
     el.querySelector('[data-act="no"]').addEventListener("click", cancel);
 
     el.querySelector('[data-act="yes"]').addEventListener("click", () => {
+      if (opts.simple) {
+        (async () => {
+          try {
+            await opts.onConfirm();
+            closeToast(el);
+          } catch (err) {
+            closeToast(el);
+            toast(err.message, "error");
+          }
+        })();
+        return;
+      }
       const msgEl = el.querySelector(".toast-confirm-msg");
       const actionsEl = el.querySelector(".toast-confirm-actions");
       const siblingRects = snapshotToastRects();
@@ -910,6 +922,33 @@
     handlers.forEach(fn => { try { fn(); } catch (e) {} });
   }
 
+  function hasUnsavedSettings() {
+    try { return sessionStorage.getItem("otp-settings-dirty") === "1"; } catch (e) { return false; }
+  }
+  function clearSettingsDirty() {
+    try { sessionStorage.removeItem("otp-settings-dirty"); } catch (e) {}
+    const dot = document.querySelector("#settings-dirty-dot");
+    if (dot) dot.style.display = "none";
+  }
+  function confirmLeaveUnsaved() {
+    if (!hasUnsavedSettings()) return Promise.resolve(true);
+    return new Promise(resolve => {
+      confirmToast("You have unsaved settings changes. Leave without saving?", {
+        simple: true,
+        noLabel: "Stay",
+        yesLabel: "Leave without saving",
+        yesIcon: ICONS.logout,
+        onCancel: () => resolve(false),
+        onConfirm: async () => { clearSettingsDirty(); resolve(true); },
+      });
+    });
+  }
+  window.addEventListener("beforeunload", e => {
+    if (!hasUnsavedSettings()) return;
+    e.preventDefault();
+    e.returnValue = "";
+  });
+
   function softNavLinkFor(target) {
     const a = target.closest(".sidebar a[href]");
     if (!a || a.target || a.hasAttribute("download")) return null;
@@ -934,7 +973,12 @@
   }
 
   let navSeq = 0;
+  let currentHref = location.href;
   async function softNavigate(href, push) {
+    if (!(await confirmLeaveUnsaved())) {
+      if (!push) history.pushState({ softNav: true }, "", currentHref);
+      return;
+    }
     const seq = ++navSeq;
     setNavProgress(true);
     try {
@@ -961,6 +1005,10 @@
       curNav.innerHTML = newNav.innerHTML;
       const newDot = curNav.querySelector("#update-dot");
       if (newDot && dotVisible) newDot.style.display = "inline-block";
+      try {
+        const newSettingsDot = curNav.querySelector("#settings-dirty-dot");
+        if (newSettingsDot && sessionStorage.getItem("otp-settings-dirty") === "1") newSettingsDot.style.display = "inline-block";
+      } catch (e) {}
       if (sidebarPinned.secrets) sidebarPinnedRender();
       sidebarPinnedFetch();
 
@@ -978,6 +1026,7 @@
       document.title = doc.title;
       hydrateIcons();
       if (push) history.pushState({ softNav: true }, "", href);
+      currentHref = href;
     } catch (e) {
       location.href = href;
     } finally {
@@ -1191,14 +1240,29 @@
     }
   }
 
+  function idleDelaySeconds() {
+    const raw = window.APP_USER_SETTINGS && window.APP_USER_SETTINGS.blur_on_inactive_delay;
+    return [0, 10, 30, 60].includes(raw) ? raw : 60;
+  }
+
   function armIdleGuard() {
     setIdleHidden(false);
     clearTimeout(idleArmTimer);
-    idleArmTimer = setTimeout(() => setIdleHidden(true), 60000);
+    idleArmTimer = setTimeout(() => setIdleHidden(true), idleDelaySeconds() * 1000);
   }
 
   function initIdleGuard() {
     if (!document.documentElement.classList.contains("blur-on-inactive")) return;
+    if (idleDelaySeconds() === 0) {
+      /* "Instant" hides only when the window/tab loses focus, not on mouse idle */
+      window.addEventListener("blur", () => setIdleHidden(true));
+      window.addEventListener("focus", () => setIdleHidden(false));
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden) setIdleHidden(true);
+      });
+      if (document.hidden || !document.hasFocus()) setIdleHidden(true);
+      return;
+    }
     const events = ["mousemove", "mousedown", "keydown", "scroll", "touchstart"];
     events.forEach(ev => window.addEventListener(ev, armIdleGuard, { passive: true }));
     armIdleGuard();

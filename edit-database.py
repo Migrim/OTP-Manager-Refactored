@@ -244,7 +244,7 @@ def upgrade_database():
         "blur_on_inactive", "show_including_admin_on_top",
         "hide_codes_by_default", "hide_secret_field", "show_search_and_link",
         "show_pinned_in_sidebar", "only_pinned_in_sidebar", "bg_animation_style",
-        "bg_animation_intensity"
+        "bg_animation_intensity", "blur_on_inactive_delay"
     ]
 
     if any(col not in columns for col in required_columns):
@@ -280,7 +280,8 @@ def upgrade_database():
                 show_pinned_in_sidebar INTEGER DEFAULT 0,
                 only_pinned_in_sidebar INTEGER DEFAULT 0,
                 bg_animation_style TEXT DEFAULT 'turbulence',
-                bg_animation_intensity INTEGER DEFAULT 100
+                bg_animation_intensity INTEGER DEFAULT 100,
+                blur_on_inactive_delay INTEGER DEFAULT 60
             )
         """)
 
@@ -296,9 +297,9 @@ def upgrade_database():
                 blur_on_inactive, show_including_admin_on_top,
                 hide_codes_by_default, hide_secret_field, show_search_and_link,
                 show_pinned_in_sidebar, only_pinned_in_sidebar, bg_animation_style,
-                bg_animation_intensity
+                bg_animation_intensity, blur_on_inactive_delay
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
 
         migrated = 0
@@ -331,7 +332,8 @@ def upgrade_database():
                 int(data.get("show_pinned_in_sidebar", 0) or 0),
                 int(data.get("only_pinned_in_sidebar", 0) or 0),
                 data.get("bg_animation_style", "turbulence") or "turbulence",
-                int(data.get("bg_animation_intensity", 100) or 100)
+                int(data.get("bg_animation_intensity", 100) or 100),
+                int(data.get("blur_on_inactive_delay", 60) or 60)
             ))
             migrated += 1
 
@@ -380,6 +382,10 @@ def upgrade_database():
         cur.execute("ALTER TABLE users ADD COLUMN bg_animation_intensity INTEGER DEFAULT 100")
         print(f"  {green('✓')} Added column: {gray('bg_animation_intensity')}")
         changed = True
+    if "blur_on_inactive_delay" not in columns:
+        cur.execute("ALTER TABLE users ADD COLUMN blur_on_inactive_delay INTEGER DEFAULT 60")
+        print(f"  {green('✓')} Added column: {gray('blur_on_inactive_delay')}")
+        changed = True
 
     # Remove deprecated columns via full table rebuild
     deprecated = [c for c in ("show_content_titles", "alert_color", "text_color") if c in columns]
@@ -415,7 +421,8 @@ def upgrade_database():
                 show_pinned_in_sidebar INTEGER DEFAULT 0,
                 only_pinned_in_sidebar INTEGER DEFAULT 0,
                 bg_animation_style TEXT DEFAULT 'turbulence',
-                bg_animation_intensity INTEGER DEFAULT 100
+                bg_animation_intensity INTEGER DEFAULT 100,
+                blur_on_inactive_delay INTEGER DEFAULT 60
             )
         """)
         keep = [
@@ -426,7 +433,7 @@ def upgrade_database():
             "blur_on_inactive", "show_including_admin_on_top",
             "hide_codes_by_default", "hide_secret_field", "show_search_and_link",
             "show_pinned_in_sidebar", "only_pinned_in_sidebar", "bg_animation_style",
-            "bg_animation_intensity",
+            "bg_animation_intensity", "blur_on_inactive_delay",
         ]
         cols_to_copy = [c for c in keep if c in old_columns]
         col_list = ", ".join(cols_to_copy)
@@ -589,7 +596,7 @@ def check_schema_needs_update():
         "blur_on_inactive", "show_including_admin_on_top",
         "hide_codes_by_default", "hide_secret_field", "show_search_and_link",
         "show_pinned_in_sidebar", "only_pinned_in_sidebar", "bg_animation_style",
-        "bg_animation_intensity"
+        "bg_animation_intensity", "blur_on_inactive_delay"
     ]
     deprecated_cols   = ["show_content_titles", "alert_color", "text_color"]
     deprecated_tables = ["statistics"]

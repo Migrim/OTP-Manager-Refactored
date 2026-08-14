@@ -375,6 +375,7 @@ def row_to_settings(row):
         "only_pinned_in_sidebar": int(row[23] or 0),
         "bg_animation_style": row[24] or "turbulence",
         "bg_animation_intensity": int(row[25]) if row[25] is not None else 100,
+        "blur_on_inactive_delay": int(row[26]) if row[26] is not None else 60,
     }
 
 def _is_rate_limited(ip: str) -> float | None:
@@ -444,7 +445,7 @@ def load_user():
                     pinned, show_timer, show_otp_type, show_emails, show_company,
                     blur_on_inactive, show_including_admin_on_top, hide_codes_by_default, hide_secret_field,
                     show_search_and_link, show_pinned_in_sidebar, only_pinned_in_sidebar, bg_animation_style,
-                    bg_animation_intensity
+                    bg_animation_intensity, blur_on_inactive_delay
                 FROM users
                 WHERE id = ?
             """, (g.user_id,))
@@ -481,6 +482,7 @@ def load_user():
                     "only_pinned_in_sidebar": int(row[23] or 0),
                     "bg_animation_style": row[24] or "turbulence",
                     "bg_animation_intensity": int(row[25]) if row[25] is not None else 100,
+                    "blur_on_inactive_delay": int(row[26]) if row[26] is not None else 60,
                 }
 
 @app.context_processor
@@ -675,7 +677,7 @@ def settings():
                     pinned, show_timer, show_otp_type, show_emails, show_company,
                     blur_on_inactive, show_including_admin_on_top, hide_codes_by_default,
                     hide_secret_field, show_search_and_link, show_pinned_in_sidebar, only_pinned_in_sidebar,
-                    bg_animation_style, bg_animation_intensity
+                    bg_animation_style, bg_animation_intensity, blur_on_inactive_delay
                 FROM users WHERE id = ?
             """, (session["user_id"],))
         row = cursor.fetchone()
@@ -685,27 +687,43 @@ def settings():
 @app.route("/update-settings", methods=["POST"])
 @login_required
 def update_settings():
+    is_ajax = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+    data = request.get_json(silent=True) if request.is_json else None
+    if data is None:
+        data = request.form
+
+    def flag(name):
+        return 1 if data.get(name) in ("on", "true", "1", True, 1) else 0
+
     try:
-        bg_animation_intensity = int(request.form.get("bg_animation_intensity", 100))
+        bg_animation_intensity = int(data.get("bg_animation_intensity", 100))
     except (TypeError, ValueError):
         bg_animation_intensity = 100
     bg_animation_intensity = max(0, min(200, bg_animation_intensity))
 
+    try:
+        blur_on_inactive_delay = int(data.get("blur_on_inactive_delay", 60))
+    except (TypeError, ValueError):
+        blur_on_inactive_delay = 60
+    if blur_on_inactive_delay not in (0, 10, 30, 60):
+        blur_on_inactive_delay = 60
+
     payload = {
-        "show_timer": 1 if request.form.get("show_timer") in ("on", "true", "1") else 0,
-        "show_otp_type": 1 if request.form.get("show_otp_type") in ("on", "true", "1") else 0,
-        "show_emails": 1 if request.form.get("show_emails") in ("on", "true", "1") else 0,
-        "show_company": 1 if request.form.get("show_company") in ("on", "true", "1") else 0,
-        "blur_on_inactive": 1 if request.form.get("blur_on_inactive") in ("on", "true", "1") else 0,
-        "show_including_admin_on_top": 1 if request.form.get("show_including_admin_on_top") in ("on", "true", "1") else 0,
-        "hide_codes_by_default": 1 if request.form.get("hide_codes_by_default") in ("on", "true", "1") else 0,
-        "hide_secret_field": 1 if request.form.get("hide_secret_field") in ("on", "true", "1") else 0,
-        "show_search_and_link": 1 if request.form.get("show_search_and_link") in ("on", "true", "1") else 0,
-        "show_pinned_in_sidebar": 1 if request.form.get("show_pinned_in_sidebar") in ("on", "true", "1") else 0,
-        "only_pinned_in_sidebar": 1 if request.form.get("only_pinned_in_sidebar") in ("on", "true", "1") else 0,
-        "bg_animation_style": request.form.get("bg_animation_style")
-            if request.form.get("bg_animation_style") in ("contours", "streaks", "turbulence") else "turbulence",
+        "show_timer": flag("show_timer"),
+        "show_otp_type": flag("show_otp_type"),
+        "show_emails": flag("show_emails"),
+        "show_company": flag("show_company"),
+        "blur_on_inactive": flag("blur_on_inactive"),
+        "show_including_admin_on_top": flag("show_including_admin_on_top"),
+        "hide_codes_by_default": flag("hide_codes_by_default"),
+        "hide_secret_field": flag("hide_secret_field"),
+        "show_search_and_link": flag("show_search_and_link"),
+        "show_pinned_in_sidebar": flag("show_pinned_in_sidebar"),
+        "only_pinned_in_sidebar": flag("only_pinned_in_sidebar"),
+        "bg_animation_style": data.get("bg_animation_style")
+            if data.get("bg_animation_style") in ("contours", "streaks", "turbulence") else "turbulence",
         "bg_animation_intensity": bg_animation_intensity,
+        "blur_on_inactive_delay": blur_on_inactive_delay,
     }
     try:
         with sqlite3.connect(DB_PATH) as db:
@@ -725,7 +743,8 @@ def update_settings():
                     show_pinned_in_sidebar = ?,
                     only_pinned_in_sidebar = ?,
                     bg_animation_style = ?,
-                    bg_animation_intensity = ?
+                    bg_animation_intensity = ?,
+                    blur_on_inactive_delay = ?
                 WHERE id = ?
                 """,
                 (
@@ -742,14 +761,19 @@ def update_settings():
                     payload["only_pinned_in_sidebar"],
                     payload["bg_animation_style"],
                     payload["bg_animation_intensity"],
+                    payload["blur_on_inactive_delay"],
                     g.user_id,
                 ),
             )
             db.commit()
         logger.info(f"Updated settings for {u(g.user_id)}: {payload}")
+        if is_ajax:
+            return jsonify({"message": "Settings saved."})
         flash("Settings saved.", "success")
     except Exception as e:
         logger.exception(f"Error updating settings for {u(g.user_id)}: {e}")
+        if is_ajax:
+            return jsonify({"error": "Could not save settings."}), 500
         flash("Could not save settings.", "error")
     return redirect(url_for("settings"))
 
@@ -994,6 +1018,7 @@ _SCHEMA_COLUMN_DEFAULTS = {
     "users.only_pinned_in_sidebar": "INTEGER DEFAULT 0",
     "users.bg_animation_style": "TEXT DEFAULT 'turbulence'",
     "users.bg_animation_intensity": "INTEGER DEFAULT 100",
+    "users.blur_on_inactive_delay": "INTEGER DEFAULT 60",
     "companies.login_enabled": "INTEGER DEFAULT 0",
 }
 
