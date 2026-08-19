@@ -232,6 +232,10 @@
     });
   }
 
+  function dismissConfirmToast() {
+    if (activeConfirmToast) closeToast(activeConfirmToast);
+  }
+
   function copyText(text, label) {
     if (!text) return;
     const done = () => toast(label !== undefined ? label : "Copied: " + text);
@@ -1514,7 +1518,7 @@
   });
 
   window.App = {
-    ICONS, toast, confirmToast, copyText, hydrateIcons, digitsHTML, digitsHTMLUpdate, ringSVG, setRing, escapeHtml,
+    ICONS, toast, confirmToast, dismissConfirmToast, copyText, hydrateIcons, digitsHTML, digitsHTMLUpdate, ringSVG, setRing, escapeHtml,
     fetchJSON, openOverlay, closeOverlay, closeAllOverlays, applyAccent, setCookie, getCookie,
     cmdkOpen, attachAutocomplete, onPageLeave, emptyVaultHTML, emptyBgStart, emptyBgStop, companyDrawer,
     asciiStyle: { get: asciiStyleGet, set: asciiStyleSet, mount: asciiMountStylePicker },

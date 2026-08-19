@@ -212,7 +212,9 @@
     if (revertBtn) revertBtn.style.display = dirty ? "" : "none";
     const saveBtn = document.getElementById("save-settings");
     if (saveBtn) saveBtn.disabled = !dirty;
+    if (!dirty && A.dismissConfirmToast) A.dismissConfirmToast();
   }
+  syncDirty();
   document.getElementById("revert-settings").addEventListener("click", () => {
     if (!isDirty()) return;
     A.confirmToast("Discard your unsaved settings changes?", {
