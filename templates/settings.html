@@ -22,14 +22,23 @@
 
       <div class="settings-section-title" id="section-display">Display</div>
 
-      <div class="setting-card" style="margin-bottom:14px">
-        <div style="flex:1">
-          <div class="set-label">Home menu layout</div>
-          <div class="set-desc">Choose how OTP entries are displayed on the home screen.</div>
+      <div class="setting-card-group" style="margin-bottom:14px">
+        <div class="setting-card-row toggle-card">
+          <div style="flex:1">
+            <div class="set-label">Home menu layout</div>
+            <div class="set-desc">Choose how OTP entries are displayed on the home screen.</div>
+          </div>
+          <div class="seg-control">
+            <button id="layout-list" type="button">List</button>
+            <button id="layout-cards" type="button">Cards</button>
+          </div>
         </div>
-        <div class="seg-control">
-          <button id="layout-list" type="button">List</button>
-          <button id="layout-cards" type="button">Cards</button>
+        <div class="setting-slide-wrap" id="card-style-wrap">
+          <div class="setting-slide-wrap-inner">
+            <div class="setting-card-row sub-row" style="flex-direction:column;align-items:stretch;gap:10px">
+              <div class="card-style-list" id="card-style-list"></div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -296,9 +305,70 @@
     const l = currentLayout();
     document.getElementById("layout-list").classList.toggle("active", l === "list");
     document.getElementById("layout-cards").classList.toggle("active", l === "cards");
+    document.getElementById("card-style-wrap").classList.toggle("open", l === "cards");
   }
   document.getElementById("layout-list").addEventListener("click", () => { A.setCookie("layout", "list"); renderLayout(); });
   document.getElementById("layout-cards").addEventListener("click", () => { A.setCookie("layout", "cards"); renderLayout(); });
+
+  /* card style (only relevant when layout is "cards") */
+  const CARD_STYLES = [
+    { key: "code-first", name: "Code first", desc: "Grouped digits are the hero — timer is a hairline at the card's edge." },
+    { key: "copy-tile", name: "Copy tile", desc: "The whole card is one target. Click anywhere to copy." },
+    { key: "timer-rail", name: "Timer rail", desc: "Densest option — the left edge is the timer." },
+  ];
+  function currentCardStyle() {
+    const v = A.getCookie("card_style");
+    return CARD_STYLES.some(s => s.key === v) ? v : "code-first";
+  }
+  function phDigitsHTML(n) {
+    let h = "";
+    for (let i = 0; i < n; i++) h += '<span class="digit">0</span>';
+    return h;
+  }
+  /* thumbnails reuse the real card markup/classes so they're a 1:1 match to the
+     actual cards — name/code/meta are swapped for inert placeholder bars */
+  function cardStyleThumbHTML(key) {
+    if (key === "code-first") {
+      return '<div class="cs-thumb"><div class="style-code-first cs-card">' +
+        '<div class="cf-head"><div class="cf-name-wrap"><span class="ph-bar ph-name"></span></div>' +
+        '<span class="cf-more"><span class="ico">' + A.ICONS.dots + "</span></span></div>" +
+        '<div class="cf-code-row"><span class="otp-code cf-code">' + phDigitsHTML(6) + "</span></div>" +
+        '<div class="cf-meta"><span class="ph-bar ph-meta"></span></div>' +
+        '<div class="cf-bar"><div class="cf-bar-fill" style="width:62%"></div></div>' +
+        "</div></div>";
+    }
+    if (key === "copy-tile") {
+      return '<div class="cs-thumb"><div class="style-copy-tile cs-card">' +
+        '<div class="ct-name"><span class="ph-bar ph-name-sm"></span></div>' +
+        '<div class="ct-code-row"><span class="otp-code ct-code">' + phDigitsHTML(6) + "</span></div>" +
+        '<div class="ct-bar"><div class="ct-bar-fill" style="width:62%"></div></div>' +
+        '<div class="ct-meta"><span class="ph-bar ph-meta"></span></div>' +
+        "</div></div>";
+    }
+    return '<div class="cs-thumb"><div class="style-timer-rail cs-card">' +
+      '<div class="tr-rail"></div><div class="tr-rail-fill" style="height:62%"></div>' +
+      '<div class="tr-head"><div class="cf-name-wrap"><span class="ph-bar ph-name"></span></div>' +
+      '<span class="tr-seconds ph-bar ph-sec"></span></div>' +
+      '<div class="tr-code-row"><span class="otp-code tr-code">' + phDigitsHTML(6) + "</span></div>" +
+      '<div class="tr-meta"><span class="ph-bar ph-meta"></span></div>' +
+      "</div></div>";
+  }
+  function renderCardStyleList() {
+    const active = currentCardStyle();
+    document.getElementById("card-style-list").innerHTML = CARD_STYLES.map(s =>
+      '<button type="button" class="cs-opt' + (active === s.key ? " selected" : "") + '" data-style="' + s.key + '">' +
+      cardStyleThumbHTML(s.key) +
+      '<div class="cs-opt-name">' + A.escapeHtml(s.name) + '</div>' +
+      '<div class="cs-opt-desc">' + A.escapeHtml(s.desc) + '</div>' +
+      '</button>'
+    ).join("");
+  }
+  document.getElementById("card-style-list").addEventListener("click", e => {
+    const btn = e.target.closest("[data-style]");
+    if (!btn) return;
+    A.setCookie("card_style", btn.getAttribute("data-style"));
+    renderCardStyleList();
+  });
 
   /* background animation style */
   const bgStylePicker = A.emptyBgStyle.mount(document.getElementById("bg-style-control"), state.bg_animation_style, v => {
@@ -428,6 +498,7 @@
   if (A.onPageLeave) A.onPageLeave(() => asciiPicker.stop());
 
   renderToggles();
+  renderCardStyleList();
   renderLayout();
   renderSwatches();
   syncDirty();

@@ -82,6 +82,7 @@
   };
   const SETTINGS = {{ user_settings|tojson }};
   const LAYOUT = (A.getCookie("layout") === "cards") ? "cards" : "list";
+  const CARD_STYLE = ["code-first", "copy-tile", "timer-rail"].includes(A.getCookie("card_style")) ? A.getCookie("card_style") : "code-first";
   const SHOW_SECRET = !SETTINGS.hide_secret_field;
   const SHOW_EMAILS = !!SETTINGS.show_emails;
   const HIDE_CODES = !!SETTINGS.hide_codes_by_default;
@@ -188,18 +189,75 @@
       '<div class="otp-actions">' + actionsHTML(e) + "</div></div></div>";
   }
 
-  function cardHTML(e, isPinnedGroup) {
-    const check = '<input type="checkbox" class="card-check" data-select="' + e.id + '"' + (selected.has(e.id) ? " checked" : "") + ">";
-    return '<div class="otp-card" data-ctx="' + e.id + '">' + check +
-      '<div style="min-width:0"><div class="nm">' + A.escapeHtml(e.name) + "</div>" +
+  function cardCheckHTML(e) {
+    return '<input type="checkbox" class="card-check" data-select="' + e.id + '"' + (selected.has(e.id) ? " checked" : "") + ">";
+  }
+
+  function cardMetaHTML(e) {
+    if (!SHOW_EMAILS) return "";
+    return A.escapeHtml(!e.email || e.email === "none" ? "None" : e.email);
+  }
+
+  function barPct() { return Math.max(0, Math.min(100, (remaining / PERIOD) * 100)) + "%"; }
+
+  /* code digits for card layouts: data-code-of's innerHTML must stay exactly what
+     A.digitsHTML/digitsHTMLUpdate produce, since patchCodes() replaces it wholesale */
+  function cardCodeDigitsHTML(e, extraClass) {
+    if (!e.current_code) {
+      return '<div class="otp-error" title="Can\'t generate OTP code #ERR-004"><span class="ico">' + A.ICONS.warn + "</span> error</div>";
+    }
+    const digits = codeVisible(e) ? A.digitsHTML(e.current_code, animateDigits) : '<span class="digit" style="letter-spacing:2px">••••••</span>';
+    return '<span class="otp-code ' + extraClass + '" data-code-of="' + e.id + '" data-code="' + (codeVisible(e) ? A.escapeHtml(e.current_code) : "") + '" title="' + (codeVisible(e) ? "Copy code" : "Click to reveal") + '">' + digits + "</span>";
+  }
+
+  function cardHTMLCodeFirst(e, isPinnedGroup) {
+    const meta = cardMetaHTML(e);
+    return '<div class="otp-card style-code-first" data-ctx="' + e.id + '">' + cardCheckHTML(e) +
+      '<div class="cf-head">' +
+      '<div class="cf-name-wrap"><span class="nm">' + A.escapeHtml(e.name) + "</span>" +
+      (isPinnedGroup ? '<span class="co">' + A.escapeHtml(e.company_name || "") + "</span>" : "") +
+      "</div>" +
+      '<button class="cf-more" data-more="' + e.id + '" title="More"><span class="ico">' + A.ICONS.dots + "</span></button>" +
+      "</div>" +
+      '<div class="cf-code-row">' + cardCodeDigitsHTML(e, "cf-code") + "</div>" +
+      (meta ? '<div class="cf-meta" title="' + A.escapeHtml(e.email) + '">' + meta + "</div>" : "") +
+      secretCellHTML(e, true) +
+      '<div class="cf-bar"><div class="cf-bar-fill" style="width:' + barPct() + '"></div></div>' +
+      "</div>";
+  }
+
+  function cardHTMLCopyTile(e, isPinnedGroup) {
+    const meta = cardMetaHTML(e);
+    return '<div class="otp-card style-copy-tile" data-ctx="' + e.id + '" data-copy="' + e.id + '"' + (!e.current_code ? "" : ' title="Copy code"') + ">" + cardCheckHTML(e) +
+      '<div class="ct-name">' + A.escapeHtml(e.name) + "</div>" +
       (isPinnedGroup ? '<div class="co">' + A.escapeHtml(e.company_name || "") + "</div>" : "") +
-      (SHOW_EMAILS ? '<div class="em" title="' + A.escapeHtml(e.email) + '">' + A.escapeHtml(!e.email || e.email === "none" ? "None" : e.email) + "</div>" : "") +
-      "</div>" + codeCellHTML(e, true) + secretCellHTML(e, true) +
-      '<div class="card-btns">' +
-      '<button class="card-copy-btn" data-copy="' + e.id + '"' + (!e.current_code ? " disabled" : "") + '><span style="width:12px;height:12px;display:flex">' + A.ICONS.copy + "</span> Copy code</button>" +
-      (PERMS.canEdit ? '<button class="icon-btn" data-edit="' + e.id + '" title="Edit"><span class="ico">' + A.ICONS.edit + "</span></button>" : "") +
-      (PERMS.canDelete ? '<button class="icon-btn danger" data-delete="' + e.id + '" title="Delete"><span class="ico">' + A.ICONS.trash + "</span></button>" : "") +
-      "</div></div>";
+      '<div class="ct-code-row">' + cardCodeDigitsHTML(e, "ct-code") + "</div>" +
+      '<div class="ct-bar"><div class="ct-bar-fill" style="width:' + barPct() + '"></div></div>' +
+      (meta ? '<div class="ct-meta" title="' + A.escapeHtml(e.email) + '">' + meta + "</div>" : "") +
+      secretCellHTML(e, true) +
+      "</div>";
+  }
+
+  function cardHTMLTimerRail(e, isPinnedGroup) {
+    const meta = cardMetaHTML(e);
+    return '<div class="otp-card style-timer-rail" data-ctx="' + e.id + '">' + cardCheckHTML(e) +
+      '<div class="tr-rail"></div><div class="tr-rail-fill" style="height:' + barPct() + '"></div>' +
+      '<div class="tr-head">' +
+      '<div class="cf-name-wrap"><span class="nm">' + A.escapeHtml(e.name) + "</span>" +
+      (isPinnedGroup ? '<span class="co">' + A.escapeHtml(e.company_name || "") + "</span>" : "") +
+      "</div>" +
+      '<span class="tr-seconds">' + Math.ceil(remaining) + "s</span>" +
+      "</div>" +
+      '<div class="tr-code-row">' + cardCodeDigitsHTML(e, "tr-code") + "</div>" +
+      (meta ? '<div class="tr-meta"><span title="' + A.escapeHtml(e.email) + '">' + meta + "</span></div>" : "") +
+      secretCellHTML(e, true) +
+      "</div>";
+  }
+
+  function cardHTML(e, isPinnedGroup) {
+    if (CARD_STYLE === "copy-tile") return cardHTMLCopyTile(e, isPinnedGroup);
+    if (CARD_STYLE === "timer-rail") return cardHTMLTimerRail(e, isPinnedGroup);
+    return cardHTMLCodeFirst(e, isPinnedGroup);
   }
 
   function sectionHTML(title, entries, isPinnedGroup) {
@@ -246,7 +304,7 @@
   function sectionsKeyOf(pinnedEntries, names, byCompany) {
     const idOf = e => e.id + (e.current_code ? "1" : "0");
     return JSON.stringify({
-      layout: LAYOUT,
+      layout: LAYOUT + ":" + CARD_STYLE,
       pinned: pinnedEntries.map(idOf),
       sections: names.map(n => [n, byCompany[n].map(idOf)]),
     });
@@ -313,6 +371,10 @@
     content.querySelectorAll(".ring").forEach(svg => A.setRing(svg, ringRemaining, PERIOD));
     const label = Math.ceil(remaining) + "s";
     content.querySelectorAll(".text-timer").forEach(el => { if (el.textContent !== label) el.textContent = label; });
+    const pct = Math.max(0, Math.min(100, (ringRemaining / PERIOD) * 100)) + "%";
+    content.querySelectorAll(".cf-bar-fill, .ct-bar-fill").forEach(el => { el.style.width = pct; });
+    content.querySelectorAll(".tr-rail-fill").forEach(el => { el.style.height = pct; });
+    content.querySelectorAll(".tr-seconds").forEach(el => { if (el.textContent !== label) el.textContent = label; });
   }
 
   let companyFilterKey = null;
@@ -404,6 +466,7 @@
   function entryById(id) { return secrets.find(e => String(e.id) === String(id)); }
 
   content.addEventListener("click", e => {
+    if (e.target.closest(".card-check")) return;
     const emptyAct = e.target.closest("[data-empty-act]");
     if (emptyAct) {
       const act = emptyAct.getAttribute("data-empty-act");
@@ -424,6 +487,12 @@
       const id = +revealEl.getAttribute("data-reveal");
       if (revealed.has(id)) revealed.delete(id); else revealed.add(id);
       render(); return;
+    }
+    const moreBtn = e.target.closest("[data-more]");
+    if (moreBtn) {
+      const entry = entryById(moreBtn.getAttribute("data-more"));
+      if (entry) { const r = moreBtn.getBoundingClientRect(); openCtxMenu(entry, r.left, r.bottom + 4); }
+      return;
     }
     const copyBtn = e.target.closest("[data-copy]");
     if (copyBtn) {

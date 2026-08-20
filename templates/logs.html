@@ -5,86 +5,85 @@
 
 {% block page %}
 <div class="page">
-  <div class="logs-card">
-    <div class="logs-topbar">
-      <div class="logs-title">Logs</div>
-      <div class="topbar-sep"></div>
-
-      <div class="topbar-pop-wrap">
-        <button class="logs-filter-btn" id="logs-day-btn" type="button">
-          <span class="f-ico" data-icon="calendar"></span><span id="logs-day-label"></span>
-          <span class="f-chev" data-icon="chevron"></span>
-        </button>
-        <div class="day-pop" id="logs-day-pop"></div>
-      </div>
-      <div class="topbar-sep"></div>
-
-      <div class="topbar-pop-wrap">
-        <button class="logs-filter-btn" id="logs-level-btn" type="button">
-          Level
-          <span class="filter-count" id="logs-level-count" style="display:none"></span>
-          <span class="f-chev" data-icon="chevron"></span>
-        </button>
-        <div class="filter-pop" id="logs-levels"></div>
-      </div>
-      <div class="topbar-sep"></div>
-
-      <div class="topbar-pop-wrap">
-        <button class="logs-filter-btn" id="logs-source-btn" type="button">
-          Sources
-          <span class="filter-count" id="logs-source-count" style="display:none"></span>
-          <span class="f-chev" data-icon="chevron"></span>
-        </button>
-        <div class="filter-pop" id="logs-sources" style="min-width:170px"></div>
-      </div>
-      <div class="topbar-sep"></div>
-
-      <div class="topbar-search">
-        <span class="ico" data-icon="search"></span>
-        <input type="text" id="logs-search" placeholder="Search logs…" autocomplete="off">
-      </div>
-
-      <span id="logs-reset-wrap" style="display:none;align-items:stretch">
-        <div class="topbar-sep"></div>
-        <button class="logs-filter-btn" id="logs-reset" type="button" style="color:var(--text-dim)">Reset</button>
-      </span>
-
-      <div class="topbar-sep"></div>
-      <div class="logs-updated" id="logs-updated">Updated just now</div>
-      <div class="topbar-sep"></div>
-      <button class="live-pill on" id="logs-live" type="button">
-        <span class="ico" id="logs-live-ico"></span><span id="logs-live-label">Live</span>
+  <div class="page-topbar logs-topbar">
+    <div class="topbar-pop-wrap">
+      <button class="logs-filter-btn" id="logs-day-btn" type="button">
+        <span class="f-ico" data-icon="calendar"></span><span id="logs-day-label"></span>
+        <span class="f-chev" data-icon="chevron"></span>
       </button>
-      <div class="topbar-sep"></div>
-      <button class="topbar-icon-btn" id="logs-refresh" title="Refresh" type="button">
-        <span style="width:14px;height:14px;display:flex" data-icon="refresh"></span>
+      <div class="day-pop" id="logs-day-pop"></div>
+    </div>
+    <div class="topbar-sep"></div>
+
+    <div class="topbar-pop-wrap">
+      <button class="logs-filter-btn" id="logs-level-btn" type="button">
+        Level
+        <span class="filter-count" id="logs-level-count" style="display:none"></span>
+        <span class="f-chev" data-icon="chevron"></span>
       </button>
-      <div class="topbar-sep"></div>
-      <div class="topbar-pop-wrap">
-        <button class="topbar-icon-btn" id="logs-more-btn" title="More" type="button">
-          <span style="width:14px;height:14px;display:flex" data-icon="dots"></span>
-        </button>
-        <div class="menu-pop" id="logs-more-pop">
-          <div class="menu-title">Actions</div>
-          <button id="logs-export-log" type="button">Export to .log</button>
-          <button id="logs-export-txt" type="button">Export to .txt</button>
-        </div>
-      </div>
+      <div class="filter-pop" id="logs-levels"></div>
+    </div>
+    <div class="topbar-sep"></div>
+
+    <div class="topbar-pop-wrap">
+      <button class="logs-filter-btn" id="logs-source-btn" type="button">
+        Sources
+        <span class="filter-count" id="logs-source-count" style="display:none"></span>
+        <span class="f-chev" data-icon="chevron"></span>
+      </button>
+      <div class="filter-pop" id="logs-sources" style="min-width:170px"></div>
+    </div>
+    <div class="topbar-sep"></div>
+
+    <div class="topbar-search">
+      <span class="ico" data-icon="search"></span>
+      <input type="text" id="logs-search" placeholder="Search logs…" autocomplete="off">
     </div>
 
-    <div class="logs-table-wrap" id="logs-scroll">
-      <table class="logs-table">
-        <thead>
-          <tr>
-            <th style="width:110px">Timestamp</th>
-            <th style="width:95px">Level</th>
-            <th>Message</th>
-            <th style="width:156px">Source</th>
-          </tr>
-        </thead>
-        <tbody id="logs-tbody"></tbody>
-      </table>
-      <div id="logs-empty" style="padding:60px 0;text-align:center;color:var(--text-faint);font-size:13px;display:none">No log entries match these filters</div>
+    <span id="logs-reset-wrap" style="display:none;align-items:stretch">
+      <div class="topbar-sep"></div>
+      <button class="logs-filter-btn" id="logs-reset" type="button" style="color:var(--text-dim)">Reset</button>
+    </span>
+
+    <div class="topbar-sep"></div>
+    <div class="logs-updated" id="logs-updated">Updated just now</div>
+    <div class="topbar-sep"></div>
+    <button class="live-pill on" id="logs-live" type="button">
+      <span class="ico" id="logs-live-ico"></span><span id="logs-live-label">Live</span>
+    </button>
+    <div class="topbar-sep"></div>
+    <button class="topbar-icon-btn" id="logs-refresh" title="Refresh" type="button">
+      <span style="width:14px;height:14px;display:flex" data-icon="refresh"></span>
+    </button>
+    <div class="topbar-sep"></div>
+    <div class="topbar-pop-wrap">
+      <button class="topbar-icon-btn" id="logs-more-btn" title="More" type="button">
+        <span style="width:14px;height:14px;display:flex" data-icon="dots"></span>
+      </button>
+      <div class="menu-pop" id="logs-more-pop">
+        <div class="menu-title">Actions</div>
+        <button id="logs-export-log" type="button">Export to .log</button>
+        <button id="logs-export-txt" type="button">Export to .txt</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-scroll" style="padding:10px;mask-image:none;-webkit-mask-image:none">
+    <div class="table-panel" id="logs-panel" style="position:absolute;top:5px;bottom:10px;left:0;right:0;max-width:1100px;margin:0 auto;border-radius:16px">
+      <div class="logs-table-wrap" id="logs-scroll">
+        <table class="logs-table">
+          <thead>
+            <tr>
+              <th style="width:110px">Timestamp</th>
+              <th style="width:95px">Level</th>
+              <th>Message</th>
+              <th style="width:156px">Source</th>
+            </tr>
+          </thead>
+          <tbody id="logs-tbody"></tbody>
+        </table>
+        <div id="logs-empty" style="padding:60px 0;text-align:center;color:var(--text-faint);font-size:13px;display:none">No log entries match these filters</div>
+      </div>
     </div>
   </div>
 </div>
@@ -112,6 +111,12 @@
   const tbody = document.getElementById("logs-tbody");
   const scroller = document.getElementById("logs-scroll");
   const POPS = ["logs-day-pop", "logs-levels", "logs-sources", "logs-more-pop"];
+
+  let stickToBottom = true;
+  scroller.addEventListener("scroll", () => {
+    const distanceFromBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+    stickToBottom = distanceFromBottom < 60;
+  });
 
   function closePops(except) {
     POPS.forEach(id => { if (id !== except) document.getElementById(id).classList.remove("open"); });
@@ -165,7 +170,7 @@
       "<td class='src'>" + A.escapeHtml(e.source) + "</td></tr>"
     ).join("");
     updateFilterBadges();
-    if (live) scroller.scrollTop = scroller.scrollHeight;
+    if (live && stickToBottom) scroller.scrollTop = scroller.scrollHeight;
   }
 
   function renderFilters() {
@@ -281,6 +286,7 @@
     closePops();
     levelFilter.clear(); sourceFilter.clear();
     entries = [];
+    stickToBottom = true;
     renderSkeletonRows();
     fetchLogs(false);
   });

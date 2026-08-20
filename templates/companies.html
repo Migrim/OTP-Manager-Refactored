@@ -19,16 +19,16 @@
     {% endif %}
   </div>
 
-  <div class="page-scroll">
-    <div style="max-width:960px;margin:0 auto;display:flex;flex-direction:column;gap:10px">
+  <div class="page-scroll" style="padding:10px;mask-image:none;-webkit-mask-image:none">
+    <div class="table-panel" id="companies-extra-panel" style="position:absolute;top:5px;bottom:10px;left:0;right:0;max-width:1100px;margin:0 auto;border-radius:16px">
       <div class="table-head" id="companies-table-head" style="grid-template-columns:120px 1.6fr 1fr 140px 96px">
-        <div class="sort-col" data-sort="kundennummer">Company ID<span class="sort-ico">⇅</span></div>
-        <div class="sort-col" data-sort="name">Name<span class="sort-ico">⇅</span></div>
-        <div class="sort-col" data-sort="count">OTPs<span class="sort-ico">⇅</span></div>
-        <div class="sort-col" data-sort="login_enabled">Web Access<span class="sort-ico">⇅</span></div>
+        <div class="sort-col" data-sort="kundennummer">Company ID<span class="sort-ico"></span></div>
+        <div class="sort-col" data-sort="name">Name<span class="sort-ico"></span></div>
+        <div class="sort-col" data-sort="count">OTPs<span class="sort-ico"></span></div>
+        <div class="sort-col" data-sort="login_enabled">Web Access<span class="sort-ico"></span></div>
         <div></div>
       </div>
-      <div class="table-panel" id="companies-table"></div>
+      <div id="companies-table"></div>
       <div class="empty-state" id="companies-empty" style="display:none">
         <span class="ico" data-icon="search"></span>
         <div class="txt">No companies match your search</div>
@@ -107,12 +107,14 @@
     document.querySelectorAll("#companies-table-head .sort-col").forEach(col => {
       const active = col.getAttribute("data-sort") === sortKey;
       const ico = col.querySelector(".sort-ico");
-      ico.textContent = active ? (sortDir === "desc" ? "↓" : "↑") : "⇅";
+      ico.innerHTML = active ? A.ICONS.chevron : A.ICONS.sortBoth;
+      ico.classList.toggle("asc", active && sortDir === "asc");
       col.classList.toggle("active", active);
     });
   }
 
   function renderTable() {
+    const panel = document.getElementById("companies-extra-panel");
     const table = document.getElementById("companies-table");
     const head = document.getElementById("companies-table-head");
     const emptyState = document.getElementById("companies-empty");
@@ -123,8 +125,7 @@
     pageScroll.classList.toggle("no-anim", !hasAny);
 
     if (!hasAny) {
-      head.style.display = "none";
-      table.style.display = "none";
+      panel.style.display = "none";
       emptyState.style.display = "none";
       emptyVault.style.display = "";
       const actions = [];
@@ -140,6 +141,7 @@
     }
     emptyVault.style.display = "none";
 
+    panel.style.display = "";
     head.style.display = "";
     table.style.display = "";
     const q = search.trim().toLowerCase();

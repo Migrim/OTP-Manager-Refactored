@@ -13,6 +13,7 @@
     moon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M20 14.5A8.5 8.5 0 119.5 4a7 7 0 0010.5 10.5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
     logout: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 21H5a1 1 0 01-1-1V4a1 1 0 011-1h4M16 17l5-5-5-5M21 12H9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     chevron: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    sortBoth: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M8 3v18M8 3L4 7M8 3l4 4M16 21V3M16 21l4-4M16 21l-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     keysm: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="8" cy="15" r="3.2" stroke="currentColor" stroke-width="1.8"/><path d="M10.3 12.7L19 4M15.5 8.2l2.3 2.3M18.2 5.5l2.3 2.3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
     searchBig: '<svg width="36" height="36" viewBox="0 0 24 24" fill="none"><circle cx="10.5" cy="10.5" r="7" stroke="currentColor" stroke-width="1.6"/><path d="M20 20l-4.3-4.3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
     arrowUp: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -448,6 +449,10 @@
       o.body = JSON.stringify(o.body);
     }
     const res = await fetch(url, o);
+    if (res.status === 401) {
+      location.href = "/login";
+      return new Promise(() => {});
+    }
     let data = null;
     try { data = await res.json(); } catch (e) {}
     if (!res.ok) {
@@ -1199,10 +1204,10 @@
 
   /* ---------- idle code obfuscation (replaces the old full-panel blur) ---------- */
 
-  const SCRAMBLE_DIGITS = "0123456789";
-  function scrambleDigits(len) {
+  const SCRAMBLE_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  function scrambleChars(len) {
     let s = "";
-    for (let i = 0; i < len; i++) s += SCRAMBLE_DIGITS[(Math.random() * SCRAMBLE_DIGITS.length) | 0];
+    for (let i = 0; i < len; i++) s += SCRAMBLE_CHARS[(Math.random() * SCRAMBLE_CHARS.length) | 0];
     return s;
   }
 
@@ -1219,7 +1224,7 @@
   function obscureTick() {
     obscureDigits().forEach(el => {
       if (el.dataset.real === undefined) el.dataset.real = el.textContent;
-      el.textContent = scrambleDigits(el.dataset.real.length || 1);
+      el.textContent = scrambleChars(el.dataset.real.length || 1);
     });
   }
 

@@ -12,6 +12,8 @@ from datetime import datetime
 import re
 import socket
 import urllib.request
+import urllib.error
+import ssl
 try:
     import termios
     import tty
@@ -97,6 +99,39 @@ def lavender(s): return c(s, "38;5;183")
 def cyan(s): return c(s, "36")
 def gray(s): return c(s, "90")
 def color8(s, n): return c(s, f"38;5;{int(n)}")
+
+def selected_style(s): return c(s, "1;38;5;183;7")
+
+SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+
+def spinner_frame(speed=8.0):
+    return SPINNER_FRAMES[int(time.time() * speed) % len(SPINNER_FRAMES)]
+
+MENU_COLOR_FUNCS = {
+    "green": green,
+    "red": red,
+    "yellow": yellow,
+    "cyan": cyan,
+    "gray": gray,
+}
+
+def menu_line(key, label, selected, enabled=True, note=None, color="cyan", desc=None):
+    marker = "▶" if selected else " "
+    if selected:
+        text = f"{marker} {key}  {label}"
+        if note and not enabled:
+            text += f"  {note}"
+        return selected_style(text)
+    badge_color = gray if not enabled else MENU_COLOR_FUNCS.get(color, cyan)
+    badge = badge_color(f"[{key}]")
+    line = f"{marker} {badge}  {label}"
+    if note and not enabled:
+        line += f"  {gray(note)}"
+    elif desc and enabled:
+        line += f"  {dim(desc)}"
+    if not enabled:
+        line = dim(line)
+    return line
 
 def clamp(v, lo=0.0, hi=100.0):
     try:
@@ -599,16 +634,39 @@ def version_tuple(v):
         return (0,)
     return tuple(int(x) for x in parts)
 
+def _open_url(req, timeout, ctx=None):
+    if ctx is not None:
+        return urllib.request.urlopen(req, timeout=timeout, context=ctx)
+    return urllib.request.urlopen(req, timeout=timeout)
+
 def fetch_text(url, timeout=10):
     req = urllib.request.Request(url, headers={"User-Agent": "OTP-Tool-Updater"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        charset = r.headers.get_content_charset() or "utf-8"
-        return r.read().decode(charset, errors="replace")
+    try:
+        with _open_url(req, timeout) as r:
+            charset = r.headers.get_content_charset() or "utf-8"
+            return r.read().decode(charset, errors="replace")
+    except urllib.error.URLError as e:
+        reason = e.reason if hasattr(e, "reason") else e
+        if isinstance(reason, ssl.SSLError):
+            ctx = ssl._create_unverified_context()
+            with _open_url(req, timeout, ctx) as r:
+                charset = r.headers.get_content_charset() or "utf-8"
+                return r.read().decode(charset, errors="replace")
+        raise RuntimeError(f"Network error: {reason}") from e
 
 def download_file(url, dest_path, timeout=30):
     req = urllib.request.Request(url, headers={"User-Agent": "OTP-Tool-Updater"})
-    with urllib.request.urlopen(req, timeout=timeout) as r, open(dest_path, "wb") as f:
-        shutil.copyfileobj(r, f)
+    try:
+        with _open_url(req, timeout) as r, open(dest_path, "wb") as f:
+            shutil.copyfileobj(r, f)
+    except urllib.error.URLError as e:
+        reason = e.reason if hasattr(e, "reason") else e
+        if isinstance(reason, ssl.SSLError):
+            ctx = ssl._create_unverified_context()
+            with _open_url(req, timeout, ctx) as r, open(dest_path, "wb") as f:
+                shutil.copyfileobj(r, f)
+            return
+        raise RuntimeError(f"Network error: {reason}") from e
 
 def get_remote_version():
     txt = fetch_text(REMOTE_VERSION_URL, timeout=10).strip()
@@ -961,9 +1019,9 @@ ASCII_TITLE = r"""
 ███████  ████  █████  █████  █████████████████  █████  ████  ██  ████  ██  █████████████
 ████████      ██████  █████  █████████████████  ██████      ████      ███        ███████
 """.strip("\n")
+ASCII_TITLE_W = max(len(row) for row in ASCII_TITLE.splitlines())
 
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
-MIN_LINE_WIDTH = 92
 
 def strip_ansi(s):
     return ANSI_RE.sub("", str(s or ""))
@@ -974,6 +1032,15 @@ def visible_len(s):
 def pad_visible(s, width):
     text = str(s or "")
     return text + (" " * max(0, width - visible_len(text)))
+
+LABEL_W = 9
+
+def kv(label, value):
+    pad = max(0, LABEL_W - len(label))
+    return f"{bold(label)}{' ' * pad} : {value}"
+
+def section_label(text):
+    return gray(f"▸ {text}")
 
 def center_visible(s, width):
     text = str(s or "")
@@ -1010,6 +1077,7 @@ def print_centered(line, total_width):
 
 def render_box(title, lines, hint=None):
     tw, th = get_terminal_size()
+    th -= 1  # the trailing newline after the last printed row pushes the cursor (and view) down one row
     body = list(lines or [])
     widths = [visible_len(x) for x in body]
     if title:
@@ -1044,63 +1112,84 @@ def render_box(title, lines, hint=None):
     for row in boxed:
         print_centered(row, tw)
 
-def print_centered_box(lines, title=None, hint=None, width=None):
-    tw, _ = get_terminal_size()
-    body = list(lines or [])
-    widths = [visible_len(x) for x in body]
-    if title:
-        widths.append(visible_len(title) + 4)
-    if hint:
-        widths.append(visible_len(hint))
-    inner_w = width if width else min(max(widths + [52]), max(40, tw - 12))
+MIN_SCREEN_W = 50
+MIN_SCREEN_H = 14
 
-    top = lavender("┌" + ("─" * (inner_w + 2)) + "┐")
-    bottom = lavender("└" + ("─" * (inner_w + 2)) + "┘")
-    print_centered(top, tw)
-    if title:
-        t_line = f"│ {pad_visible(f' {title} ', inner_w)} │"
-        print_centered(lavender(t_line), tw)
-        print_centered(lavender("├" + ("─" * (inner_w + 2)) + "┤"), tw)
-    for line in body:
-        row = lavender("│ ") + pad_visible(line, inner_w) + lavender(" │")
-        print_centered(row, tw)
-    if hint:
-        print_centered(lavender("├" + ("─" * (inner_w + 2)) + "┤"), tw)
-        if isinstance(hint, tuple):
-            left_h, right_h = hint
-            gap = max(1, inner_w - visible_len(left_h) - visible_len(right_h))
-            hint_row = dim(left_h) + (" " * gap) + dim(right_h)
+def screen_chrome_rows(big_title=False, has_footer=True):
+    tw, th = get_terminal_size()
+    th -= 1  # the trailing newline after the last printed row pushes the cursor (and view) down one row
+    if big_title:
+        # 2 blank lines + full art (5 rows) + blank line only when it fits; otherwise 2 text lines + blank
+        top = (len(ASCII_TITLE.splitlines()) + 3) if tw >= ASCII_TITLE_W else 4
+    else:
+        top = 2
+    fits_footer = has_footer and tw >= MIN_SCREEN_W and th >= MIN_SCREEN_H
+    bottom = 2 if fits_footer else 0
+    return top, bottom, fits_footer, tw, th
+
+def screen_body_height(big_title=False, has_footer=True):
+    top, bottom, _, _, th = screen_chrome_rows(big_title, has_footer)
+    return max(3, th - top - bottom)
+
+def render_screen(title, lines, breadcrumb=None, hints=None, big_title=False):
+    """Full-screen frame: a title/rule bar on top, body content centered below, and a
+    breadcrumb + key-hint bar pinned to the last row — dropped automatically
+    on terminals too small to fit it cleanly."""
+    _, bottom_h, fits_footer, tw, th = screen_chrome_rows(big_title, bool(breadcrumb or hints))
+
+    out = []
+    if big_title:
+        out.append("")
+        out.append("")
+        if tw >= ASCII_TITLE_W:
+            for row in ASCII_TITLE.splitlines():
+                pad = max(0, (tw - len(row)) // 2)
+                out.append(" " * pad + lavender(row))
         else:
-            hint_row = pad_visible(dim(hint), inner_w)
-        row = lavender("│ ") + hint_row + lavender(" │")
-        print_centered(row, tw)
-    print_centered(bottom, tw)
+            out.append(center_visible(lavender(bold("OTP Manager")), tw))
+        out.append("")
+    else:
+        out.append(center_visible(bold(title), tw) if title else "")
+        out.append(gray("─" * tw))
 
-def build_dashboard_lines():
-    ensure_settings_file()
-    s = status()
-    st = read_state()
-    cfg = read_settings()
-    started_at = st.get("started_at") if s["running"] else None
-    up = fmt_uptime(started_at)
-    stat = green("RUNNING") if s["running"] else red("STOPPED")
-    pid_txt = f"{s['pid']}" if s["running"] else "-"
-    version_txt = read_local_version()
+    body = list(lines or [])
+    avail      = max(0, th - len(out) - bottom_h)
+    pad_total  = max(0, avail - len(body))
+    pad_before = pad_total // 2
+    pad_after  = pad_total - pad_before
 
-    lines = [
-        f"{bold('Status')} : {stat}",
-        f"{bold('PID')}    : {pid_txt}",
-        f"{bold('Uptime')} : {up}",
-        f"{bold('Version')}: {gray(version_txt)}",
-        f"{bold('Port')}   : {gray(str(cfg['port']))}",
-        f"{bold('Secret')} : {gray(mask_secret(cfg['secret_key']))}",
-        f"{bold('Log')}    : {gray(LOG_PATH)}",
-    ]
-    urls = server_urls()
-    if urls:
-        lines.append("")
-        lines.append(f"{bold('URL')}    : {gray('  '.join(urls))}")
-    return lines
+    # Center the body block: find widest visible line, offset left so the block is centered
+    body_w = max((visible_len(ln) for ln in body), default=0) if body else 0
+    left_pad = max(1, (tw - body_w) // 2)
+
+    for _ in range(pad_before):
+        out.append("")
+    for ln in body:
+        if not strip_ansi(ln).strip():
+            out.append("")
+        else:
+            out.append(" " * left_pad + ln)
+    for _ in range(pad_after):
+        out.append("")
+
+    if not fits_footer and (breadcrumb or hints):
+        out.append(dim(hints or breadcrumb or ""))
+    elif fits_footer:
+        out.append(gray("─" * tw))
+        left = gray(breadcrumb) if breadcrumb else ""
+        right = hints or ""
+        lv, rv = visible_len(left), visible_len(right)
+        if lv + rv + 4 <= tw:
+            gap = max(1, tw - lv - rv - 2)
+            out.append(" " + left + (" " * gap) + right + " ")
+        elif rv + 2 <= tw:
+            out.append(" " * max(0, tw - rv - 1) + right)
+        else:
+            out.append("")
+
+    clear()
+    for row in out:
+        print(row)
 
 def get_db_status():
     try:
@@ -1137,6 +1226,61 @@ def get_db_integrity():
     except Exception as e:
         return None, f"Check failed: {shorten_middle(str(e), 40)}"
 
+HEALTH_STATUS_LOCK = threading.Lock()
+HEALTH_STATUS_CACHE = {
+    "state": "idle",       # idle | checking | done
+    "ok": None,
+    "code": None,
+    "latency_ms": None,
+    "last_check_ts": 0.0,
+}
+HEALTH_CHECK_INTERVAL = 10  # re-check every 10 seconds, same cadence as DB status
+
+def http_health_check(timeout=2.0):
+    """Actually hit the running app over HTTP instead of just checking the port
+    is open — a hung/deadlocked process can still hold the socket open."""
+    host, port = parse_app_bind()
+    check_host = "127.0.0.1" if host in ("0.0.0.0", "::", "") else host
+    url = f"http://{check_host}:{port}/api/server/ping"
+    t0 = time.time()
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "OTP-Tool-HealthCheck"})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return True, r.status, int((time.time() - t0) * 1000)
+    except urllib.error.HTTPError as e:
+        # Any HTTP response (even 401 from the auth-gated ping route) proves
+        # the WSGI app is alive and answering requests.
+        return True, e.code, int((time.time() - t0) * 1000)
+    except Exception:
+        return False, None, int((time.time() - t0) * 1000)
+
+def maybe_refresh_health_status():
+    if not status()["running"]:
+        with HEALTH_STATUS_LOCK:
+            HEALTH_STATUS_CACHE["state"] = "idle"
+            HEALTH_STATUS_CACHE["ok"] = None
+            HEALTH_STATUS_CACHE["code"] = None
+            HEALTH_STATUS_CACHE["latency_ms"] = None
+        return
+
+    with HEALTH_STATUS_LOCK:
+        if HEALTH_STATUS_CACHE.get("state") == "checking":
+            return
+        if time.time() - HEALTH_STATUS_CACHE.get("last_check_ts", 0.0) < HEALTH_CHECK_INTERVAL:
+            return
+        HEALTH_STATUS_CACHE["state"] = "checking"
+
+    def worker():
+        ok, code, latency_ms = http_health_check()
+        with HEALTH_STATUS_LOCK:
+            HEALTH_STATUS_CACHE["state"] = "done"
+            HEALTH_STATUS_CACHE["ok"] = ok
+            HEALTH_STATUS_CACHE["code"] = code
+            HEALTH_STATUS_CACHE["latency_ms"] = latency_ms
+            HEALTH_STATUS_CACHE["last_check_ts"] = time.time()
+
+    threading.Thread(target=worker, daemon=True).start()
+
 def draw_header():
     ensure_settings_file()
     s = status()
@@ -1144,13 +1288,25 @@ def draw_header():
     cfg = read_settings()
     started_at = st.get("started_at") if s["running"] else None
     up = fmt_uptime(started_at)
-    _, term_h = get_terminal_size()
-    w = term_width()
+    tw, th = get_terminal_size()
 
-    stat        = green("RUNNING") if s["running"] else red("STOPPED")
+    stat        = green("● RUNNING") if s["running"] else red("● STOPPED")
     pid_txt     = str(s["pid"]) if s["running"] else "-"
     version_txt = read_local_version()
-    box_w       = 86
+
+    # Responsive breakpoints
+    is_very_narrow = tw < 55
+    is_narrow      = tw < 72
+    is_short       = th < 24
+    is_very_short  = th < 18
+
+    # Content block width — capped so it can be horizontally centered on wide terminals
+    if is_very_narrow:
+        box_w = max(40, tw - 2)
+    elif is_narrow:
+        box_w = max(50, tw - 2)
+    else:
+        box_w = min(max(60, tw - 4), 100)
 
     sep = gray("─" * box_w)
 
@@ -1161,7 +1317,7 @@ def draw_header():
         upd_error = BOOT_UPDATE_STATUS.get("error")
 
     if upd_state == "checking":
-        spin    = ["|", "/", "-", "\\"][int(time.time() * 6) % 4]
+        spin    = spinner_frame()
         upd_val = yellow(f"{spin} Checking...")
     elif upd_state == "done" and isinstance(upd_info, dict):
         if upd_info.get("update_available"):
@@ -1182,7 +1338,7 @@ def draw_header():
         int_msg  = DB_STATUS_CACHE.get("int_msg", "—")
 
     if db_state == "checking" and db_ok is None:
-        spin   = ["|", "/", "-", "\\"][int(time.time() * 6) % 4]
+        spin   = spinner_frame()
         db_val = yellow(f"{spin} Checking...")
         int_val = yellow(f"{spin} Checking...")
     else:
@@ -1200,6 +1356,24 @@ def draw_header():
         else:
             int_val = yellow("?") + f"  {int_msg}"
 
+    # ── live http health check ──────────────────────────────────────────
+    with HEALTH_STATUS_LOCK:
+        health_state = HEALTH_STATUS_CACHE.get("state")
+        health_ok    = HEALTH_STATUS_CACHE.get("ok")
+        health_code  = HEALTH_STATUS_CACHE.get("code")
+        health_ms    = HEALTH_STATUS_CACHE.get("latency_ms")
+
+    if not s["running"]:
+        health_val = gray("— not running")
+    elif health_state == "checking" and health_ok is None:
+        health_val = yellow(f"{spinner_frame()} Checking...")
+    elif health_ok is True:
+        health_val = green("✓") + f"  HTTP {health_code}  {gray(f'{health_ms}ms')}"
+    elif health_ok is False:
+        health_val = red("✗") + "  Not responding"
+    else:
+        health_val = gray("—")
+
     # ── system metrics ────────────────────────────────────────────────
     sysm        = get_system_metrics()
     cpu_pct     = sysm.get("cpu_pct")
@@ -1208,70 +1382,88 @@ def draw_header():
     disk_pct    = sysm.get("disk_pct")
     disk_detail = sysm.get("disk_detail")
 
+    bar_w = 10 if is_narrow else 16
+
     def bar_line(label, pct, detail=None):
-        name = f"{label:>4}"
-        bar_w = 16
         if pct is None:
             empty = gray("░" * bar_w)
-            return f"{bold(name)} : {empty}  n/a  {gray(detail) if detail else ''}".rstrip()
+            return f"{kv(label, empty)}  n/a  {gray(detail) if detail else ''}".rstrip()
         p    = int(round(clamp(pct)))
-        base = f"{bold(name)} : {progress_bar(p, width=bar_w)}  {p:>3d}%"
-        if detail:
+        base = kv(label, f"{progress_bar(p, width=bar_w)}  {p:>3d}%")
+        if detail and not is_narrow:
             base += f"  {gray(detail)}"
         return base
 
-    urls    = server_urls()
+    urls = server_urls()
 
-    status_row = (
-        f"{bold('Status')}: {stat}   "
-        f"{bold('PID')}: {pid_txt}   "
-        f"{bold('Uptime')}: {up}   "
-        f"{bold('Version')}: {gray(version_txt)}"
-    )
+    # Responsive status row — abbreviate on narrow terminals
+    if is_very_narrow:
+        status_row = f"{bold('Status')}: {stat}   {bold('v')}: {gray(version_txt)}"
+    elif is_narrow:
+        status_row = (
+            f"{bold('Status')}: {stat}   "
+            f"{bold('PID')}: {pid_txt}   "
+            f"{bold('v')}: {gray(version_txt)}"
+        )
+    else:
+        status_row = (
+            f"{bold('Status')}: {stat}   "
+            f"{bold('PID')}: {pid_txt}   "
+            f"{bold('Uptime')}: {up}   "
+            f"{bold('Version')}: {gray(version_txt)}"
+        )
 
     info_lines = [
         center_visible(status_row, box_w),
         sep,
-        f"{bold('Port')}    : {gray(str(cfg['port']))}",
-        f"{bold('Secret')}  : {gray(mask_secret(cfg['secret_key']))}",
-    ]
-    if urls:
-        info_lines.append(f"{bold('URL')}     : {gray('  '.join(urls))}")
-    info_lines += [
-        sep,
-        bar_line("CPU",  cpu_pct),
-        bar_line("RAM",  ram_pct,  ram_detail),
-        bar_line("Disk", disk_pct, disk_detail),
-        sep,
-        f"{bold('DB')}        : {db_val}",
-        f"{bold('Integrity')} : {int_val}",
-        f"{bold('Update ')}   : {upd_val}",
+        section_label("SERVER"),
+        kv("Port", gray(str(cfg['port']))),
     ]
 
-    clear()
-    ascii_h = len(ASCII_TITLE.splitlines())
-    box_h   = len(info_lines) + 4
-    total_h = ascii_h + 1 + box_h
-    top_pad = max(0, (term_h - total_h) // 2)
-    for _ in range(top_pad):
-        print("")
-    for row in ASCII_TITLE.splitlines():
-        pad = max(0, (w - len(row)) // 2)
-        print(" " * pad + lavender(row))
-    print("")
-    print_centered_box(
-        info_lines,
-        hint=("↵ Enter  Open menu", "X  Exit"),
-        width=box_w
-    )
+    if not is_very_narrow:
+        info_lines.append(kv("Secret", gray(mask_secret(cfg['secret_key']))))
+
+    info_lines.append(kv("Health", health_val))
+
+    if not is_very_narrow:
+        info_lines.append(kv("Update", upd_val))
+
+    if urls:
+        # Show only the first URL on narrow terminals to save space
+        url_str = urls[0] if is_narrow else "  ".join(urls)
+        info_lines.append(kv("URL", gray(url_str)))
+
+    # Resources section — hidden on very short screens
+    if not is_very_short:
+        info_lines += [
+            sep,
+            section_label("RESOURCES"),
+            bar_line("CPU",  cpu_pct),
+            bar_line("RAM",  ram_pct,  ram_detail),
+        ]
+        if not (is_short and is_narrow):
+            info_lines.append(bar_line("Disk", disk_pct, disk_detail))
+
+    # Database section — hidden on very short or very narrow screens
+    if not is_very_short and not is_very_narrow:
+        info_lines += [
+            sep,
+            section_label("DATABASE"),
+            kv("Schema", db_val),
+            kv("Integrity", int_val),
+        ]
+
+    hints = f"{cyan('↵')} Open menu   {gray('X')} Exit"
+    render_screen(None, info_lines, breadcrumb="Dashboard", hints=hints, big_title=True)
 
 def toast(msg, ok=True):
     tag = green("✓") if ok else red("✗")
-    print("")
-    print(f"{tag} {msg}")
-    print(dim("Press any key to continue..."), end="", flush=True)
+    msg_lines = str(msg or "").splitlines() or [""]
+    lines = [f"{tag} {msg_lines[0]}"]
+    for extra in msg_lines[1:]:
+        lines.append(gray(extra))
+    render_screen(None, lines, breadcrumb=None, hints=dim("Press any key to continue..."), big_title=True)
     wait_for_any_key()
-    print("")
 
 def read_last_lines(path, n=60):
     try:
@@ -1313,6 +1505,10 @@ def read_menu_key():
             return None
         if ch == "\x1b":
             return "esc"
+        if ch.lower() == "j":
+            return "down"
+        if ch.lower() == "k":
+            return "up"
         return ch.lower()
 
     if termios and tty and sys.stdin.isatty():
@@ -1353,6 +1549,10 @@ def read_menu_key():
                     if code == "B":
                         return "down"
                 return "esc"
+            if ch.lower() == "j":
+                return "down"
+            if ch.lower() == "k":
+                return "up"
             return ch.lower()
         finally:
             termios.tcsetattr(fd, termios.TCSADRAIN, old)
@@ -1442,32 +1642,47 @@ def read_line_allow_escape(prompt):
         return None
     return value
 
-def print_urls_line():
-    urls = server_urls()
-    if not urls:
-        return
-    print(lavender(hr()))
-    print(bold("URL") + "      : " + gray("  ".join(urls)))
+LOG_ERROR_RE  = re.compile(r"\b(CRITICAL|ERROR|Traceback \(most recent call last\)|Exception)\b")
+LOG_WARN_RE   = re.compile(r"\b(WARNING|WARN)\b")
+LOG_STATUS_RE = re.compile(r'"\s(\d{3})\s')
+
+def colorize_log_line(raw):
+    if not ANSI or not raw:
+        return raw
+    if LOG_ERROR_RE.search(raw):
+        return red(raw)
+    if LOG_WARN_RE.search(raw):
+        return yellow(raw)
+    m = LOG_STATUS_RE.search(raw)
+    if m:
+        code = int(m.group(1))
+        color = green if code < 300 else cyan if code < 400 else (yellow if code < 500 else red)
+        start, end = m.span(1)
+        return raw[:start] + color(m.group(1)) + raw[end:]
+    return raw
 
 def follow_log(path):
     ensure_log_file()
     mode = "tail"
     urls_text = "  ".join(server_urls())
+    breadcrumb = "Dashboard ▸ Menu ▸ Peek Terminal Output"
 
-    def show_tail():
-        n = max(10, min(22, term_height() - 14))
-        lines = read_last_lines(path, n)
-        body = []
-        if lines:
-            body.extend(lines)
+    def build_body():
+        extra = 2 if urls_text else 0
+        n = max(8, screen_body_height(big_title=False, has_footer=True) - extra)
+        raw = read_last_lines(path, n)
+        if raw:
+            body = [colorize_log_line(l) for l in raw]
         else:
-            body.append(dim("No terminal output yet."))
+            body = [dim("No terminal output yet.")]
         if urls_text:
             body.append("")
             body.append(f"{bold('URL')} : {gray(urls_text)}")
-        body.append("")
-        body.append(dim("Q/B/Esc = back    F = follow live    R = refresh"))
-        render_box("Terminal Output", body, "Use arrow-style menu keys here too.")
+        return body
+
+    def show_tail():
+        hints = f"{cyan('F')} Follow live   {cyan('R')} Refresh   {gray('Esc/B')} Back"
+        render_screen("Terminal Output", build_body(), breadcrumb=breadcrumb, hints=hints)
 
         key = read_menu_key()
         if key in ("q", "b", "esc"):
@@ -1478,20 +1693,8 @@ def follow_log(path):
 
     def show_follow():
         while True:
-            n = max(10, min(22, term_height() - 14))
-            lines = read_last_lines(path, n)
-            body = []
-            if lines:
-                body.extend(lines)
-            else:
-                body.append(dim("No terminal output yet."))
-            if urls_text:
-                body.append("")
-                body.append(f"{bold('URL')} : {gray(urls_text)}")
-            body.append("")
-            body.append(dim("LIVE MODE: auto-refresh"))
-            body.append(dim("Q/B/Esc = back    R = refresh now"))
-            render_box("Live Terminal Output", body, "Updates automatically.")
+            hints = f"{green('●')} LIVE   {cyan('R')} Refresh now   {gray('Esc/B')} Back"
+            render_screen("Terminal Output", build_body(), breadcrumb=breadcrumb, hints=hints)
 
             try:
                 if os.name == "nt" and msvcrt:
@@ -1530,22 +1733,6 @@ def follow_log(path):
             if cmd == "q":
                 continue
 
-def term_width():
-    try:
-        return max(MIN_LINE_WIDTH, shutil.get_terminal_size((80, 24)).columns)
-    except:
-        return MIN_LINE_WIDTH
-    
-def term_height():
-    try:
-        return max(12, shutil.get_terminal_size((80, 24)).lines)
-    except:
-        return 24
-    
-def hr(w=None):
-    w = w or term_width()
-    return "─" * w
-
 def run_with_spinner(label, fn, *args, **kwargs):
     if not ANSI:
         print(dim(f"{label}..."))
@@ -1554,7 +1741,6 @@ def run_with_spinner(label, fn, *args, **kwargs):
     done = threading.Event()
     result = {}
     error = {}
-    frames = ["|", "/", "-", "\\"]
 
     def worker():
         try:
@@ -1565,14 +1751,53 @@ def run_with_spinner(label, fn, *args, **kwargs):
             done.set()
 
     def spin():
-        i = 0
-        while not done.wait(0.1):
-            frame = frames[i % len(frames)]
-            text = f"\r{cyan(frame)} {label}..."
-            print(text, end="", flush=True)
-            i += 1
-        clear_line = "\r" + (" " * max(24, len(label) + 8)) + "\r"
-        print(clear_line, end="", flush=True)
+        start_t = time.time()
+        sys.stdout.write("\x1b[?25l")  # hide cursor
+        sys.stdout.write("\x1b[2J")    # clear once up front so no stale screen bleeds through
+        sys.stdout.flush()
+        last_size = None
+        try:
+            while not done.wait(0.08):
+                tw, th = get_terminal_size()
+                frame = spinner_frame(speed=10.0)
+                elapsed = time.time() - start_t
+
+                out = []
+                out.append("")
+                out.append("")
+                if tw >= ASCII_TITLE_W:
+                    for row in ASCII_TITLE.splitlines():
+                        pad = max(0, (tw - len(row)) // 2)
+                        out.append(pad_visible(" " * pad + lavender(row), tw))
+                else:
+                    out.append(center_visible(lavender(bold("OTP Manager")), tw))
+                out.append("")
+
+                spinner_block_h = 4
+                pad_top = max(0, (th - len(out) - spinner_block_h - 2) // 2)
+                for _ in range(pad_top):
+                    out.append("")
+
+                out.append(center_visible(f"{lavender(frame)}  {bold(label)}...", tw))
+                out.append(center_visible(gray(f"{elapsed:.1f}s elapsed"), tw))
+                out.append("")
+                out.append(center_visible(dim("Please wait  ·  Ctrl-C to abort"), tw))
+
+                while len(out) < th:
+                    out.append(" " * tw)
+                out = [pad_visible(ln, tw) for ln in out[:th]]
+
+                size = (tw, th)
+                if size != last_size:
+                    sys.stdout.write("\x1b[2J")  # terminal was resized: full redraw to avoid artifacts
+                    last_size = size
+                sys.stdout.write("\x1b[H")
+                sys.stdout.write("\n".join(out))
+                sys.stdout.flush()
+        finally:
+            sys.stdout.write("\x1b[?25h")  # show cursor
+            sys.stdout.flush()
+            clear()
 
     t_work = threading.Thread(target=worker, daemon=True)
     t_spin = threading.Thread(target=spin, daemon=True)
@@ -1620,17 +1845,15 @@ def _db_select_backup(db):
         return f"{delta // 86400}d ago"
 
     selected = 0
+    breadcrumb = "Dashboard ▸ Menu ▸ Database Tools ▸ Select Backup"
+    hints = f"{cyan('↑↓/jk')} Move   {cyan('↵')} Select   {gray('Esc')} Cancel"
     while True:
         lines = []
         for idx, (mtime, name, size, path) in enumerate(entries):
-            marker = "▶" if idx == selected else " "
             age = fmt_age(mtime) if mtime else "?"
             label = f"{name}  {dim(fmt_size(size))}  {gray(age)}"
-            line = f"{marker} {label}" if idx != selected else cyan(f"▶ {name}") + f"  {dim(fmt_size(size))}  {gray(age)}"
-            lines.append(line)
-        lines.append("")
-        lines.append(dim("↑/↓ to select   Enter to confirm   Esc/B to cancel"))
-        render_box("Select Backup to Restore", lines)
+            lines.append(menu_line(str(idx + 1), label, idx == selected, color="cyan"))
+        render_screen("Select Backup", lines, breadcrumb=breadcrumb, hints=hints)
 
         key = read_menu_key()
         if key == "up":
@@ -1653,7 +1876,7 @@ def _db_select_backup(db):
             conf_lines.append(f"  {dim('A security backup of the current DB will be saved first.')}")
             conf_lines.append("")
             conf_lines.append(dim("Press Y to confirm, any other key to cancel."))
-            render_box("Confirm Restore", conf_lines)
+            render_box("Menu ▸ Database Tools ▸ Confirm Restore", conf_lines)
             k = read_menu_key()
             if k == "y":
                 return path
@@ -1669,34 +1892,29 @@ def database_menu():
         return
 
     items = [
-        {"key": "1", "choice": "1", "label": "Check integrity"},
-        {"key": "2", "choice": "2", "label": "Repair database"},
-        {"key": "3", "choice": "3", "label": "Upgrade schema"},
-        {"key": "4", "choice": "4", "label": "Database statistics"},
-        {"key": "5", "choice": "5", "label": "Vacuum database"},
-        {"key": "6", "choice": "6", "label": "Reset all sessions"},
-        {"key": "7", "choice": "7", "label": "Create backup"},
-        {"key": "8", "choice": "8", "label": "List backups"},
-        {"key": "9", "choice": "9", "label": "Load backup"},
-        {"key": "B", "choice": "0", "label": "Back"},
+        {"key": "1", "choice": "1", "label": "Check integrity", "color": "cyan"},
+        {"key": "2", "choice": "2", "label": "Repair database", "color": "yellow"},
+        {"key": "3", "choice": "3", "label": "Upgrade schema", "color": "yellow"},
+        {"key": "4", "choice": "4", "label": "Database statistics", "color": "cyan"},
+        {"key": "5", "choice": "5", "label": "Vacuum database", "color": "cyan"},
+        {"key": "6", "choice": "6", "label": "Reset all sessions", "color": "red"},
+        {"key": "7", "choice": "7", "label": "Create backup", "color": "green"},
+        {"key": "8", "choice": "8", "label": "List backups", "color": "cyan"},
+        {"key": "9", "choice": "9", "label": "Load backup", "color": "red"},
+        {"key": "B", "choice": "0", "label": "Back", "color": "gray"},
     ]
 
     shortcuts = {it["key"].lower(): it["choice"] for it in items}
     shortcuts["q"] = "0"
     selected = 0
+    breadcrumb = "Dashboard ▸ Menu ▸ Database Tools"
+    hints = f"{cyan('↑↓/jk')} Move   {cyan('↵')} Select   {gray('Esc')} Back"
 
     while True:
         lines = []
         for idx, it in enumerate(items):
-            marker = "▶" if idx == selected else " "
-            label = f"{it['key']}  {it['label']}"
-            line = f"{marker} {label}"
-            if idx == selected:
-                line = cyan(line)
-            lines.append(line)
-        lines.append("")
-        lines.append(dim("Use ↑/↓ + Enter, or press 1-9/0 directly."))
-        render_box("Database Tools", lines, "Esc also goes back.")
+            lines.append(menu_line(it["key"], it["label"], idx == selected, color=it["color"]))
+        render_screen("Database Tools", lines, breadcrumb=breadcrumb, hints=hints)
 
         key = read_menu_key()
         if key == "up":
@@ -1754,9 +1972,11 @@ def database_menu():
                     out_lines.append(f"  {dim('Stop')}    : {gray(stop_msg)}")
                 if start_msg:
                     out_lines.append(f"  {dim('Restart')} : {gray(start_msg)}")
-            out_lines.append("")
-            out_lines.append(dim("Press any key to continue..."))
-            render_box("Restore Backup", out_lines)
+            render_screen(
+                "Restore Backup", out_lines,
+                breadcrumb="Dashboard ▸ Menu ▸ Database Tools ▸ Restore Backup",
+                hints=dim("any key: continue")
+            )
             wait_for_any_key()
             continue
 
@@ -1805,9 +2025,12 @@ def database_menu():
             "7": "Create Backup",
             "8": "List Backups",
         }
-        out_lines.append("")
-        out_lines.append(dim("Press any key to continue..."))
-        render_box(titles.get(choice, "Database Tools"), out_lines)
+        result_title = titles.get(choice, "Result")
+        render_screen(
+            result_title, out_lines,
+            breadcrumb=f"Dashboard ▸ Menu ▸ Database Tools ▸ {result_title}",
+            hints=dim("any key: continue")
+        )
         wait_for_any_key()
 
 
@@ -1815,38 +2038,33 @@ def settings_menu():
     ensure_settings_file()
 
     items = [
-        {"key": "1", "choice": "1", "label": "Set port"},
-        {"key": "2", "choice": "2", "label": "Set secret"},
-        {"key": "3", "choice": "3", "label": "Reset to defaults"},
-        {"key": "4", "choice": "4", "label": "Set version"},
-        {"key": "B", "choice": "0", "label": "Back"},
+        {"key": "1", "choice": "1", "label": "Set port", "color": "cyan"},
+        {"key": "2", "choice": "2", "label": "Set secret", "color": "cyan"},
+        {"key": "3", "choice": "3", "label": "Reset to defaults", "color": "red"},
+        {"key": "4", "choice": "4", "label": "Set version", "color": "cyan"},
+        {"key": "B", "choice": "0", "label": "Back", "color": "gray"},
     ]
 
     shortcuts = {it["key"]: it["choice"] for it in items}
     shortcuts["b"] = "0"
     shortcuts["q"] = "0"
     selected = 0
+    breadcrumb = "Dashboard ▸ Menu ▸ Settings"
+    hints = f"{cyan('↑↓/jk')} Move   {cyan('↵')} Select   {gray('Esc')} Back"
 
     while True:
         cfg = read_settings()
         lines = [
-            f"{bold('Current Port')}    : {gray(str(cfg['port']))}",
-            f"{bold('Current Secret')}  : {gray(mask_secret(cfg['secret_key']))}",
-            f"{bold('Current Version')} : {gray(read_local_version())}",
+            kv("Port", gray(str(cfg['port']))),
+            kv("Secret", gray(mask_secret(cfg['secret_key']))),
+            kv("Version", gray(read_local_version())),
             "",
         ]
 
         for idx, it in enumerate(items):
-            marker = "▶" if idx == selected else " "
-            label = f"{it['key']}  {it['label']}"
-            line = f"{marker} {label}"
-            if idx == selected:
-                line = cyan(line)
-            lines.append(line)
+            lines.append(menu_line(it["key"], it["label"], idx == selected, color=it["color"]))
 
-        lines.append("")
-        lines.append(dim("Use ↑/↓ + Enter, or press 1-4/0 directly."))
-        render_box("Settings", lines, "Esc also goes back.")
+        render_screen("Settings", lines, breadcrumb=breadcrumb, hints=hints)
 
         key = read_menu_key()
         if key == "up":
@@ -2072,71 +2290,138 @@ def menu_action(choice):
 
 def show_menu_once():
     s = status()
-
-    can_start = not s["running"]
-    can_stop = s["running"]
+    can_start  = not s["running"]
+    can_stop   = s["running"]
     can_update = not s["running"]
 
-    items = [
-        {"key": "S", "num": "1", "choice": "s", "label": "Start server", "enabled": can_start, "note": "(already running)"},
-        {"key": "T", "num": "2", "choice": "t", "label": "Stop server", "enabled": can_stop, "note": "(already stopped)"},
-        {"key": "L", "num": "3", "choice": "l", "label": "Peek terminal output", "enabled": True, "note": ""},
-        {"key": "C", "num": "4", "choice": "c", "label": "Check for updates", "enabled": True, "note": ""},
-        {"key": "U", "num": "5", "choice": "u", "label": "Update from GitHub", "enabled": can_update, "note": "(stop server first)"},
-        {"key": "G", "num": "6", "choice": "g", "label": "Settings", "enabled": True, "note": ""},
-        {"key": "D", "num": "7", "choice": "d", "label": "Database tools", "enabled": True, "note": ""},
-        {"key": "B", "num": "0", "choice": "b", "label": "Back to dashboard", "enabled": True, "note": ""},
-        {"key": "X", "num": "8", "choice": "x", "label": "Exit OTP Manager", "enabled": True, "note": ""},
+    sections = [
+        {
+            "label": "SERVER",
+            "items": [
+                {"key": "S", "num": "1", "choice": "s", "label": "Start server",
+                 "enabled": can_start,  "note": "(already running)",  "color": "green",
+                 "desc": "Launch the OTP web server"},
+                {"key": "T", "num": "2", "choice": "t", "label": "Stop server",
+                 "enabled": can_stop,   "note": "(already stopped)",  "color": "red",
+                 "desc": "Gracefully shut down the running server"},
+            ],
+        },
+        {
+            "label": "TOOLS",
+            "items": [
+                {"key": "L", "num": "3", "choice": "l", "label": "Peek terminal output",
+                 "enabled": True, "note": "", "color": "cyan",
+                 "desc": "Stream the live server log"},
+                {"key": "C", "num": "4", "choice": "c", "label": "Check for updates",
+                 "enabled": True, "note": "", "color": "cyan",
+                 "desc": "Query GitHub for a newer version"},
+                {"key": "U", "num": "5", "choice": "u", "label": "Update from GitHub",
+                 "enabled": can_update, "note": "(stop server first)", "color": "yellow",
+                 "desc": "Download and apply the latest release"},
+                {"key": "G", "num": "6", "choice": "g", "label": "Settings",
+                 "enabled": True, "note": "", "color": "cyan",
+                 "desc": "Configure port, secret key, and more"},
+                {"key": "D", "num": "7", "choice": "d", "label": "Database tools",
+                 "enabled": True, "note": "", "color": "cyan",
+                 "desc": "Backup, restore, and inspect the database"},
+            ],
+        },
+        {
+            "label": "NAVIGATION",
+            "items": [
+                {"key": "B", "num": "0", "choice": "b", "label": "Back to dashboard",
+                 "enabled": True, "note": "", "color": "gray",
+                 "desc": "Return to the status dashboard"},
+                {"key": "X", "num": "8", "choice": "x", "label": "Exit OTP Manager",
+                 "enabled": True, "note": "", "color": "gray",
+                 "desc": "Quit this management tool"},
+            ],
+        },
     ]
 
+    all_items = [it for sec in sections for it in sec["items"]]
+
     shortcuts = {}
-    for it in items:
-        shortcuts[it["choice"]] = it["choice"]
-        shortcuts[it["key"].lower()] = it["choice"]
-        shortcuts[it["num"]] = it["choice"]
+    for it in all_items:
+        shortcuts[it["choice"]]       = it["choice"]
+        shortcuts[it["key"].lower()]  = it["choice"]
+        shortcuts[it["num"]]          = it["choice"]
     shortcuts["q"] = "b"
 
-    selected = 0
+    selected  = 0
+    breadcrumb = "Dashboard ▸ Menu"
+    hints = f"{cyan('↑↓/jk')} Move   {cyan('↵')} Select   {gray('Esc')} Back"
 
     while True:
         lines = []
-        for idx, it in enumerate(items):
-            marker = "▶" if idx == selected else " "
-            base = f"{it['key']}  {it['label']}"
-            if it["note"] and not it["enabled"]:
-                base += f" {gray(it['note'])}"
-            line = f"{marker} {base}"
-            if idx == selected:
-                line = cyan(line)
-            if not it["enabled"]:
-                line = dim(line)
-            lines.append(line)
-        lines.append("")
-        lines.append(dim("Use ↑/↓ + Enter, or press shortcut keys directly."))
-        lines.append(dim("Shortcuts: 1=S, 2=T, 3=L, 4=C, 5=U, 6=G, 7=D, 0=B, X=Exit"))
+        item_idx = 0
+        for si, sec in enumerate(sections):
+            if si > 0:
+                lines.append("")
+            lines.append(section_label(sec["label"]))
+            for it in sec["items"]:
+                lines.append(menu_line(
+                    it["key"], it["label"], item_idx == selected,
+                    enabled=it["enabled"], note=it["note"],
+                    color=it["color"], desc=it.get("desc"),
+                ))
+                item_idx += 1
 
-        render_box("Menu", lines, "Esc also goes back.")
+        render_screen("Menu", lines, breadcrumb=breadcrumb, hints=hints)
         key = read_menu_key()
 
         if key == "up":
-            selected = (selected - 1) % len(items)
+            selected = (selected - 1) % len(all_items)
             continue
         if key == "down":
-            selected = (selected + 1) % len(items)
+            selected = (selected + 1) % len(all_items)
             continue
         if key == "enter":
-            return items[selected]["choice"]
+            return all_items[selected]["choice"]
         if key == "esc":
             return "b"
         if key in shortcuts:
             return shortcuts[key]
 
+def boot_animation():
+    if not ANSI:
+        return
+    tw, th = get_terminal_size()
+    rows = ASCII_TITLE.splitlines()
+    clear()
+    if tw >= ASCII_TITLE_W:
+        top_pad = max(0, (th - len(rows) - 3) // 2)
+        for _ in range(top_pad):
+            print("")
+        for row in rows:
+            pad = max(0, (tw - len(row)) // 2)
+            print(" " * pad + lavender(row))
+            time.sleep(0.035)
+    else:
+        top_pad = max(0, (th - 3) // 2)
+        for _ in range(top_pad):
+            print("")
+        print(center_visible(lavender(bold("OTP Manager")), tw))
+    print("")
+    label = "Initializing OTP Manager..."
+    t_end = time.time() + 0.5
+    while time.time() < t_end:
+        frame = spinner_frame(speed=10.0)
+        line = f"{lavender(frame)} {dim(label)}"
+        pad = max(0, (tw - visible_len(line)) // 2)
+        print("\r" + (" " * tw), end="")
+        print("\r" + (" " * pad) + line, end="", flush=True)
+        time.sleep(0.05)
+    print("\r" + (" " * tw) + "\r", end="", flush=True)
+
 def main():
     signal.signal(signal.SIGINT, lambda _sig, _frame: None)
     ensure_settings_file()
+    boot_animation()
     while True:
         maybe_trigger_update_check()
         maybe_refresh_db_status()
+        maybe_refresh_health_status()
         draw_header()
         wait_seconds = 5.0
         with BOOT_UPDATE_LOCK:
@@ -2144,6 +2429,9 @@ def main():
                 wait_seconds = 0.12
         with DB_STATUS_LOCK:
             if DB_STATUS_CACHE.get("state") == "checking" and DB_STATUS_CACHE.get("schema_ok") is None:
+                wait_seconds = min(wait_seconds, 0.12)
+        with HEALTH_STATUS_LOCK:
+            if HEALTH_STATUS_CACHE.get("state") == "checking" and HEALTH_STATUS_CACHE.get("ok") is None:
                 wait_seconds = min(wait_seconds, 0.12)
         key = _read_dashboard_key(wait_seconds)
         if key in ("x", "esc"):

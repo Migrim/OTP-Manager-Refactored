@@ -16,12 +16,12 @@
     </button>
   </div>
 
-  <div class="page-scroll">
-    <div style="max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:10px">
+  <div class="page-scroll" style="padding:10px;mask-image:none;-webkit-mask-image:none">
+    <div class="table-panel" id="users-extra-panel" style="position:absolute;top:5px;bottom:10px;left:0;right:0;max-width:1100px;margin:0 auto;border-radius:16px">
       <div class="table-head" style="grid-template-columns:1.6fr 1fr 128px">
         <div>Name</div><div>Role</div><div></div>
       </div>
-      <div class="table-panel" id="users-table"></div>
+      <div id="users-table"></div>
       <div class="empty-state" id="users-empty" style="display:none">
         <span class="ico" data-icon="users"></span>
         <div class="txt">No dashboard users yet</div>
