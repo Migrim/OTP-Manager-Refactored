@@ -207,7 +207,7 @@
       return '<div class="otp-error" title="Can\'t generate OTP code #ERR-004"><span class="ico">' + A.ICONS.warn + "</span> error</div>";
     }
     const digits = codeVisible(e) ? A.digitsHTML(e.current_code, animateDigits) : '<span class="digit" style="letter-spacing:2px">••••••</span>';
-    return '<span class="otp-code ' + extraClass + '" data-code-of="' + e.id + '" data-code="' + (codeVisible(e) ? A.escapeHtml(e.current_code) : "") + '" title="' + (codeVisible(e) ? "Copy code" : "Click to reveal") + '">' + digits + "</span>";
+    return '<span class="otp-code ' + extraClass + '" data-code-of="' + e.id + '" data-code="' + (codeVisible(e) ? A.escapeHtml(e.current_code) : "") + '" data-obscure-group title="' + (codeVisible(e) ? "Copy code" : "Click to reveal") + '">' + digits + "</span>";
   }
 
   function cardHTMLCodeFirst(e, isPinnedGroup) {
