@@ -358,7 +358,9 @@
     document.getElementById("card-style-list").innerHTML = CARD_STYLES.map(s =>
       '<button type="button" class="cs-opt' + (active === s.key ? " selected" : "") + '" data-style="' + s.key + '">' +
       cardStyleThumbHTML(s.key) +
-      '<div class="cs-opt-name">' + A.escapeHtml(s.name) + '</div>' +
+      '<div class="cs-opt-name">' + A.escapeHtml(s.name) +
+      (active === s.key ? '<span class="cs-selected-badge">' + A.ICONS.check + "</span>" : "") +
+      '</div>' +
       '<div class="cs-opt-desc">' + A.escapeHtml(s.desc) + '</div>' +
       '</button>'
     ).join("");

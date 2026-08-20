@@ -17,6 +17,7 @@
   --text-faint: #9a9da3;
   --danger: #dc2626;
   --ok: #1fa463;
+  --redact-bg: #eeeeee;
   color-scheme: light;
 }
 
@@ -31,6 +32,7 @@ html.dark-mode {
   --text: #f2f2f2;
   --text-dim: #a3a3a3;
   --text-faint: #707070;
+  --redact-bg: #151515;
   color-scheme: dark;
 }
 
@@ -61,6 +63,7 @@ html.dark-mode ::-webkit-scrollbar-thumb { background: #ffffff22; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes rowIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes sectionFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes cardFlyIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes toastOut { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(4px) scale(0.97); } }
 @keyframes sonnerIn { from { opacity: 0; transform: translateY(12px) scale(0.95); filter: blur(8px); } to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); } }
@@ -492,10 +495,13 @@ html.dark-mode select.text-input {
 
 .otp-section { margin: 0 auto 22px auto; max-width: 840px; }
 .otp-section.enter { animation: sectionFadeIn 0.4s ease-out; }
+.otp-section.enter .otp-card { animation: cardFlyIn 0.32s ease-out both; }
 .otp-section-head { display: flex; align-items: center; gap: 8px; padding: 10px 4px 8px 4px; background: var(--app-bg); }
 .otp-section-head .sec-title { font-size: 13.5px; font-weight: 700; color: var(--text); }
 .otp-section-head .sec-count {
-  font-size: 11.5px; color: var(--text-faint); background: var(--input-bg); border-radius: 20px; padding: 1px 8px;
+  font-size: 11.5px; color: var(--text-faint); background: var(--input-bg); border-radius: 5px;
+  display: flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; padding: 0; flex: none; line-height: 1;
 }
 .otp-section-head .sec-pin { width: 14px; height: 14px; display: flex; align-items: center; justify-content: center; flex: none; color: var(--accent); }
 .otp-section-head .sec-tool {
@@ -532,7 +538,7 @@ html.show-company-icons .otp-section-head .sec-tool { display: flex; }
 }
 .otp-name { min-width: 0; }
 .otp-name .nm { font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.otp-name .co { font-size: 11.5px; color: var(--text-faint); }
+.otp-name .co { font-size: 11.5px; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .otp-code-cell { display: flex; align-items: center; gap: 8px; }
 .otp-code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; letter-spacing: 0.04em;
@@ -558,7 +564,7 @@ html.show-company-icons .otp-section-head .sec-tool { display: flex; }
 .otp-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
 .otp-card { position: relative; }
 .otp-card .nm { font-weight: 600; color: var(--text); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.otp-card .co { font-size: 12.5px; color: var(--text-faint); }
+.otp-card .co { font-size: 12.5px; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .otp-card .card-check {
   position: absolute; top: 10px; right: 10px; pointer-events: none;
   opacity: 0; transform: scale(0.5);
@@ -575,6 +581,8 @@ html.show-company-icons .otp-section-head .sec-tool { display: flex; }
 .style-code-first:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
 .cf-head { display: flex; align-items: center; gap: 6px; margin-bottom: 7px; }
 .cf-name-wrap { min-width: 0; flex: 1; }
+.cf-name-wrap .nm { display: block; }
+.cf-name-wrap .co { display: block; margin-top: 1px; }
 .cf-more {
   display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; flex: none;
   border-radius: 6px; border: none; background: none; color: var(--text-faint); cursor: pointer; padding: 0;
@@ -637,8 +645,17 @@ html.show-company-icons .otp-section-head .sec-tool { display: flex; }
 .tr-meta span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .style-timer-rail .otp-secret { margin-top: 3px; }
 
-html.idle-hidden [data-obscure-group] .digit {
+html.idle-hidden [data-obscure-group] {
+  position: relative;
+  color: transparent;
   user-select: none;
+}
+html.idle-hidden [data-obscure-group]::before {
+  content: "";
+  position: absolute;
+  inset: -3px -4px;
+  background: var(--redact-bg);
+  border-radius: 4px;
 }
 
 .empty-state {
@@ -685,6 +702,22 @@ html.idle-hidden [data-obscure-group] .digit {
   position: fixed; min-width: 170px; background: var(--row-bg); border: 1px solid var(--border);
   border-radius: 10px; padding: 6px; z-index: 61;
   animation: toastIn 0.12s ease;
+}
+.ctx-menu[data-arrow]::before, .ctx-menu[data-arrow]::after {
+  content: ""; position: absolute; left: var(--arrow-x, 50%); transform: translateX(-50%);
+  border-style: solid; width: 0; height: 0;
+}
+.ctx-menu[data-placement="below"]::before {
+  top: -9px; border-width: 0 9px 9px 9px; border-color: transparent transparent var(--border) transparent;
+}
+.ctx-menu[data-placement="below"]::after {
+  top: -8px; border-width: 0 8px 8px 8px; border-color: transparent transparent var(--row-bg) transparent;
+}
+.ctx-menu[data-placement="above"]::before {
+  bottom: -9px; border-width: 9px 9px 0 9px; border-color: var(--border) transparent transparent transparent;
+}
+.ctx-menu[data-placement="above"]::after {
+  bottom: -8px; border-width: 8px 8px 0 8px; border-color: var(--row-bg) transparent transparent transparent;
 }
 .bulk-menu::before, .bulk-menu::after {
   content: ""; position: absolute; left: var(--arrow-x, 50%); transform: translateX(-50%);
@@ -1393,9 +1426,15 @@ html.dark-mode .toast-btn:hover { filter: brightness(1.2); }
   border: none; border-radius: 10px; background: none; cursor: pointer;
   font-family: inherit; color: inherit;
 }
-.cs-opt-name { font-size: 12.5px; font-weight: 600; color: var(--text); }
+.cs-opt-name { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--text); }
 .cs-opt.selected .cs-opt-name { color: var(--accent); }
 .cs-opt-desc { font-size: 11px; color: var(--text-dim); line-height: 1.4; }
+.cs-selected-badge {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 15px; height: 15px; border-radius: 50%;
+  background: var(--accent); color: #fff;
+}
+.cs-selected-badge svg { width: 9px; height: 9px; }
 
 /* thumbnails reuse the real .style-code-first / .style-copy-tile / .style-timer-rail
    card classes so the preview is a 1:1 match to the actual card — only the name/

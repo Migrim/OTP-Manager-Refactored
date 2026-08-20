@@ -172,8 +172,7 @@
 
   function actionsHTML(e) {
     let h = '<button class="icon-btn" data-copy="' + e.id + '" title="Copy"' + (!e.current_code ? " disabled" : "") + '><span class="ico">' + A.ICONS.copy + "</span></button>";
-    if (PERMS.canEdit) h += '<button class="icon-btn" data-edit="' + e.id + '" title="Edit"><span class="ico">' + A.ICONS.edit + "</span></button>";
-    if (PERMS.canDelete) h += '<button class="icon-btn danger" data-delete="' + e.id + '" title="Delete"><span class="ico">' + A.ICONS.trash + "</span></button>";
+    h += '<button class="icon-btn" data-more="' + e.id + '" title="More"><span class="ico">' + A.ICONS.dots + "</span></button>";
     return h;
   }
 
@@ -187,6 +186,10 @@
       (SHOW_EMAILS ? '<div class="otp-email" title="' + A.escapeHtml(e.email) + '">' + A.escapeHtml(!e.email || e.email === "none" ? "None" : e.email) + "</div>" : "") +
       secretCellHTML(e, false) +
       '<div class="otp-actions">' + actionsHTML(e) + "</div></div></div>";
+  }
+
+  function cardEnterStyle() {
+    return animateDigits ? ' style="animation-delay:' + Math.round(Math.random() * 350) + 'ms"' : "";
   }
 
   function cardCheckHTML(e) {
@@ -212,7 +215,7 @@
 
   function cardHTMLCodeFirst(e, isPinnedGroup) {
     const meta = cardMetaHTML(e);
-    return '<div class="otp-card style-code-first" data-ctx="' + e.id + '">' + cardCheckHTML(e) +
+    return '<div class="otp-card style-code-first" data-ctx="' + e.id + '"' + cardEnterStyle() + ">" + cardCheckHTML(e) +
       '<div class="cf-head">' +
       '<div class="cf-name-wrap"><span class="nm">' + A.escapeHtml(e.name) + "</span>" +
       (isPinnedGroup ? '<span class="co">' + A.escapeHtml(e.company_name || "") + "</span>" : "") +
@@ -228,7 +231,7 @@
 
   function cardHTMLCopyTile(e, isPinnedGroup) {
     const meta = cardMetaHTML(e);
-    return '<div class="otp-card style-copy-tile" data-ctx="' + e.id + '" data-copy="' + e.id + '"' + (!e.current_code ? "" : ' title="Copy code"') + ">" + cardCheckHTML(e) +
+    return '<div class="otp-card style-copy-tile" data-ctx="' + e.id + '" data-copy="' + e.id + '"' + (!e.current_code ? "" : ' title="Copy code"') + cardEnterStyle() + ">" + cardCheckHTML(e) +
       '<div class="ct-name">' + A.escapeHtml(e.name) + "</div>" +
       (isPinnedGroup ? '<div class="co">' + A.escapeHtml(e.company_name || "") + "</div>" : "") +
       '<div class="ct-code-row">' + cardCodeDigitsHTML(e, "ct-code") + "</div>" +
@@ -240,7 +243,7 @@
 
   function cardHTMLTimerRail(e, isPinnedGroup) {
     const meta = cardMetaHTML(e);
-    return '<div class="otp-card style-timer-rail" data-ctx="' + e.id + '">' + cardCheckHTML(e) +
+    return '<div class="otp-card style-timer-rail" data-ctx="' + e.id + '"' + cardEnterStyle() + ">" + cardCheckHTML(e) +
       '<div class="tr-rail"></div><div class="tr-rail-fill" style="height:' + barPct() + '"></div>' +
       '<div class="tr-head">' +
       '<div class="cf-name-wrap"><span class="nm">' + A.escapeHtml(e.name) + "</span>" +
@@ -491,7 +494,7 @@
     const moreBtn = e.target.closest("[data-more]");
     if (moreBtn) {
       const entry = entryById(moreBtn.getAttribute("data-more"));
-      if (entry) { const r = moreBtn.getBoundingClientRect(); openCtxMenu(entry, r.left, r.bottom + 4); }
+      if (entry) { const r = moreBtn.getBoundingClientRect(); openCtxMenu(entry, r.left, r.bottom + 10, r); }
       return;
     }
     const copyBtn = e.target.closest("[data-copy]");
@@ -500,10 +503,6 @@
       if (entry && entry.current_code) A.copyText(entry.current_code, "Copied code: " + entry.current_code);
       return;
     }
-    const editBtn = e.target.closest("[data-edit]");
-    if (editBtn) { openEdit(entryById(editBtn.getAttribute("data-edit"))); return; }
-    const delBtn = e.target.closest("[data-delete]");
-    if (delBtn) { openDelete(+delBtn.getAttribute("data-delete")); return; }
     const coFilter = e.target.closest("[data-co-filter]");
     if (coFilter) {
       companyFilter = coFilter.getAttribute("data-co-filter");
@@ -571,7 +570,7 @@
   function closeCtx() {
     if (ctxEls) { ctxEls.forEach(el => el.remove()); ctxEls = null; }
   }
-  function openCtxMenu(entry, clientX, clientY) {
+  function openCtxMenu(entry, clientX, clientY, anchorRect) {
     closeCtx();
     const isPinned = pinned.has(String(entry.id));
     const backdrop = document.createElement("div");
@@ -596,10 +595,25 @@
       '<button class="ctx-item" data-act="export"><span class="ico">' + A.ICONS.exportIco + "</span>Export as PDF</button>" +
       (PERMS.canDelete ? '<div class="ctx-sep"></div><button class="ctx-item danger" data-act="delete"><span class="ico">' + A.ICONS.trash + "</span>Delete</button>" : "");
     const menuW = 180, menuH = 220;
-    let x = clientX, y = clientY;
+    const anchorCx = anchorRect ? (anchorRect.left + anchorRect.right) / 2 : null;
+    let x = anchorRect ? anchorCx - menuW / 2 : clientX, y, placement = null;
+    if (anchorRect) {
+      const spaceBelow = window.innerHeight - anchorRect.bottom;
+      if (spaceBelow >= menuH + 10 || anchorRect.top < menuH + 10) { placement = "below"; y = anchorRect.bottom + 10; }
+      else { placement = "above"; y = anchorRect.top - menuH - 10; }
+    } else {
+      y = clientY;
+    }
     if (x + menuW > window.innerWidth) x = window.innerWidth - menuW - 8;
+    if (x < 8) x = 8;
     if (y + menuH > window.innerHeight) y = window.innerHeight - menuH - 8;
+    if (y < 8) y = 8;
     menu.style.left = x + "px"; menu.style.top = y + "px";
+    if (anchorRect) {
+      menu.setAttribute("data-arrow", "");
+      menu.setAttribute("data-placement", placement);
+      menu.style.setProperty("--arrow-x", Math.max(22, Math.min(menuW - 22, anchorCx - x)) + "px");
+    }
     menu.addEventListener("click", e2 => {
       const btn = e2.target.closest("[data-act]");
       if (!btn) return;

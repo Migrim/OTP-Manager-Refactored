@@ -1202,51 +1202,18 @@
     else if (e.key === "Enter") { if (cmdk.items[cmdk.index]) cmdkSelect(cmdk.items[cmdk.index]); }
   });
 
-  /* ---------- idle code obfuscation (replaces the old full-panel blur) ---------- */
-
-  const SCRAMBLE_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  function scrambleChars(len) {
-    let s = "";
-    for (let i = 0; i < len; i++) s += SCRAMBLE_CHARS[(Math.random() * SCRAMBLE_CHARS.length) | 0];
-    return s;
-  }
+  /* ---------- idle code redaction (replaces the old full-panel blur) ----------
+     Purely CSS-driven: toggling .idle-hidden on <html> paints a redaction bar
+     over each [data-obscure-group] element (see app.css). No per-frame JS work
+     and the underlying digits are never touched, so nothing needs restoring. */
 
   let idleHidden = false;
   let idleArmTimer = null;
-  let scrambleInterval = null;
-
-  function obscureDigits() {
-    const leaves = [];
-    document.querySelectorAll("[data-obscure-group] .digit").forEach(d => leaves.push(d));
-    return leaves;
-  }
-
-  function obscureTick() {
-    obscureDigits().forEach(el => {
-      if (el.dataset.real === undefined) el.dataset.real = el.textContent;
-      el.textContent = scrambleChars(el.dataset.real.length || 1);
-    });
-  }
-
-  function restoreObscured() {
-    document.querySelectorAll("[data-obscure-group] .digit[data-real]").forEach(el => {
-      el.textContent = el.dataset.real;
-      delete el.dataset.real;
-    });
-  }
 
   function setIdleHidden(v) {
     if (idleHidden === v) return;
     idleHidden = v;
     document.documentElement.classList.toggle("idle-hidden", v);
-    if (v) {
-      obscureTick();
-      scrambleInterval = setInterval(obscureTick, 80);
-    } else {
-      clearInterval(scrambleInterval);
-      scrambleInterval = null;
-      restoreObscured();
-    }
   }
 
   function idleDelaySeconds() {
