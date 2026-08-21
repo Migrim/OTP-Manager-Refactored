@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en"
-      class="{{ 'dark-mode' if request.cookies.get('theme') == 'dark' else '' }} {{ 'sidebar-closed' if request.cookies.get('sidebar') == 'closed' else '' }} {{ 'show-company-icons' if user_settings.get('show_search_and_link') else '' }} {{ 'blur-on-inactive' if user_settings.get('blur_on_inactive') else '' }}">
+      class="{{ 'dark-mode' if request.cookies.get('theme') == 'dark' else '' }} {{ 'sidebar-closed' if request.cookies.get('sidebar') == 'closed' else '' }} {{ 'show-company-icons' if user_settings.get('show_search_and_link') else '' }} {{ 'blur-on-inactive' if user_settings.get('blur_on_inactive') else '' }} {{ 'full-width-layout' if user_settings.get('full_width_layout') else '' }}">
 <head>
     <meta charset="UTF-8">
     <script>

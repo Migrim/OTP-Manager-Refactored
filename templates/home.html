@@ -27,7 +27,7 @@
   </div>
 
   <div class="page-scroll" id="home-scroll" style="padding:6px 22px 40px 22px">
-    <div style="max-width:1100px;margin:0 auto" id="home-content">
+    <div id="home-content">
     </div>
   </div>
 
@@ -113,6 +113,41 @@
   const topbar = document.getElementById("home-topbar");
   const searchInput = document.getElementById("home-search");
   const filterSelect = document.getElementById("company-filter");
+
+  /* perf: the countdown ring/bar for every card is animated every rAF frame (~60fps).
+     With hundreds of cards that means thousands of DOM writes/frame even for cards
+     scrolled out of view. IntersectionObserver tracks which [data-ctx] cards are
+     actually on screen so the per-frame loop only touches those; a WeakMap caches
+     each card's timer sub-elements so we don't re-query the DOM every frame either. */
+  const visibleCards = new Set();
+  const timerRefs = new WeakMap();
+  const cardObserver = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) visibleCards.add(entry.target);
+      else visibleCards.delete(entry.target);
+    });
+  }, { root: scroller, rootMargin: "600px 0px" });
+
+  function observeCards() {
+    cardObserver.disconnect();
+    visibleCards.clear();
+    content.querySelectorAll("[data-ctx]").forEach(card => cardObserver.observe(card));
+  }
+
+  function getTimerRefs(card) {
+    let r = timerRefs.get(card);
+    if (!r) {
+      r = {
+        ring: card.querySelector(".ring"),
+        textTimer: card.querySelector(".text-timer"),
+        barFill: card.querySelector(".cf-bar-fill, .ct-bar-fill"),
+        railFill: card.querySelector(".tr-rail-fill"),
+        trSeconds: card.querySelector(".tr-seconds"),
+      };
+      timerRefs.set(card, r);
+    }
+    return r;
+  }
 
   const params = new URLSearchParams(window.location.search);
   if (params.get("q")) { query = params.get("q"); searchInput.value = query; }
@@ -343,7 +378,8 @@
     content.innerHTML = html;
     sectionsKey = sectionsKeyOf(pinnedEntries, names, byCompany);
     animateDigits = false;
-    updateTimers();
+    observeCards();
+    updateTimers(true);
     renderBulkBar();
     topbar.style.display = secrets.length ? "" : "none";
     scroller.classList.toggle("no-anim", !filtered.length && !secrets.length);
@@ -360,7 +396,10 @@
     });
   }
 
-  function updateTimers() {
+  /* full=true updates every card (used right after a render/patch rebuild so newly
+     created cards start in the correct state); the per-frame tick loop calls this
+     with full=false so only cards currently on screen (visibleCards) get touched. */
+  function updateTimers(full) {
     let ringRemaining = remaining;
     if (refillStart !== null) {
       const t = (Date.now() - refillStart) / REFILL_MS;
@@ -371,13 +410,17 @@
         ringRemaining = eased * remaining;
       }
     }
-    content.querySelectorAll(".ring").forEach(svg => A.setRing(svg, ringRemaining, PERIOD));
     const label = Math.ceil(remaining) + "s";
-    content.querySelectorAll(".text-timer").forEach(el => { if (el.textContent !== label) el.textContent = label; });
     const pct = Math.max(0, Math.min(100, (ringRemaining / PERIOD) * 100)) + "%";
-    content.querySelectorAll(".cf-bar-fill, .ct-bar-fill").forEach(el => { el.style.width = pct; });
-    content.querySelectorAll(".tr-rail-fill").forEach(el => { el.style.height = pct; });
-    content.querySelectorAll(".tr-seconds").forEach(el => { if (el.textContent !== label) el.textContent = label; });
+    const cards = full ? content.querySelectorAll("[data-ctx]") : visibleCards;
+    cards.forEach(card => {
+      const r = getTimerRefs(card);
+      if (r.ring) A.setRing(r.ring, ringRemaining, PERIOD);
+      if (r.textTimer && r.textTimer.textContent !== label) r.textTimer.textContent = label;
+      if (r.barFill) r.barFill.style.width = pct;
+      if (r.railFill) r.railFill.style.height = pct;
+      if (r.trSeconds && r.trSeconds.textContent !== label) r.trSeconds.textContent = label;
+    });
   }
 
   let companyFilterKey = null;
@@ -437,7 +480,11 @@
 
   /* ---------- interactions ---------- */
 
-  searchInput.addEventListener("input", () => { query = searchInput.value; render(); });
+  let searchDebounceTimer = null;
+  searchInput.addEventListener("input", () => {
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => { query = searchInput.value; render(); }, 150);
+  });
   filterSelect.addEventListener("change", () => { companyFilter = filterSelect.value; render(); });
   const searchAC = A.attachAutocomplete(searchInput, () => {
     const c = [];
@@ -451,6 +498,7 @@
 
   function clearSearchAndFilters() {
     if (!query && !companyFilter) return;
+    clearTimeout(searchDebounceTimer);
     query = ""; companyFilter = "";
     searchInput.value = ""; filterSelect.value = "";
     searchAC.refresh();

@@ -493,7 +493,10 @@ html.dark-mode select.text-input {
 
 /* ---------- OTP sections (home) ---------- */
 
+#home-content { max-width: 1100px; margin: 0 auto; }
+html.full-width-layout #home-content { max-width: none; }
 .otp-section { margin: 0 auto 22px auto; max-width: 840px; }
+html.full-width-layout .otp-section { max-width: none; }
 .otp-section.enter { animation: sectionFadeIn 0.4s ease-out; }
 .otp-section.enter .otp-card { animation: cardFlyIn 0.32s ease-out both; }
 .otp-section-head { display: flex; align-items: center; gap: 8px; padding: 10px 4px 8px 4px; background: var(--app-bg); }

@@ -116,7 +116,8 @@ def init_db():
                 only_pinned_in_sidebar INTEGER DEFAULT 0,
                 bg_animation_style TEXT DEFAULT 'turbulence',
                 bg_animation_intensity INTEGER DEFAULT 100,
-                blur_on_inactive_delay INTEGER DEFAULT 60
+                blur_on_inactive_delay INTEGER DEFAULT 60,
+                full_width_layout INTEGER DEFAULT 0
             )
         """)
         db.commit()
@@ -140,6 +141,7 @@ _REQUIRED_USER_COLUMNS = [
     "show_including_admin_on_top", "hide_codes_by_default", "hide_secret_field",
     "show_search_and_link", "show_pinned_in_sidebar", "only_pinned_in_sidebar",
     "bg_animation_style", "bg_animation_intensity", "blur_on_inactive_delay",
+    "full_width_layout",
 ]
 
 _REQUIRED_TABLE_COLUMNS = {

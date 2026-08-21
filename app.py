@@ -376,6 +376,7 @@ def row_to_settings(row):
         "bg_animation_style": row[24] or "turbulence",
         "bg_animation_intensity": int(row[25]) if row[25] is not None else 100,
         "blur_on_inactive_delay": int(row[26]) if row[26] is not None else 60,
+        "full_width_layout": int(row[27] or 0),
     }
 
 def _is_rate_limited(ip: str) -> float | None:
@@ -445,7 +446,7 @@ def load_user():
                     pinned, show_timer, show_otp_type, show_emails, show_company,
                     blur_on_inactive, show_including_admin_on_top, hide_codes_by_default, hide_secret_field,
                     show_search_and_link, show_pinned_in_sidebar, only_pinned_in_sidebar, bg_animation_style,
-                    bg_animation_intensity, blur_on_inactive_delay
+                    bg_animation_intensity, blur_on_inactive_delay, full_width_layout
                 FROM users
                 WHERE id = ?
             """, (g.user_id,))
@@ -483,6 +484,7 @@ def load_user():
                     "bg_animation_style": row[24] or "turbulence",
                     "bg_animation_intensity": int(row[25]) if row[25] is not None else 100,
                     "blur_on_inactive_delay": int(row[26]) if row[26] is not None else 60,
+                    "full_width_layout": int(row[27] or 0),
                 }
 
 @app.context_processor
@@ -677,7 +679,7 @@ def settings():
                     pinned, show_timer, show_otp_type, show_emails, show_company,
                     blur_on_inactive, show_including_admin_on_top, hide_codes_by_default,
                     hide_secret_field, show_search_and_link, show_pinned_in_sidebar, only_pinned_in_sidebar,
-                    bg_animation_style, bg_animation_intensity, blur_on_inactive_delay
+                    bg_animation_style, bg_animation_intensity, blur_on_inactive_delay, full_width_layout
                 FROM users WHERE id = ?
             """, (session["user_id"],))
         row = cursor.fetchone()
@@ -724,6 +726,7 @@ def update_settings():
             if data.get("bg_animation_style") in ("contours", "streaks", "turbulence") else "turbulence",
         "bg_animation_intensity": bg_animation_intensity,
         "blur_on_inactive_delay": blur_on_inactive_delay,
+        "full_width_layout": flag("full_width_layout"),
     }
     try:
         with sqlite3.connect(DB_PATH) as db:
@@ -744,7 +747,8 @@ def update_settings():
                     only_pinned_in_sidebar = ?,
                     bg_animation_style = ?,
                     bg_animation_intensity = ?,
-                    blur_on_inactive_delay = ?
+                    blur_on_inactive_delay = ?,
+                    full_width_layout = ?
                 WHERE id = ?
                 """,
                 (
@@ -762,6 +766,7 @@ def update_settings():
                     payload["bg_animation_style"],
                     payload["bg_animation_intensity"],
                     payload["blur_on_inactive_delay"],
+                    payload["full_width_layout"],
                     g.user_id,
                 ),
             )
@@ -1019,6 +1024,7 @@ _SCHEMA_COLUMN_DEFAULTS = {
     "users.bg_animation_style": "TEXT DEFAULT 'turbulence'",
     "users.bg_animation_intensity": "INTEGER DEFAULT 100",
     "users.blur_on_inactive_delay": "INTEGER DEFAULT 60",
+    "users.full_width_layout": "INTEGER DEFAULT 0",
     "companies.login_enabled": "INTEGER DEFAULT 0",
 }
 

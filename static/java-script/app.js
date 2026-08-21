@@ -1266,12 +1266,10 @@
     if (sidebarPinned.refreshing || !document.getElementById("sidebar-pinned")) return;
     sidebarPinned.refreshing = true;
     try {
-      const [pinnedIds, secrets] = await Promise.all([
-        fetchJSON("/api/user-pinned"),
-        fetchJSON("/api/secrets"),
-      ]);
-      const idSet = new Set((pinnedIds || []).map(String));
-      sidebarPinned.secrets = (secrets || []).filter(s => idSet.has(String(s.id)));
+      const pinnedIds = await fetchJSON("/api/user-pinned");
+      const ids = [...new Set((pinnedIds || []).map(String))];
+      const secrets = ids.length ? await fetchJSON("/api/secrets?ids=" + ids.join(",")) : [];
+      sidebarPinned.secrets = secrets || [];
       sidebarPinned.fetchedAt = Date.now();
       sidebarPinned.baseRemaining = sidebarPinned.secrets.length
         ? Math.max(0, Math.min(30, sidebarPinned.secrets[0].seconds_remaining)) : 30;

@@ -134,6 +134,7 @@
     blur_on_inactive_delay: [0, 10, 30, 60].includes(SERVER.blur_on_inactive_delay) ? SERVER.blur_on_inactive_delay : 60,
     show_pinned_in_sidebar: !!SERVER.show_pinned_in_sidebar,
     only_pinned_in_sidebar: !!SERVER.only_pinned_in_sidebar,
+    full_width_layout: !!SERVER.full_width_layout,
     bg_animation_style: SERVER.bg_animation_style || "turbulence",
     bg_animation_intensity: Number.isFinite(SERVER.bg_animation_intensity) ? SERVER.bg_animation_intensity : 100,
   };
@@ -142,6 +143,7 @@
     { key: "show_timer", label: "Simple Text-Timer", desc: "Display a simple text timer instead of the circular timer on the OTP Containers on the home screen." },
     { key: "show_emails", label: "Show Emails", desc: "Displays the email address associated with the OTP." },
     { key: "show_search_and_link", label: "Show company link & search icons", desc: "Shows a link icon and a search icon next to each company section title on the home screen for quick navigation." },
+    { key: "full_width_layout", label: "Full-width home screen", desc: "Removes the width cap on the OTP home screen so secrets, codes, and company containers stretch to fill the entire screen." },
   ];
   const BEHAVIOR = [
     { key: "show_including_admin_on_top", label: 'Show "admin" entries first', desc: 'Entries whose name contains "admin" will appear at the top — both on the home screen and in company search results.' },

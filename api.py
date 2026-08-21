@@ -170,16 +170,39 @@ def get_username(uid):
 @api_bp.route("/secrets", methods=["GET"])
 def get_all_secrets():
     t0 = time.perf_counter()
+    ids_param = request.args.get("ids")
+    id_list = None
+    if ids_param is not None:
+        id_list = []
+        for part in ids_param.split(","):
+            part = part.strip()
+            if part.isdigit():
+                id_list.append(int(part))
     with sqlite3.connect(DB_PATH) as db:
         cursor = db.cursor()
-        cursor.execute("""
-            SELECT 
-                s.id, s.name, s.email, s.secret, s.otp_type, s.refresh_time, s.company_id,
-                c.name AS company_name
-            FROM otp_secrets s
-            LEFT JOIN companies c ON s.company_id = c.company_id
-        """)
-        rows = cursor.fetchall()
+        if id_list is not None:
+            if id_list:
+                placeholders = ",".join("?" * len(id_list))
+                cursor.execute("""
+                    SELECT
+                        s.id, s.name, s.email, s.secret, s.otp_type, s.refresh_time, s.company_id,
+                        c.name AS company_name
+                    FROM otp_secrets s
+                    LEFT JOIN companies c ON s.company_id = c.company_id
+                    WHERE s.id IN (%s)
+                """ % placeholders, id_list)
+                rows = cursor.fetchall()
+            else:
+                rows = []
+        else:
+            cursor.execute("""
+                SELECT
+                    s.id, s.name, s.email, s.secret, s.otp_type, s.refresh_time, s.company_id,
+                    c.name AS company_name
+                FROM otp_secrets s
+                LEFT JOIN companies c ON s.company_id = c.company_id
+            """)
+            rows = cursor.fetchall()
     out = []
     now = int(time.time())
     for row in rows:
