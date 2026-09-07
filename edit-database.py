@@ -244,7 +244,7 @@ def upgrade_database():
         "blur_on_inactive", "show_including_admin_on_top",
         "hide_codes_by_default", "hide_secret_field", "show_search_and_link",
         "show_pinned_in_sidebar", "only_pinned_in_sidebar", "bg_animation_style",
-        "bg_animation_intensity", "blur_on_inactive_delay"
+        "bg_animation_intensity", "blur_on_inactive_delay", "full_width_layout"
     ]
 
     if any(col not in columns for col in required_columns):
@@ -281,7 +281,8 @@ def upgrade_database():
                 only_pinned_in_sidebar INTEGER DEFAULT 0,
                 bg_animation_style TEXT DEFAULT 'turbulence',
                 bg_animation_intensity INTEGER DEFAULT 100,
-                blur_on_inactive_delay INTEGER DEFAULT 60
+                blur_on_inactive_delay INTEGER DEFAULT 60,
+                full_width_layout INTEGER DEFAULT 0
             )
         """)
 
@@ -297,9 +298,9 @@ def upgrade_database():
                 blur_on_inactive, show_including_admin_on_top,
                 hide_codes_by_default, hide_secret_field, show_search_and_link,
                 show_pinned_in_sidebar, only_pinned_in_sidebar, bg_animation_style,
-                bg_animation_intensity, blur_on_inactive_delay
+                bg_animation_intensity, blur_on_inactive_delay, full_width_layout
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
 
         migrated = 0
@@ -333,7 +334,8 @@ def upgrade_database():
                 int(data.get("only_pinned_in_sidebar", 0) or 0),
                 data.get("bg_animation_style", "turbulence") or "turbulence",
                 int(data.get("bg_animation_intensity", 100) or 100),
-                int(data.get("blur_on_inactive_delay", 60) or 60)
+                int(data.get("blur_on_inactive_delay", 60) or 60),
+                int(data.get("full_width_layout", 0) or 0)
             ))
             migrated += 1
 
@@ -386,6 +388,10 @@ def upgrade_database():
         cur.execute("ALTER TABLE users ADD COLUMN blur_on_inactive_delay INTEGER DEFAULT 60")
         print(f"  {green('✓')} Added column: {gray('blur_on_inactive_delay')}")
         changed = True
+    if "full_width_layout" not in columns:
+        cur.execute("ALTER TABLE users ADD COLUMN full_width_layout INTEGER DEFAULT 0")
+        print(f"  {green('✓')} Added column: {gray('full_width_layout')}")
+        changed = True
 
     # Remove deprecated columns via full table rebuild
     deprecated = [c for c in ("show_content_titles", "alert_color", "text_color") if c in columns]
@@ -422,7 +428,8 @@ def upgrade_database():
                 only_pinned_in_sidebar INTEGER DEFAULT 0,
                 bg_animation_style TEXT DEFAULT 'turbulence',
                 bg_animation_intensity INTEGER DEFAULT 100,
-                blur_on_inactive_delay INTEGER DEFAULT 60
+                blur_on_inactive_delay INTEGER DEFAULT 60,
+                full_width_layout INTEGER DEFAULT 0
             )
         """)
         keep = [
@@ -433,7 +440,7 @@ def upgrade_database():
             "blur_on_inactive", "show_including_admin_on_top",
             "hide_codes_by_default", "hide_secret_field", "show_search_and_link",
             "show_pinned_in_sidebar", "only_pinned_in_sidebar", "bg_animation_style",
-            "bg_animation_intensity", "blur_on_inactive_delay",
+            "bg_animation_intensity", "blur_on_inactive_delay", "full_width_layout",
         ]
         cols_to_copy = [c for c in keep if c in old_columns]
         col_list = ", ".join(cols_to_copy)
@@ -596,7 +603,7 @@ def check_schema_needs_update():
         "blur_on_inactive", "show_including_admin_on_top",
         "hide_codes_by_default", "hide_secret_field", "show_search_and_link",
         "show_pinned_in_sidebar", "only_pinned_in_sidebar", "bg_animation_style",
-        "bg_animation_intensity", "blur_on_inactive_delay"
+        "bg_animation_intensity", "blur_on_inactive_delay", "full_width_layout"
     ]
     deprecated_cols   = ["show_content_titles", "alert_color", "text_color"]
     deprecated_tables = ["statistics"]
