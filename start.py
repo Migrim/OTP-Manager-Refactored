@@ -1,5 +1,6 @@
 import os
 import sys
+import io
 import time
 import json
 import signal
@@ -424,7 +425,6 @@ def ensure_schema_current():
         db = _load_db_module()
         if not db.check_schema_needs_update():
             return False, None
-        import io
         buf = io.StringIO()
         old_stdout = sys.stdout
         sys.stdout = buf
@@ -1733,28 +1733,59 @@ def follow_log(path):
             if cmd == "q":
                 continue
 
-def run_with_spinner(label, fn, *args, **kwargs):
+def run_with_spinner(label, fn, *args, capture_output=False, **kwargs):
+    """Run fn behind the same boot-style dot-matrix spinner used at startup.
+
+    With capture_output=True, fn's stdout is captured (rather than left to
+    print over the spinner screen) and the captured text is returned; any
+    exception fn raises is caught and appended to that text instead of
+    propagating, matching how the database tools used to swallow errors into
+    their result screen.
+    """
     if not ANSI:
         print(dim(f"{label}..."))
+        if capture_output:
+            buf = io.StringIO()
+            old_stdout = sys.stdout
+            sys.stdout = buf
+            try:
+                fn(*args, **kwargs)
+            except Exception as e:
+                print(f"  {red('✗')} {e}", file=buf)
+            finally:
+                sys.stdout = old_stdout
+            return buf.getvalue()
         return fn(*args, **kwargs)
 
     done = threading.Event()
     result = {}
     error = {}
+    term = sys.stdout  # real terminal stream, captured before fn can redirect sys.stdout
 
     def worker():
-        try:
-            result["value"] = fn(*args, **kwargs)
-        except Exception as e:
-            error["exc"] = e
-        finally:
-            done.set()
+        if capture_output:
+            buf = io.StringIO()
+            old_stdout = sys.stdout
+            sys.stdout = buf
+            try:
+                fn(*args, **kwargs)
+            except Exception as e:
+                print(f"  {red('✗')} {e}", file=buf)
+            finally:
+                sys.stdout = old_stdout
+            result["value"] = buf.getvalue()
+        else:
+            try:
+                result["value"] = fn(*args, **kwargs)
+            except Exception as e:
+                error["exc"] = e
+        done.set()
 
     def spin():
         start_t = time.time()
-        sys.stdout.write("\x1b[?25l")  # hide cursor
-        sys.stdout.write("\x1b[2J")    # clear once up front so no stale screen bleeds through
-        sys.stdout.flush()
+        term.write("\x1b[?25l")  # hide cursor
+        term.write("\x1b[2J")    # clear once up front so no stale screen bleeds through
+        term.flush()
         last_size = None
         try:
             while not done.wait(0.08):
@@ -1789,14 +1820,14 @@ def run_with_spinner(label, fn, *args, **kwargs):
 
                 size = (tw, th)
                 if size != last_size:
-                    sys.stdout.write("\x1b[2J")  # terminal was resized: full redraw to avoid artifacts
+                    term.write("\x1b[2J")  # terminal was resized: full redraw to avoid artifacts
                     last_size = size
-                sys.stdout.write("\x1b[H")
-                sys.stdout.write("\n".join(out))
-                sys.stdout.flush()
+                term.write("\x1b[H")
+                term.write("\n".join(out))
+                term.flush()
         finally:
-            sys.stdout.write("\x1b[?25h")  # show cursor
-            sys.stdout.flush()
+            term.write("\x1b[?25h")  # show cursor
+            term.flush()
             clear()
 
     t_work = threading.Thread(target=worker, daemon=True)
@@ -1946,22 +1977,16 @@ def database_menu():
             if server_was_running:
                 _, stop_msg = run_with_spinner("Stopping server", stop_server)
 
-            import io
-            buf = io.StringIO()
-            old_stdout = sys.stdout
-            sys.stdout = buf
-            try:
-                db.restore_backup_file(restore_path)
-            except Exception as e:
-                print(f"  {red('✗')} {e}")
-            finally:
-                sys.stdout = old_stdout
+            output = run_with_spinner(
+                "Restoring backup", db.restore_backup_file, restore_path,
+                capture_output=True
+            )
 
             start_msg = None
             if server_was_running:
                 _, start_msg = run_with_spinner("Restarting server", start_server)
 
-            out_lines = buf.getvalue().splitlines()
+            out_lines = output.splitlines()
             while out_lines and not out_lines[0].strip():
                 out_lines.pop(0)
             while out_lines and not out_lines[-1].strip():
@@ -1980,11 +2005,19 @@ def database_menu():
             wait_for_any_key()
             continue
 
-        import io
-        buf = io.StringIO()
-        old_stdout = sys.stdout
-        sys.stdout = buf
-        try:
+        titles = {
+            "1": "Integrity Check",
+            "2": "Repair Database",
+            "3": "Upgrade Schema",
+            "4": "Database Statistics",
+            "5": "Vacuum Database",
+            "6": "Reset All Sessions",
+            "7": "Create Backup",
+            "8": "List Backups",
+        }
+        result_title = titles.get(choice, "Result")
+
+        def _run_choice():
             if choice == "1":
                 db.check_integrity()
             elif choice == "2":
@@ -2004,28 +2037,13 @@ def database_menu():
                     print(f"  {yellow('!')} Schema is outdated — run {bold('Upgrade Schema')} to update.")
             elif choice == "8":
                 db.list_backups()
-        except Exception as e:
-            print(f"  {red('✗')} {e}")
-        finally:
-            sys.stdout = old_stdout
 
-        out_lines = buf.getvalue().splitlines()
+        output = run_with_spinner(result_title, _run_choice, capture_output=True)
+        out_lines = output.splitlines()
         while out_lines and not out_lines[0].strip():
             out_lines.pop(0)
         while out_lines and not out_lines[-1].strip():
             out_lines.pop()
-
-        titles = {
-            "1": "Integrity Check",
-            "2": "Repair Database",
-            "3": "Upgrade Schema",
-            "4": "Database Statistics",
-            "5": "Vacuum Database",
-            "6": "Reset All Sessions",
-            "7": "Create Backup",
-            "8": "List Backups",
-        }
-        result_title = titles.get(choice, "Result")
         render_screen(
             result_title, out_lines,
             breadcrumb=f"Dashboard ▸ Menu ▸ Database Tools ▸ {result_title}",
