@@ -19,7 +19,7 @@
     arrowUp: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     send: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 12h15M13 6l7 6-7 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     collapse: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="15" rx="3" stroke="currentColor" stroke-width="1.6"/><path d="M9.5 4.5v15" stroke="currentColor" stroke-width="1.6"/></svg>',
-    info: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"/><path d="M12 11v5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="8" r="1" fill="currentColor"/></svg>',
+    info: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="3.5" y="3.5" width="17" height="17" stroke="currentColor" stroke-width="1.6"/><path d="M12 11v5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="8" r="1" fill="currentColor"/></svg>',
     check: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M5 13l4.5 4.5L19.5 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     xmark: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
     logs: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
@@ -486,7 +486,7 @@
     return (getComputedStyle(document.documentElement).getPropertyValue("--accent") || "#a15c93").trim();
   }
   function asciiBgColor() {
-    return (getComputedStyle(document.documentElement).getPropertyValue("--app-bg") || "#fafafa").trim();
+    return (getComputedStyle(document.documentElement).getPropertyValue("--bg") || "#f5f5f2").trim();
   }
 
   function asciiOptListHTML(selected) {
@@ -1254,7 +1254,10 @@
     const list = sidebarPinned.secrets || [];
     el.innerHTML = list.map(s =>
       '<button class="sidebar-pin-row" data-pin-id="' + s.id + '" type="button" title="' + escapeHtml(s.name) + '">' +
+      '<span class="sidebar-pin-info">' +
       '<span class="sidebar-pin-name">' + escapeHtml(s.name) + "</span>" +
+      (s.company_name ? '<span class="sidebar-pin-company">' + escapeHtml(s.company_name) + "</span>" : "") +
+      "</span>" +
       (s.current_code
         ? '<span class="sidebar-pin-code" data-obscure-group>' + digitsHTML(s.current_code, false) + "</span>"
         : '<span class="sidebar-pin-error" title="Can\'t generate OTP code #ERR-004"><span class="ico">' + ICONS.warn + "</span> error</span>") +

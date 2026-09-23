@@ -7,7 +7,7 @@
 <div class="page">
   <div class="page-topbar">
     <div style="display:flex;align-items:center;gap:8px;padding-left:14px;overflow:hidden">
-      <span style="font-size:12px;font-weight:600;color:var(--text-dim);flex:none;white-space:nowrap">Database</span>
+      <span style="font-size:12px;font-weight:600;color:var(--dim);flex:none;white-space:nowrap">Database</span>
       <span id="db-size-top" style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;letter-spacing:-0.5px;color:var(--accent);white-space:nowrap;overflow:hidden"></span>
     </div>
     <div class="topbar-spacer"></div>
@@ -35,6 +35,63 @@
       </div>
 
       <div id="db-tasks"></div>
+
+      {% if is_licensed %}
+      <div class="task-card" id="sync-card">
+        <div class="task-main">
+          <span class="task-ico" data-icon="lock"></span>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span class="task-title">Remote Sync</span>
+            </div>
+            <div class="task-desc">Pushes an end-to-end encrypted copy of this database to another endpoint. Both sides use the same secret to encrypt and decrypt — the plaintext database never leaves this machine.</div>
+          </div>
+          <button class="switch" id="sync-enabled" type="button"><span class="knob"></span></button>
+        </div>
+
+        <div style="display:flex;gap:12px;margin-top:14px">
+          <div style="flex:1;min-width:0">
+            <label class="field-label-sm">Endpoint</label>
+            <input class="text-input mono" id="sync-endpoint" placeholder="https://otp-backup.example.com" autocomplete="off">
+          </div>
+          <div style="width:150px;flex:none">
+            <label class="field-label-sm">Push every</label>
+            <div style="position:relative">
+              <input class="text-input padded" id="sync-interval" type="number" min="1" max="24" step="1" value="1">
+              <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--dim)">hr</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px">
+          <label class="field-label-sm">Shared Secret</label>
+          <div style="position:relative">
+            <input class="text-input mono padded" type="password" id="sync-secret" placeholder="Shared secret used to encrypt and decrypt" autocomplete="off">
+            <button id="sync-secret-toggle" type="button" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);padding:5px 9px;border-radius:6px;border:none;background:none;color:var(--dim);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Show</button>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">
+            <div class="task-desc" style="margin:0">Same secret must be set on the counterpart — see the setup notes it comes with.</div>
+            <button id="sync-secret-generate" type="button" class="btn-outline" style="padding:4px 10px;font-size:11px;flex:none">Generate</button>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:10px;margin-top:16px;padding-top:14px;border-top:1px solid var(--edge);flex-wrap:wrap">
+          <div style="flex:1;min-width:180px">
+            <div class="task-desc" style="margin:0" id="sync-next-push">Automatic push is off</div>
+            <div class="task-desc" style="margin:2px 0 0 0" id="sync-last-push"></div>
+          </div>
+          <button class="btn-outline" id="sync-check" type="button" style="padding:8px 14px;display:flex;align-items:center;gap:8px">
+            <span class="spinner sm" id="sync-check-spinner" style="display:none"></span>
+            <span id="sync-check-label">Check Connection</span>
+          </button>
+          <button class="btn-outline" id="sync-push-now" type="button" style="padding:8px 14px;display:flex;align-items:center;gap:8px">
+            <span class="spinner sm" id="sync-push-spinner" style="display:none"></span>
+            <span id="sync-push-label">Push Now</span>
+          </button>
+          <button class="btn-accent" id="sync-save" type="button" style="padding:8px 16px">Save</button>
+        </div>
+      </div>
+      {% endif %}
 
       <div class="collapse-card" id="backups-card" style="margin-top:6px">
         <button class="collapse-head" id="backups-toggle" type="button">
@@ -108,10 +165,10 @@
 
   function renderStatus(key) {
     const st = taskState[key] || "idle";
-    if (st === "running") return '<div class="task-status" style="color:var(--text-dim)"><span class="spinner sm"></span>Running…</div>';
+    if (st === "running") return '<div class="task-status" style="color:var(--dim)"><span class="spinner sm"></span>Running…</div>';
     if (st === "done") return '<div class="task-status" style="color:var(--ok)"><span style="width:13px;height:13px;display:flex">' + A.ICONS.check + "</span>Done</div>";
     if (st === "error") return '<div class="task-status" style="color:var(--danger)"><span style="width:13px;height:13px;display:flex">' + A.ICONS.xmark + "</span>Failed</div>";
-    return '<div class="task-status" style="color:var(--text-faint)"><span class="status-dot"></span>Idle</div>';
+    return '<div class="task-status" style="color:var(--dim)"><span class="status-dot"></span>Idle</div>';
   }
 
   function renderTasks() {
@@ -156,7 +213,7 @@
       '<div style="flex:1;min-width:0"><div class="b-name">' + A.escapeHtml(b.name) + '</div><div class="b-meta">' + A.escapeHtml(b.date) + " · " + A.escapeHtml(b.size) + "</div></div>" +
       (loadingBackup === b.name ? '<div class="spinner sm"></div>' : '<button class="b-load" data-load="' + A.escapeHtml(b.name) + '" type="button">Load</button>') +
       "</div>"
-    ).join("") || '<div style="padding:16px;font-size:12.5px;color:var(--text-faint);border-top:1px solid var(--border)">No backups yet</div>';
+    ).join("") || '<div style="padding:16px;font-size:12.5px;color:var(--dim);border-top:1px solid var(--edge)">No backups yet</div>';
   }
 
   async function refreshBackups() {
@@ -194,6 +251,145 @@
 
   renderTasks();
   renderBackups();
+
+  /* remote sync */
+  (function () {
+    if (!document.getElementById("sync-card")) return;
+    const endpointInput = document.getElementById("sync-endpoint");
+    const secretInput = document.getElementById("sync-secret");
+    const intervalInput = document.getElementById("sync-interval");
+    const enabledSwitch = document.getElementById("sync-enabled");
+    const nextPushEl = document.getElementById("sync-next-push");
+    const lastPushEl = document.getElementById("sync-last-push");
+    let enabled = false;
+    let status = null;
+
+    function setBtnBusy(idPrefix, busy, busyText, idleText) {
+      const btn = document.getElementById(idPrefix);
+      const spinner = document.getElementById(idPrefix + "-spinner");
+      const label = document.getElementById(idPrefix + "-label");
+      btn.disabled = busy;
+      spinner.style.display = busy ? "flex" : "none";
+      label.textContent = busy ? busyText : idleText;
+    }
+
+    function fmtDuration(totalSeconds) {
+      const s = Math.max(0, Math.round(totalSeconds));
+      const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+      if (h > 0) return h + "h " + m + "m";
+      if (m > 0) return m + "m";
+      return "less than a minute";
+    }
+
+    function fmtAgo(epochSeconds) {
+      const s = Math.max(0, Math.round(Date.now() / 1000 - epochSeconds));
+      if (s < 60) return "just now";
+      const m = Math.floor(s / 60);
+      if (m < 60) return m + "m ago";
+      const h = Math.floor(m / 60);
+      if (h < 24) return h + "h ago";
+      return Math.floor(h / 24) + "d ago";
+    }
+
+    function renderTimers() {
+      if (!status) return;
+      if (status.enabled && status.next_push_at) {
+        const diff = status.next_push_at - Date.now() / 1000;
+        nextPushEl.textContent = diff <= 0 ? "Next push starting shortly…" : "Next push in " + fmtDuration(diff);
+      } else {
+        nextPushEl.textContent = "Automatic push is off";
+      }
+      if (status.last_push_at) {
+        lastPushEl.textContent = "Last push " + fmtAgo(status.last_push_at) + " — " +
+          (status.last_push_ok ? "succeeded" : "failed: " + (status.last_push_message || "unknown error"));
+        lastPushEl.style.color = status.last_push_ok ? "" : "var(--danger)";
+      } else {
+        lastPushEl.textContent = "Never pushed yet";
+        lastPushEl.style.color = "";
+      }
+    }
+
+    function applyStatus(res) {
+      status = res;
+      endpointInput.value = res.endpoint || "";
+      secretInput.value = res.secret || "";
+      intervalInput.value = res.interval_hours || 1;
+      enabled = !!res.enabled;
+      enabledSwitch.classList.toggle("on", enabled);
+      renderTimers();
+    }
+
+    async function loadStatus() {
+      try {
+        applyStatus(await A.fetchJSON("/api/sync/status"));
+      } catch (err) { A.toast(err.message, "error"); }
+    }
+
+    document.getElementById("sync-secret-toggle").addEventListener("click", function () {
+      const show = secretInput.type === "password";
+      secretInput.type = show ? "text" : "password";
+      this.textContent = show ? "Hide" : "Show";
+    });
+
+    document.getElementById("sync-secret-generate").addEventListener("click", async () => {
+      try {
+        const res = await A.fetchJSON("/api/sync/generate-secret", { method: "POST" });
+        secretInput.value = res.secret;
+        secretInput.type = "text";
+        document.getElementById("sync-secret-toggle").textContent = "Hide";
+        A.toast("New secret generated — click Save, then set the same secret on the counterpart");
+      } catch (err) { A.toast(err.message, "error"); }
+    });
+
+    enabledSwitch.addEventListener("click", () => {
+      enabled = !enabled;
+      enabledSwitch.classList.toggle("on", enabled);
+    });
+
+    document.getElementById("sync-save").addEventListener("click", async () => {
+      const saveBtn = document.getElementById("sync-save");
+      saveBtn.disabled = true;
+      try {
+        const res = await A.fetchJSON("/api/sync/save", {
+          method: "POST",
+          body: {
+            endpoint: endpointInput.value.trim(),
+            secret: secretInput.value,
+            interval_hours: parseInt(intervalInput.value, 10) || 1,
+            enabled: enabled,
+          },
+        });
+        applyStatus(res);
+        A.toast("Remote sync settings saved");
+      } catch (err) { A.toast(err.message, "error"); } finally { saveBtn.disabled = false; }
+    });
+
+    document.getElementById("sync-check").addEventListener("click", async () => {
+      const endpoint = endpointInput.value.trim();
+      const secret = secretInput.value;
+      if (!endpoint || !secret) { A.toast("Enter an endpoint and a secret first", "error"); return; }
+      setBtnBusy("sync-check", true, "Checking…", "Check Connection");
+      try {
+        const res = await A.fetchJSON("/api/sync/test-connection", { method: "POST", body: { endpoint, secret } });
+        if (res.ok) A.toast(res.message + " (" + res.latency_ms + "ms)");
+        else A.toast(res.message, "error");
+      } catch (err) { A.toast(err.message, "error"); }
+      setBtnBusy("sync-check", false, "Checking…", "Check Connection");
+    });
+
+    document.getElementById("sync-push-now").addEventListener("click", async () => {
+      setBtnBusy("sync-push-now", true, "Pushing…", "Push Now");
+      try {
+        const res = await A.fetchJSON("/api/sync/push-now", { method: "POST" });
+        applyStatus(res);
+        A.toast("Database pushed");
+      } catch (err) { A.toast(err.message, "error"); }
+      setBtnBusy("sync-push-now", false, "Pushing…", "Push Now");
+    });
+
+    setInterval(renderTimers, 15000);
+    loadStatus();
+  })();
 })();
 </script>
 {% endblock %}

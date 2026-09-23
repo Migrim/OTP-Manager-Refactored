@@ -236,7 +236,9 @@
     return A.escapeHtml(!e.email || e.email === "none" ? "None" : e.email);
   }
 
-  function barPct() { return Math.max(0, Math.min(100, (remaining / PERIOD) * 100)) + "%"; }
+  /* transform-based (not width/height) so the per-frame update below is a compositor-only
+     paint instead of a layout-triggering reflow on every visible card, every frame */
+  function barScale() { return Math.max(0, Math.min(1, remaining / PERIOD)); }
 
   /* code digits for card layouts: data-code-of's innerHTML must stay exactly what
      A.digitsHTML/digitsHTMLUpdate produce, since patchCodes() replaces it wholesale */
@@ -260,7 +262,7 @@
       '<div class="cf-code-row">' + cardCodeDigitsHTML(e, "cf-code") + "</div>" +
       (meta ? '<div class="cf-meta" title="' + A.escapeHtml(e.email) + '">' + meta + "</div>" : "") +
       secretCellHTML(e, true) +
-      '<div class="cf-bar"><div class="cf-bar-fill" style="width:' + barPct() + '"></div></div>' +
+      '<div class="cf-bar"><div class="cf-bar-fill" style="transform:scaleX(' + barScale() + ')"></div></div>' +
       "</div>";
   }
 
@@ -270,7 +272,7 @@
       '<div class="ct-name">' + A.escapeHtml(e.name) + "</div>" +
       (isPinnedGroup ? '<div class="co">' + A.escapeHtml(e.company_name || "") + "</div>" : "") +
       '<div class="ct-code-row">' + cardCodeDigitsHTML(e, "ct-code") + "</div>" +
-      '<div class="ct-bar"><div class="ct-bar-fill" style="width:' + barPct() + '"></div></div>' +
+      '<div class="ct-bar"><div class="ct-bar-fill" style="transform:scaleX(' + barScale() + ')"></div></div>' +
       (meta ? '<div class="ct-meta" title="' + A.escapeHtml(e.email) + '">' + meta + "</div>" : "") +
       secretCellHTML(e, true) +
       "</div>";
@@ -279,7 +281,7 @@
   function cardHTMLTimerRail(e, isPinnedGroup) {
     const meta = cardMetaHTML(e);
     return '<div class="otp-card style-timer-rail" data-ctx="' + e.id + '"' + cardEnterStyle() + ">" + cardCheckHTML(e) +
-      '<div class="tr-rail"></div><div class="tr-rail-fill" style="height:' + barPct() + '"></div>' +
+      '<div class="tr-rail"></div><div class="tr-rail-fill" style="transform:scaleY(' + barScale() + ')"></div>' +
       '<div class="tr-head">' +
       '<div class="cf-name-wrap"><span class="nm">' + A.escapeHtml(e.name) + "</span>" +
       (isPinnedGroup ? '<span class="co">' + A.escapeHtml(e.company_name || "") + "</span>" : "") +
@@ -411,14 +413,14 @@
       }
     }
     const label = Math.ceil(remaining) + "s";
-    const pct = Math.max(0, Math.min(100, (ringRemaining / PERIOD) * 100)) + "%";
+    const ratio = Math.max(0, Math.min(1, ringRemaining / PERIOD));
     const cards = full ? content.querySelectorAll("[data-ctx]") : visibleCards;
     cards.forEach(card => {
       const r = getTimerRefs(card);
       if (r.ring) A.setRing(r.ring, ringRemaining, PERIOD);
       if (r.textTimer && r.textTimer.textContent !== label) r.textTimer.textContent = label;
-      if (r.barFill) r.barFill.style.width = pct;
-      if (r.railFill) r.railFill.style.height = pct;
+      if (r.barFill) r.barFill.style.transform = "scaleX(" + ratio + ")";
+      if (r.railFill) r.railFill.style.transform = "scaleY(" + ratio + ")";
       if (r.trSeconds && r.trSeconds.textContent !== label) r.trSeconds.textContent = label;
     });
   }

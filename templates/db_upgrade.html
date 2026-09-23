@@ -4,13 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Database Upgrade Required</title>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500&display=swap">
     <style>
+        :root {
+            --bg: #08080a; --ink: #edece7; --dim: #9a9a95;
+            --line: #232326; --edge: #2c2c30;
+            --warn: #d3925f; --warn-border: #8a5a3d;
+            --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
+            --font-sans: ui-sans-serif, -apple-system, 'Helvetica Neue', Helvetica, sans-serif;
+            --font-display: 'Instrument Sans', ui-sans-serif, -apple-system, sans-serif;
+        }
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: #f5f5f5;
-            color: #111;
+            font-family: var(--font-sans);
+            background: var(--bg);
+            color: var(--ink);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -19,40 +29,41 @@
         }
 
         .card {
-            background: #fff;
-            border: 1px solid #e5e5e5;
-            border-radius: 14px;
-            padding: 2.5rem 2rem;
+            border: 1px solid var(--edge);
+            padding: 2.75rem 2.25rem;
             max-width: 480px;
             width: 100%;
             text-align: center;
         }
 
         .icon {
-            font-size: 3rem;
-            margin-bottom: 1.25rem;
+            width: 42px; height: 42px; margin: 0 auto 1.5rem;
+            display: flex; align-items: center; justify-content: center;
+            border: 1px solid var(--warn-border); color: var(--warn);
         }
 
         h1 {
-            font-size: 1.25rem;
-            font-weight: 700;
+            font-family: var(--font-display);
+            font-weight: 400;
+            font-size: 22px;
+            letter-spacing: -0.015em;
             margin-bottom: 0.75rem;
         }
 
         p {
-            font-size: 0.9rem;
-            color: #555;
+            font-size: 13.5px;
+            color: var(--dim);
             line-height: 1.6;
             margin-bottom: 1.5rem;
         }
 
         .command-block {
-            background: #1a1a1a;
-            color: #e8e8e8;
-            border-radius: 8px;
-            padding: 0.85rem 1.2rem;
-            font-family: "SF Mono", "Fira Code", "Consolas", monospace;
-            font-size: 0.85rem;
+            background: none;
+            border: 1px solid var(--edge);
+            color: var(--ink);
+            padding: 0.85rem 1rem;
+            font-family: var(--font-mono);
+            font-size: 12.5px;
             text-align: left;
             margin-bottom: 1.5rem;
             user-select: all;
@@ -60,21 +71,23 @@
         }
 
         .hint {
-            font-size: 0.78rem;
-            color: #999;
+            font-size: 12px;
+            color: var(--dim);
         }
     </style>
 </head>
 <body>
     <div class="card">
-        <div class="icon">⚠️</div>
+        <div class="icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M12 8v5M12 17v.01"></path><circle cx="12" cy="12" r="9"></circle></svg>
+        </div>
         <h1>Database Upgrade Required</h1>
         <p>
             The database schema is out of date. The application cannot start until
             the upgrade is applied. On the server, open the OTP Dashboard via SSH
             and follow these steps:
         </p>
-        <div class="command-block">Main Menu → Database Tools → Upgrade Schema</div>
+        <div class="command-block">Main Menu &rarr; Database Tools &rarr; Upgrade Schema</div>
         <p class="hint">
             After the upgrade completes, restart the server and reload this page.
         </p>

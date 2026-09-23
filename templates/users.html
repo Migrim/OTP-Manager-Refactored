@@ -17,7 +17,7 @@
   </div>
 
   <div class="page-scroll" style="padding:10px;mask-image:none;-webkit-mask-image:none">
-    <div class="table-panel" id="users-extra-panel" style="position:absolute;top:5px;bottom:10px;left:0;right:0;max-width:1100px;margin:0 auto;border-radius:16px">
+    <div class="table-panel" id="users-extra-panel" style="position:absolute;top:5px;bottom:10px;left:0;right:0;max-width:1100px;margin:0 auto">
       <div class="table-head" style="grid-template-columns:1.6fr 1fr 128px">
         <div>Name</div><div>Role</div><div></div>
       </div>
@@ -162,7 +162,7 @@
       return '<div class="table-row" style="grid-template-columns:1.6fr 1fr 128px">' +
         '<div class="row-title" style="display:flex;align-items:center;gap:10px">' +
         '<span class="profile-avatar md">' + (u.avatar_url ? '<img src="' + A.escapeHtml(u.avatar_url) + '" alt="">' : '<span class="profile-avatar-fallback">' + A.escapeHtml(initials) + '</span>') + '</span>' +
-        '<span>' + A.escapeHtml(u.name) + (u.id === CURRENT_USER_ID ? ' <span style="color:var(--text-faint);font-weight:500">(you)</span>' : "") + '</span>' +
+        '<span>' + A.escapeHtml(u.name) + (u.id === CURRENT_USER_ID ? ' <span style="color:var(--dim);font-weight:500">(you)</span>' : "") + '</span>' +
         "</div>" +
         '<div class="row-dim">' + roleLabel(u) + "</div>" +
         '<div class="row-actions">' +

@@ -27,6 +27,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}One-Auth - OTP Tool{% endblock %}</title>
     <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500&display=swap">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles/app.css') }}">
     <script src="{{ url_for('static', filename='java-script/app.js') }}"></script>
     {% block head %}{% endblock %}
@@ -80,9 +82,11 @@
       <a href="/database" class="nav-item {{ 'active' if active_page == 'database' else '' }}">
         <span class="nav-ico" data-icon="database"></span><span class="nav-label">Database</span>
       </a>
+      {% if is_licensed %}
       <a href="/webaccess" class="nav-item {{ 'active' if active_page == 'webaccess' else '' }}">
         <span class="nav-ico" data-icon="globe"></span><span class="nav-label">Web Access</span>
       </a>
+      {% endif %}
       <a href="/server" class="nav-item {{ 'active' if active_page == 'server' else '' }}">
         <span class="nav-ico" data-icon="wrench"></span><span class="nav-label">Server Config</span>
         <span class="nav-dot" id="update-dot" style="display:none"></span>
@@ -98,7 +102,7 @@
     <div class="sidebar-spacer"></div>
     <div class="sidebar-copy">
       &copy; {{ current_year }} OTP-Tool by One-Auth.net
-      {% if company_brand %}<br>Licensed for {{ company_brand }}{% endif %}
+      {% if is_licensed %}<br>Licensed for {{ company_brand }}{% endif %}
     </div>
     <div class="sidebar-foot">
       <div class="sidebar-profile">

@@ -6,15 +6,17 @@ import sys
 import shutil
 import uuid
 import urllib.request
+import urllib.error
 import subprocess
 import signal
 import struct
-from datetime import datetime
+from datetime import datetime, timezone
 import time
 from functools import wraps
 from api import api_bp
 from extensions import bcrypt
 from logger import logger
+import sync
 import threading
 from flask_socketio import SocketIO, emit, join_room, disconnect
 from database import (
@@ -260,15 +262,83 @@ def load_app_settings():
     except:
         port = defaults["port"]
     secret_key = str(os.environ.get("OTP_SECRET_KEY") or data.get("secret_key") or defaults["secret_key"]).strip() or defaults["secret_key"]
+    license_key = str(data.get("license_key") or "").strip()
     company_name = str(data.get("company_name") or "").strip()
+    contact_email = str(data.get("contact_email") or "").strip()
+    expires_at = data.get("expires_at") or None
     return {
         "host": host,
         "port": port,
         "secret_key": secret_key,
-        "company_name": company_name
+        "license_key": license_key,
+        "company_name": company_name,
+        "contact_email": contact_email,
+        "expires_at": expires_at
     }
 
 APP_SETTINGS = load_app_settings()
+
+LICENSE_API_URL = "https://www.one-auth.net/api/v1/licenses/verify"
+LICENSE_API_KEY = "fWC_L4Tyt9sdoAEiUHzdpXtPdIQCrqGY7uK__pnpKP4"
+LICENSE_PRODUCT = "otp-tool"
+LICENSE_REASON_MESSAGES = {
+    "missing_key": "Enter a license key",
+    "not_found": "License key not found",
+    "revoked": "This license was revoked",
+    "expired": "This license has expired",
+    "unauthorized": "Server is not authorized to verify licenses",
+    "rate_limited": "Too many license checks — try again in a minute",
+    "unreachable": "Could not reach the license server",
+}
+
+def verify_license(key):
+    """Verify a license key against the one-auth licensing service.
+    Returns (True, response_dict) on a valid license, or (False, reason) otherwise."""
+    key = (key or "").strip()
+    if not key:
+        return False, "missing_key"
+    req = urllib.request.Request(
+        LICENSE_API_URL,
+        data=json.dumps({"key": key, "product": LICENSE_PRODUCT}).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "OTP-Tool/" + get_app_version(),
+            "X-License-Api-Key": LICENSE_API_KEY,
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=8) as res:
+            body = json.loads(res.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        raw = e.read()
+        try:
+            body = json.loads(raw.decode("utf-8"))
+        except Exception:
+            body = {}
+            logger.warning(f"license verification got non-JSON response: status={e.code} body={raw[:300]!r}")
+        code_reasons = {401: "unauthorized", 429: "rate_limited", 400: "missing_key", 404: "not_found"}
+        return False, body.get("reason") or code_reasons.get(e.code, "unreachable")
+    except Exception as e:
+        logger.warning(f"license verification failed: {type(e).__name__}: {e}")
+        return False, "unreachable"
+    if not body.get("valid"):
+        return False, body.get("reason", "unreachable")
+    return True, body
+
+def parse_license_date(value):
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+def format_license_date(value):
+    dt = parse_license_date(value)
+    return dt.strftime("%Y-%m-%d") if dt else ""
 
 app.secret_key = APP_SETTINGS["secret_key"]
 app.register_blueprint(api_bp, url_prefix="/api")
@@ -330,6 +400,32 @@ def admin_required(f):
             logger.warning(f"{u(g.user_id)} attempted admin-only access.")
             flash("Admin access required.", "error")
             return redirect(url_for("home"))
+        return f(*args, **kwargs)
+    return decorated_function
+
+def is_app_licensed():
+    if not (APP_SETTINGS.get("license_key") and APP_SETTINGS.get("company_name")):
+        return False
+    expires = parse_license_date(APP_SETTINGS.get("expires_at"))
+    if expires and expires < datetime.now(timezone.utc):
+        return False
+    return True
+
+def license_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not is_app_licensed():
+            logger.warning(f"{u(g.user_id)} attempted to access a licensed-only feature without a valid license.")
+            flash("This feature requires a valid license. Add one on the Server Config page.", "error")
+            return redirect(url_for("home"))
+        return f(*args, **kwargs)
+    return decorated_function
+
+def license_required_json(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not is_app_licensed():
+            return jsonify({"error": "This feature requires a valid license"}), 403
         return f(*args, **kwargs)
     return decorated_function
 
@@ -505,7 +601,8 @@ def inject_user():
         show_index_button=INDEX_TEMPLATE_PRESENT,
         app_version=get_app_version(),
         current_year=datetime.now().year,
-        company_brand=APP_SETTINGS.get("company_name", "")
+        company_brand=APP_SETTINGS.get("company_name", ""),
+        is_licensed=is_app_licensed()
     )
 
 @app.route("/login", methods=["GET", "POST"])
@@ -921,6 +1018,7 @@ def admin_required_json(f):
 @app.route("/webaccess")
 @login_required
 @admin_required
+@license_required
 def webaccess():
     with sqlite3.connect(DB_PATH) as db:
         cursor = db.cursor()
@@ -930,6 +1028,7 @@ def webaccess():
 
 @app.route("/api/toggle-web-access", methods=["POST"])
 @admin_required_json
+@license_required_json
 def toggle_web_access():
     data = request.get_json() or {}
     company_id = data.get("company_id")
@@ -1123,6 +1222,135 @@ def db_load_backup():
         logger.exception(f"restore of backup {name} failed: {e}")
         return jsonify({"error": f"Restore failed: {e}"}), 500
 
+def load_sync_settings():
+    try:
+        with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f) or {}
+    except Exception:
+        data = {}
+    cfg = data.get("sync") or {}
+    try:
+        interval_hours = int(cfg.get("interval_hours") or 1)
+    except (TypeError, ValueError):
+        interval_hours = 1
+    return {
+        "endpoint": str(cfg.get("endpoint") or "").strip(),
+        "secret": str(cfg.get("secret") or ""),
+        "interval_hours": max(1, min(interval_hours, 24)),
+        "enabled": bool(cfg.get("enabled")),
+    }
+
+def save_sync_settings(patch):
+    try:
+        with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f) or {}
+    except Exception:
+        data = {}
+    cfg = data.get("sync") or {}
+    cfg.update(patch)
+    data["sync"] = cfg
+    with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    return load_sync_settings()
+
+def sync_status_payload():
+    cfg = load_sync_settings()
+    state = load_state()
+    last_push_at = state.get("sync_last_push_at")
+    next_push_at = None
+    if cfg["enabled"] and cfg["endpoint"] and cfg["secret"]:
+        interval_seconds = cfg["interval_hours"] * 3600
+        next_push_at = (last_push_at + interval_seconds) if last_push_at else time.time()
+    return {
+        "endpoint": cfg["endpoint"],
+        "secret": cfg["secret"],
+        "interval_hours": cfg["interval_hours"],
+        "enabled": cfg["enabled"],
+        "last_push_at": last_push_at,
+        "last_push_ok": state.get("sync_last_push_ok"),
+        "last_push_message": state.get("sync_last_push_message"),
+        "next_push_at": next_push_at,
+    }
+
+@app.route("/api/sync/status")
+@admin_required_json
+@license_required_json
+def sync_status():
+    return jsonify(sync_status_payload())
+
+@app.route("/api/sync/save", methods=["POST"])
+@admin_required_json
+@license_required_json
+def sync_save():
+    data = request.get_json() or {}
+    endpoint = str(data.get("endpoint") or "").strip()
+    secret = str(data.get("secret") or "").strip()
+    try:
+        interval_hours = int(data.get("interval_hours") or 1)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Interval must be a whole number of hours"}), 400
+    enabled = bool(data.get("enabled"))
+
+    if endpoint and not (endpoint.startswith("http://") or endpoint.startswith("https://")):
+        return jsonify({"error": "Endpoint must start with http:// or https://"}), 400
+    if enabled and (not endpoint or not secret):
+        return jsonify({"error": "Set an endpoint and a secret before enabling automatic push"}), 400
+    if secret and len(secret) < 16:
+        return jsonify({"error": "Secret must be at least 16 characters"}), 400
+    if interval_hours < 1 or interval_hours > 24:
+        return jsonify({"error": "Interval must be between 1 and 24 hours"}), 400
+
+    save_sync_settings({
+        "endpoint": endpoint,
+        "secret": secret,
+        "interval_hours": interval_hours,
+        "enabled": enabled,
+    })
+    logger.info(f"{u(g.user_id)} updated remote sync settings endpoint={endpoint!r} enabled={enabled}")
+    return jsonify(sync_status_payload())
+
+@app.route("/api/sync/generate-secret", methods=["POST"])
+@admin_required_json
+@license_required_json
+def sync_generate_secret():
+    return jsonify({"secret": sync.generate_secret()})
+
+@app.route("/api/sync/test-connection", methods=["POST"])
+@admin_required_json
+@license_required_json
+def sync_test_connection():
+    data = request.get_json() or {}
+    cfg = load_sync_settings()
+    endpoint = str(data.get("endpoint") or cfg["endpoint"] or "").strip()
+    secret = str(data.get("secret") or cfg["secret"] or "")
+    ok, message, latency_ms = sync.test_connection(endpoint, secret)
+    if ok:
+        logger.info(f"{u(g.user_id)} tested remote sync connection to {endpoint!r} — ok ({latency_ms}ms)")
+    else:
+        logger.warning(f"{u(g.user_id)} tested remote sync connection to {endpoint!r} — failed: {message}")
+    return jsonify({"ok": ok, "message": message, "latency_ms": latency_ms})
+
+@app.route("/api/sync/push-now", methods=["POST"])
+@admin_required_json
+@license_required_json
+def sync_push_now():
+    cfg = load_sync_settings()
+    if not cfg["endpoint"] or not cfg["secret"]:
+        return jsonify({"error": "Save an endpoint and a secret first"}), 400
+    ok, message = sync.push_database(cfg["endpoint"], cfg["secret"], DB_PATH)
+    state = load_state()
+    state["sync_last_push_at"] = time.time()
+    state["sync_last_push_ok"] = ok
+    state["sync_last_push_message"] = message
+    save_state(state)
+    if ok:
+        logger.info(f"{u(g.user_id)} manually pushed the database to {cfg['endpoint']!r}")
+    else:
+        logger.warning(f"{u(g.user_id)} manual database push to {cfg['endpoint']!r} failed: {message}")
+    if not ok:
+        return jsonify({"error": message}), 502
+    return jsonify(sync_status_payload())
+
 @app.route("/server")
 @login_required
 @admin_required
@@ -1139,7 +1367,10 @@ def server_page():
         "server.html",
         server_port=stored.get("port", APP_SETTINGS.get("port", 7440)),
         server_secret=stored.get("secret_key", ""),
+        license_key=stored.get("license_key", APP_SETTINGS.get("license_key", "")),
         company_brand=stored.get("company_name", APP_SETTINGS.get("company_name", "")),
+        license_contact_email=stored.get("contact_email", APP_SETTINGS.get("contact_email", "")),
+        license_expires_at=format_license_date(stored.get("expires_at", APP_SETTINGS.get("expires_at"))),
         cli_command=cli_command,
         server_started_at=get_server_started_at(),
         github_url="https://github.com/Migrim/OTP-Manager-Refactored",
@@ -1168,6 +1399,17 @@ def server_check_update():
     logger.info(f"{u(g.user_id)} checked for updates: current={current} latest={latest} available={available}")
     return jsonify({"current": current, "latest": latest, "available": available})
 
+def _read_settings_file():
+    try:
+        with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
+            return json.load(f) or {}
+    except Exception:
+        return {}
+
+def _write_settings_file(settings):
+    with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
+        json.dump(settings, f, indent=2)
+
 @app.route("/api/server/config", methods=["POST"])
 @admin_required_json
 def server_config():
@@ -1181,26 +1423,76 @@ def server_config():
     secret_key = str(data.get("secret_key") or "").strip()
     if not secret_key:
         return jsonify({"error": "Secret key cannot be empty"}), 400
-    company_name = str(data.get("company_name") or "").strip()[:13]
 
-    try:
-        with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
-            settings = json.load(f) or {}
-    except Exception:
-        settings = {}
+    settings = _read_settings_file()
     settings["port"] = port
     settings["secret_key"] = secret_key
-    settings["company_name"] = company_name
-    with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
-        json.dump(settings, f, indent=2)
+    _write_settings_file(settings)
 
-    APP_SETTINGS["company_name"] = company_name
     logger.info(f"{u(g.user_id)} updated server configuration (port={port})")
     changed_runtime = port != APP_SETTINGS.get("port") or secret_key != APP_SETTINGS.get("secret_key")
     msg = "Server configuration saved"
     if changed_runtime:
         msg += " — restart the server to apply port/secret changes"
     return jsonify({"message": msg})
+
+@app.route("/api/server/license/check", methods=["POST"])
+@admin_required_json
+def server_license_check():
+    data = request.get_json() or {}
+    license_key = str(data.get("license_key") or "").strip()
+
+    ok, result = verify_license(license_key)
+    if not ok:
+        return jsonify({"valid": False, "error": LICENSE_REASON_MESSAGES.get(result, f"License verification failed ({result})")}), 400
+
+    return jsonify({
+        "valid": True,
+        "company_name": str(result.get("company") or "").strip(),
+        "contact_email": str(result.get("contact_email") or "").strip(),
+        "contact_name": str(result.get("contact_name") or "").strip(),
+        "expires_at": format_license_date(result.get("expires_at")),
+        "product_name": str(result.get("product_name") or "").strip(),
+    })
+
+@app.route("/api/server/license", methods=["POST"])
+@admin_required_json
+def server_license():
+    data = request.get_json() or {}
+    license_key = str(data.get("license_key") or "").strip()
+
+    company_name = ""
+    contact_email = ""
+    expires_at = None
+    if license_key:
+        ok, result = verify_license(license_key)
+        if not ok:
+            logger.warning(f"{u(g.user_id)} license verification failed: {result}")
+            return jsonify({"error": LICENSE_REASON_MESSAGES.get(result, f"License verification failed ({result})")}), 400
+        company_name = str(result.get("company") or "").strip()[:60]
+        contact_email = str(result.get("contact_email") or "").strip()
+        expires_at = result.get("expires_at") or None
+
+    settings = _read_settings_file()
+    settings["license_key"] = license_key
+    settings["company_name"] = company_name
+    settings["contact_email"] = contact_email
+    settings["expires_at"] = expires_at
+    _write_settings_file(settings)
+
+    APP_SETTINGS["license_key"] = license_key
+    APP_SETTINGS["company_name"] = company_name
+    APP_SETTINGS["contact_email"] = contact_email
+    APP_SETTINGS["expires_at"] = expires_at
+    logger.info(f"{u(g.user_id)} updated license (licensed={is_app_licensed()})")
+    msg = f"Licensed to {company_name}" if company_name else "License removed"
+    return jsonify({
+        "message": msg,
+        "company_name": company_name,
+        "contact_email": contact_email,
+        "expires_at": format_license_date(expires_at),
+        "is_licensed": is_app_licensed(),
+    })
 
 def _restart_process():
     logger.warning("server restart requested from web UI")
@@ -1276,6 +1568,30 @@ def maintenance_loop():
             logger.critical(f"Database maintenance error: {e}")
         time.sleep(3600)
 
+def sync_loop():
+    # Checked every 5 minutes so the configured interval (and enable/disable
+    # toggle) takes effect promptly instead of waiting a full hour.
+    while True:
+        try:
+            cfg = load_sync_settings()
+            if cfg["enabled"] and cfg["endpoint"] and cfg["secret"] and is_app_licensed():
+                state = load_state()
+                last = state.get("sync_last_push_at")
+                due = (not last) or (time.time() - last >= cfg["interval_hours"] * 3600)
+                if due:
+                    ok, message = sync.push_database(cfg["endpoint"], cfg["secret"], DB_PATH)
+                    state["sync_last_push_at"] = time.time()
+                    state["sync_last_push_ok"] = ok
+                    state["sync_last_push_message"] = message
+                    save_state(state)
+                    if ok:
+                        logger.info(f"scheduled sync push to {cfg['endpoint']!r} succeeded")
+                    else:
+                        logger.warning(f"scheduled sync push to {cfg['endpoint']!r} failed: {message}")
+        except Exception as e:
+            logger.critical(f"Sync push loop error: {e}")
+        time.sleep(300)
+
 if __name__ == "__main__":
     ensure_dirs()
     init_db()
@@ -1283,4 +1599,6 @@ if __name__ == "__main__":
     if start_thread:
         t = threading.Thread(target=maintenance_loop, daemon=True)
         t.start()
+        st = threading.Thread(target=sync_loop, daemon=True)
+        st.start()
     socketio.run(app, host=APP_SETTINGS["host"], port=APP_SETTINGS["port"], debug=True, use_reloader=True, allow_unsafe_werkzeug=True)

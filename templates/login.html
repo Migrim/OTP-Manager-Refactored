@@ -10,7 +10,7 @@
     <div class="auth-ascii-logo" id="auth-ascii-logo"></div>
     <div class="auth-loading-row" id="auth-loading-row">
       <div class="spinner sm"></div>
-      <span style="font-size:13px;font-weight:600;color:var(--text-dim);letter-spacing:0.02em">Loading</span>
+      <span style="font-size:13px;font-weight:600;color:var(--dim);letter-spacing:0.02em">Loading</span>
     </div>
   </div>
 
@@ -89,7 +89,7 @@
     return (getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#a15c93').trim();
   }
   function currentBg() {
-    return (getComputedStyle(document.documentElement).getPropertyValue('--app-bg') || '#fafafa').trim();
+    return (getComputedStyle(document.documentElement).getPropertyValue('--bg') || '#fafafa').trim();
   }
 
   /* ---------- ascii canvas background ---------- */

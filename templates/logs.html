@@ -42,7 +42,7 @@
 
     <span id="logs-reset-wrap" style="display:none;align-items:stretch">
       <div class="topbar-sep"></div>
-      <button class="logs-filter-btn" id="logs-reset" type="button" style="color:var(--text-dim)">Reset</button>
+      <button class="logs-filter-btn" id="logs-reset" type="button" style="color:var(--dim)">Reset</button>
     </span>
 
     <div class="topbar-sep"></div>
@@ -69,7 +69,7 @@
   </div>
 
   <div class="page-scroll" style="padding:10px;mask-image:none;-webkit-mask-image:none">
-    <div class="table-panel" id="logs-panel" style="position:absolute;top:5px;bottom:10px;left:0;right:0;max-width:1100px;margin:0 auto;border-radius:16px">
+    <div class="table-panel" id="logs-panel" style="position:absolute;top:5px;bottom:10px;left:0;right:0;max-width:1100px;margin:0 auto">
       <div class="logs-table-wrap" id="logs-scroll">
         <table class="logs-table">
           <thead>
@@ -82,7 +82,7 @@
           </thead>
           <tbody id="logs-tbody"></tbody>
         </table>
-        <div id="logs-empty" style="padding:60px 0;text-align:center;color:var(--text-faint);font-size:13px;display:none">No log entries match these filters</div>
+        <div id="logs-empty" style="padding:60px 0;text-align:center;color:var(--dim);font-size:13px;display:none">No log entries match these filters</div>
       </div>
     </div>
   </div>
@@ -188,7 +188,7 @@
     document.getElementById("logs-sources").innerHTML = sources.map(src =>
       '<label class="logs-check"><input type="checkbox" data-source="' + A.escapeHtml(src) + '"' +
       (sourceFilter.has(src) ? " checked" : "") + ' style="accent-color:var(--accent)">' + A.escapeHtml(src) + "</label>"
-    ).join("") || '<div style="padding:6px 8px;font-size:12px;color:var(--text-faint)">No sources</div>';
+    ).join("") || '<div style="padding:6px 8px;font-size:12px;color:var(--dim)">No sources</div>';
 
     document.getElementById("logs-day-label").textContent = dayLabel(day);
     document.getElementById("logs-day-pop").innerHTML = DAYS.map(d =>
