@@ -186,7 +186,7 @@
         const forced = row.key !== "is_admin" && permState.is_admin;
         const on = forced ? true : !!permState[row.key];
         return '<div class="perm-row">' +
-          '<button class="perm-switch' + (on ? " on" : "") + '" data-perm="' + row.key + '"' + (forced ? " disabled" : "") + ' type="button"><span class="knob"></span></button>' +
+          '<button class="perm-switch' + (on ? " on" : "") + '" data-perm="' + row.key + '"' + (forced ? " disabled" : "") + ' type="button"><span class="switch-cell switch-cell-off">OFF</span><span class="switch-cell switch-cell-on">ON</span></button>' +
           '<div><div class="perm-label">' + row.label + '</div><div class="perm-desc">' + row.desc + "</div></div></div>";
       }).join("")
     ).join("");

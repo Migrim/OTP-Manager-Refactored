@@ -73,7 +73,7 @@
       '<div class="table-row" style="display:flex;align-items:center;gap:12px">' +
       '<div class="row-title" style="flex:1;min-width:0">' + A.escapeHtml(c.name) + "</div>" +
       '<div class="row-dim" style="font-size:12px;margin-right:8px">' + (c.enabled ? "Enabled" : "Disabled") + "</div>" +
-      '<button class="switch' + (c.enabled ? " on" : "") + '" data-toggle="' + c.id + '" type="button"><span class="knob"></span></button>' +
+      '<button class="switch' + (c.enabled ? " on" : "") + '" data-toggle="' + c.id + '" type="button"><span class="switch-cell switch-cell-off">OFF</span><span class="switch-cell switch-cell-on">ON</span></button>' +
       "</div>"
     ).join("");
   }

@@ -77,7 +77,7 @@
         </div>
         <div class="setting-card-sep"></div>
         <div style="display:flex;align-items:center;gap:14px">
-          <button class="switch" id="accent-custom-switch" type="button"><span class="knob"></span></button>
+          <button class="switch" id="accent-custom-switch" type="button"><span class="switch-cell switch-cell-off">OFF</span><span class="switch-cell switch-cell-on">ON</span></button>
           <div style="flex:1">
             <div class="set-label">Use custom accent color</div>
             <div class="set-desc">Overrides the presets above with a color you pick yourself.</div>
@@ -161,7 +161,7 @@
 
   function cardHTML(item) {
     return '<div class="setting-card toggle-card">' +
-      '<button class="switch' + (state[item.key] ? " on" : "") + '" data-key="' + item.key + '" type="button"><span class="knob"></span></button>' +
+      '<button class="switch' + (state[item.key] ? " on" : "") + '" data-key="' + item.key + '" type="button"><span class="switch-cell switch-cell-off">OFF</span><span class="switch-cell switch-cell-on">ON</span></button>' +
       "<div><div class='set-label'>" + A.escapeHtml(item.label) +
       "</div><div class='set-desc'>" + item.desc + "</div></div></div>";
   }
@@ -170,13 +170,13 @@
     const parentOn = state.show_pinned_in_sidebar;
     return '<div class="setting-card-group">' +
       '<div class="setting-card-row toggle-card">' +
-      '<button class="switch' + (parentOn ? " on" : "") + '" data-key="show_pinned_in_sidebar" id="pinned-switch-main" type="button"><span class="knob"></span></button>' +
+      '<button class="switch' + (parentOn ? " on" : "") + '" data-key="show_pinned_in_sidebar" id="pinned-switch-main" type="button"><span class="switch-cell switch-cell-off">OFF</span><span class="switch-cell switch-cell-on">ON</span></button>' +
       "<div><div class='set-label'>Show pinned secrets in sidebar</div>" +
       "<div class='set-desc'>Lists your pinned OTP secrets under the navigation links in the sidebar, with the current code shown next to each name.</div></div></div>" +
       '<div class="setting-slide-wrap' + (parentOn ? " open" : "") + '" id="pinned-sub-wrap">' +
       '<div class="setting-slide-wrap-inner">' +
       '<div class="setting-card-row toggle-card sub-row">' +
-      '<button class="switch' + (state.only_pinned_in_sidebar ? " on" : "") + '" data-key="only_pinned_in_sidebar" id="pinned-switch-sub" type="button"' + (parentOn ? "" : " disabled") + '><span class="knob"></span></button>' +
+      '<button class="switch' + (state.only_pinned_in_sidebar ? " on" : "") + '" data-key="only_pinned_in_sidebar" id="pinned-switch-sub" type="button"' + (parentOn ? "" : " disabled") + '><span class="switch-cell switch-cell-off">OFF</span><span class="switch-cell switch-cell-on">ON</span></button>' +
       "<div><div class='set-label'>Only show pinned in sidebar</div>" +
       "<div class='set-desc'>Removes the pinned section from the home screen — pinned secrets are only listed in the sidebar.</div></div>" +
       "</div></div></div></div>";
@@ -186,7 +186,7 @@
     const parentOn = state.blur_on_inactive;
     return '<div class="setting-card-group">' +
       '<div class="setting-card-row toggle-card">' +
-      '<button class="switch' + (parentOn ? " on" : "") + '" data-key="blur_on_inactive" id="blur-switch-main" type="button"><span class="knob"></span></button>' +
+      '<button class="switch' + (parentOn ? " on" : "") + '" data-key="blur_on_inactive" id="blur-switch-main" type="button"><span class="switch-cell switch-cell-off">OFF</span><span class="switch-cell switch-cell-on">ON</span></button>' +
       "<div><div class='set-label'>Scramble OTP codes when inactive</div>" +
       "<div class='set-desc'>Scrambles OTP codes — on the home screen and in the sidebar's pinned list — after the selected period of inactivity, to protect your data from prying eyes.</div></div></div>" +
       '<div class="setting-slide-wrap' + (parentOn ? " open" : "") + '" id="blur-sub-wrap">' +

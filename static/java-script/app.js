@@ -486,7 +486,7 @@
     return (getComputedStyle(document.documentElement).getPropertyValue("--accent") || "#a15c93").trim();
   }
   function asciiBgColor() {
-    return (getComputedStyle(document.documentElement).getPropertyValue("--bg") || "#f5f5f2").trim();
+    return (getComputedStyle(document.documentElement).getPropertyValue("--app-bg") || "#f5f5f2").trim();
   }
 
   function asciiOptListHTML(selected) {
