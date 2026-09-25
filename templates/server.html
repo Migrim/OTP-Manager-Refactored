@@ -97,6 +97,13 @@
         </div>
       </div>
 
+      {% if not is_licensed %}
+      <!-- License CTA -->
+      <div class="task-card license-cta" id="license-cta">
+        <div>Not licensed yet? Get a free license in minutes at <a href="https://www.one-auth.net/login" target="_blank" rel="noopener noreferrer">One-Auth.net</a>.</div>
+      </div>
+      {% endif %}
+
       <!-- Server configuration -->
       <div class="task-card">
         <div class="task-main">
@@ -388,7 +395,7 @@
       if (ts - last < 45) return;
       last = ts;
       const styles = getComputedStyle(document.documentElement);
-      const bg = styles.getPropertyValue("--bg").trim() || "#fafafa";
+      const bg = styles.getPropertyValue("--app-bg").trim() || "#fafafa";
       const accent = (styles.getPropertyValue("--accent").trim() || "#a15c93").slice(0, 7);
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -760,7 +767,7 @@
       if (ts - last < 32) return;
       last = ts;
       const styles = getComputedStyle(document.documentElement);
-      const bg = styles.getPropertyValue("--bg").trim() || "#ffffff";
+      const bg = styles.getPropertyValue("--app-bg").trim() || "#ffffff";
       const accent = (styles.getPropertyValue("--accent").trim() || "#a15c93").slice(0, 7);
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -817,11 +824,16 @@
     setStatus("Connecting…");
 
     if (!term) {
+      const rootStyle = getComputedStyle(document.documentElement);
       term = new Terminal({
         convertEol: true,
         fontSize: 13,
         fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-        theme: { background: "#111111" },
+        theme: {
+          background: rootStyle.getPropertyValue("--side-bg").trim(),
+          foreground: rootStyle.getPropertyValue("--text").trim(),
+          cursor: rootStyle.getPropertyValue("--text").trim(),
+        },
       });
       fitAddon = new FitAddon.FitAddon();
       term.loadAddon(fitAddon);

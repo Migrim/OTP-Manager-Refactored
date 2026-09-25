@@ -3,6 +3,27 @@
 
 {% block title %}Web Access | OTP-Tool{% endblock %}
 
+{% block head %}
+<style>
+  .wa-switch-col { display: flex; align-items: center; gap: 8px; }
+  .wa-switch-col .row-dim { font-size: 12px; white-space: nowrap; }
+  .pua-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+  .pua-row:last-child { border-bottom: none; }
+  .pua-email { flex: none; width: var(--pua-email-w, 160px); font-size: 13px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pua-pass { display: flex; align-items: center; flex: 1; min-width: 60px; }
+  .pua-pass-text { font-family: "SFMono-Regular", Consolas, monospace; font-size: 12.5px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .switch.sm { transform: scale(0.82); transform-origin: center; flex: none; }
+  #peruser-list { max-height: none; }
+
+  .btn-group { display: flex; flex: none; }
+  .btn-group .icon-btn { border-radius: 0; margin-left: -1px; }
+  .btn-group .icon-btn:first-child { margin-left: 0; }
+  .btn-group .icon-btn:hover { position: relative; z-index: 1; }
+
+  .tip-wrap { display: inline-flex; }
+</style>
+{% endblock %}
+
 {% block page %}
 <div class="page">
   <div class="page-topbar" id="webaccess-topbar">
@@ -13,15 +34,88 @@
     <div class="topbar-note">{{ companies|length }} companies</div>
   </div>
 
-  <div class="page-scroll">
-    <div style="max-width:800px;margin:0 auto">
-      <div class="table-panel" id="webaccess-list" style="display:none"></div>
+  <div class="page-scroll" style="padding:10px;mask-image:none;-webkit-mask-image:none">
+    <div class="table-panel" id="webaccess-panel" style="display:none;position:absolute;top:5px;bottom:10px;left:0;right:0;max-width:1100px;margin:0 auto">
+      <div class="table-head" style="grid-template-columns:1.6fr 130px 170px 44px">
+        <div>Company</div><div>Web Access</div><div>Per-User Login</div><div></div>
+      </div>
+      <div id="webaccess-list" class="table-body"></div>
       <div class="empty-state" id="webaccess-empty" style="display:none">
         <span class="ico" data-icon="search"></span>
         <div class="txt">No companies match your search</div>
       </div>
     </div>
     <div id="webaccess-empty-vault" style="display:none"></div>
+  </div>
+</div>
+
+<!-- Per-user access management drawer -->
+<div class="overlay drawer-side" id="peruser-overlay">
+  <div class="drawer" style="display:flex;flex-direction:column;width:640px">
+    <div class="drawer-head">
+      <div>
+        <div class="drawer-title">Per-User Access</div>
+        <div class="drawer-sub" id="peruser-company-name" style="display:block"></div>
+      </div>
+      <button class="drawer-x" data-close-overlay type="button">&#10005;</button>
+    </div>
+
+    <div class="perm-row" style="padding-top:14px">
+      <button class="perm-switch" id="peruser-mode-switch" type="button">
+        <span class="switch-cell switch-cell-off">OFF</span><span class="switch-cell switch-cell-on">ON</span>
+      </button>
+      <div>
+        <div class="perm-label">Enable per-user login</div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin:14px 0">
+      <button class="btn-outline" id="peruser-sync-btn" type="button" style="flex:1">
+        <span style="width:14px;height:14px;display:flex" data-icon="refresh"></span>Sync from secrets
+      </button>
+      <button class="btn-outline" id="peruser-export-btn" type="button" style="flex:1">
+        <span style="width:14px;height:14px;display:flex" data-icon="exportIco"></span>Export PDF
+      </button>
+    </div>
+
+    <div class="perm-section-title" style="margin-top:10px">Add user manually</div>
+    <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:4px">
+      <div style="flex:1.3">
+        <label class="field-label-sm">Email</label>
+        <input class="text-input" id="peruser-add-email" placeholder="name@company.com" autocomplete="off">
+      </div>
+      <div style="flex:1">
+        <label class="field-label-sm">Password <span style="opacity:0.6;font-style:italic;font-weight:500">(optional)</span></label>
+        <input class="text-input" id="peruser-add-password" placeholder="Auto-generate" autocomplete="off">
+      </div>
+      <button class="btn-accent" id="peruser-add-btn" type="button" style="height:38px">Add</button>
+    </div>
+
+    <div class="perm-section-title">Accounts (<span id="peruser-count">0</span>)</div>
+    <div id="peruser-list"></div>
+    <div class="empty-state" id="peruser-empty" style="display:none;padding:24px 0">
+      <div class="txt" style="font-size:13px">No per-user accounts yet — enable per-user login or add one manually.</div>
+    </div>
+
+    <div class="drawer-actions" style="margin-top:auto">
+      <button class="btn-outline lg" data-close-overlay type="button">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Set custom password modal -->
+<div class="overlay center" id="pua-setpw-overlay">
+  <div class="modal">
+    <div class="modal-title">Set password</div>
+    <div class="modal-sub" style="margin-bottom:16px">Set a custom password for <span id="pua-setpw-email"></span>.</div>
+    <div style="margin-bottom:18px">
+      <label class="field-label-sm" style="margin-bottom:6px">New password</label>
+      <input class="text-input" id="pua-setpw-input" placeholder="Enter password" autocomplete="off">
+    </div>
+    <div class="modal-actions" style="margin-top:0">
+      <button class="btn-outline" data-close-overlay type="button">Cancel</button>
+      <button class="btn-accent" id="pua-setpw-confirm" type="button">Save</button>
+    </div>
   </div>
 </div>
 {% endblock %}
@@ -32,11 +126,23 @@
   const A = window.App;
   const COMPANIES = [
     {% for c in companies %}
-    { id: {{ c[0] }}, name: {{ c[1]|tojson }}, enabled: {{ (c[2]|int if c[2] is not none else 0)|tojson }} }{{ "," if not loop.last }}
+    {
+      id: {{ c[0] }},
+      name: {{ c[1]|tojson }},
+      enabled: {{ (c[2]|int if c[2] is not none else 0)|tojson }},
+      perUserEnabled: {{ (c[3]|int if c[3] is not none else 0)|tojson }},
+      puaTotal: {{ c[4]|int }},
+      puaActive: {{ c[5]|int }}
+    }{{ "," if not loop.last }}
     {% endfor %}
   ];
 
   let search = "";
+  let managingCompany = null;
+  let managingUsers = [];
+  let setpwTargetId = null;
+
+  const panel = document.getElementById("webaccess-panel");
   const list = document.getElementById("webaccess-list");
   const empty = document.getElementById("webaccess-empty");
   const emptyVault = document.getElementById("webaccess-empty-vault");
@@ -51,7 +157,7 @@
     pageScroll.classList.toggle("no-anim", !hasAny);
 
     if (!hasAny) {
-      list.style.display = "none";
+      panel.style.display = "none";
       empty.style.display = "none";
       emptyVault.style.display = "";
       emptyVault.innerHTML = A.emptyVaultHTML({
@@ -67,29 +173,268 @@
 
     const q = search.trim().toLowerCase();
     const filtered = q ? COMPANIES.filter(c => c.name.toLowerCase().includes(q)) : COMPANIES;
-    list.style.display = filtered.length ? "" : "none";
+    panel.style.display = filtered.length ? "" : "none";
     empty.style.display = filtered.length ? "none" : "flex";
     list.innerHTML = filtered.map(c =>
-      '<div class="table-row" style="display:flex;align-items:center;gap:12px">' +
-      '<div class="row-title" style="flex:1;min-width:0">' + A.escapeHtml(c.name) + "</div>" +
-      '<div class="row-dim" style="font-size:12px;margin-right:8px">' + (c.enabled ? "Enabled" : "Disabled") + "</div>" +
-      '<button class="switch' + (c.enabled ? " on" : "") + '" data-toggle="' + c.id + '" type="button"><span class="switch-cell switch-cell-off">OFF</span><span class="switch-cell switch-cell-on">ON</span></button>' +
+      '<div class="table-row" style="grid-template-columns:1.6fr 130px 170px 44px">' +
+      '<div class="row-title">' + A.escapeHtml(c.name) + "</div>" +
+      '<div class="wa-switch-col">' +
+        '<button class="switch' + (c.enabled ? " on" : "") + '" data-toggle="' + c.id + '" type="button"><span class="switch-cell switch-cell-off">OFF</span><span class="switch-cell switch-cell-on">ON</span></button>' +
+      "</div>" +
+      '<div class="wa-switch-col">' +
+        '<button class="switch' + (c.perUserEnabled ? " on" : "") + '" data-toggle-peruser="' + c.id + '" type="button"><span class="switch-cell switch-cell-off">OFF</span><span class="switch-cell switch-cell-on">ON</span></button>' +
+        (c.puaTotal && !c.perUserEnabled ? '<span class="row-dim">' + c.puaActive + "/" + c.puaTotal + "</span>" : "") +
+      "</div>" +
+      '<div class="row-actions"><span class="tip-wrap" data-tip="' + (c.perUserEnabled ? "Manage per-user accounts" : "Enable per-user login first") + '"><button class="icon-btn" data-manage="' + c.id + '"' + (c.perUserEnabled ? "" : " disabled") + '><span class="ico">' + A.ICONS.users + "</span></button></span></div>" +
       "</div>"
     ).join("");
   }
 
+  function applyCounts(c, users) {
+    c.puaTotal = users.length;
+    c.puaActive = users.filter(u => u.enabled).length;
+  }
+
+  async function fetchUsers(companyId) {
+    const res = await A.fetchJSON("/api/per-user-access/list?company_id=" + companyId);
+    return res.users || [];
+  }
+
+  function setPerUserSwitch(on) {
+    document.getElementById("peruser-mode-switch").classList.toggle("on", !!on);
+  }
+
+  let emailProbe = null;
+  function maxEmailWidth(emails) {
+    if (!emailProbe) {
+      emailProbe = document.createElement("span");
+      emailProbe.style.cssText = "position:absolute;visibility:hidden;white-space:nowrap;left:-9999px;font-size:13px;font-weight:600;";
+      document.body.appendChild(emailProbe);
+    }
+    let max = 0;
+    emails.forEach(email => {
+      emailProbe.textContent = email;
+      max = Math.max(max, emailProbe.getBoundingClientRect().width);
+    });
+    return Math.ceil(max);
+  }
+
+  function renderUsers() {
+    const wrap = document.getElementById("peruser-list");
+    const emptyEl = document.getElementById("peruser-empty");
+    document.getElementById("peruser-count").textContent = managingUsers.length;
+    emptyEl.style.display = managingUsers.length ? "none" : "";
+    if (managingUsers.length) {
+      wrap.style.setProperty("--pua-email-w", (maxEmailWidth(managingUsers.map(u => u.email)) + 2) + "px");
+    }
+    wrap.innerHTML = managingUsers.map(u =>
+      '<div class="pua-row" data-id="' + u.id + '">' +
+      '<div class="pua-email">' + A.escapeHtml(u.email) + "</div>" +
+      '<div class="pua-pass">' +
+        '<span class="pua-pass-text" data-mask="1">' + "•".repeat(10) + "</span>" +
+      "</div>" +
+      '<button class="switch sm' + (u.enabled ? " on" : "") + '" data-user-toggle="' + u.id + '" type="button" data-tip="Enable/disable"><span class="switch-cell switch-cell-off">OFF</span><span class="switch-cell switch-cell-on">ON</span></button>' +
+      '<div class="btn-group">' +
+        '<button class="icon-btn" data-reveal="' + u.id + '" data-tip="Show/hide password"><span class="ico">' + A.ICONS.eye + "</span></button>" +
+        '<button class="icon-btn" data-copy="' + u.id + '" data-tip="Copy password"><span class="ico">' + A.ICONS.copy + "</span></button>" +
+        '<button class="icon-btn" data-setpw="' + u.id + '" data-tip="Set password"><span class="ico">' + A.ICONS.edit + "</span></button>" +
+        '<button class="icon-btn" data-regen="' + u.id + '" data-tip="Reset password"><span class="ico">' + A.ICONS.keysm + "</span></button>" +
+        '<button class="icon-btn danger" data-remove="' + u.id + '" data-tip="Remove"><span class="ico">' + A.ICONS.trash + "</span></button>" +
+      "</div>" +
+      "</div>"
+    ).join("");
+  }
+
+  async function openManageDrawer(c) {
+    managingCompany = c;
+    document.getElementById("peruser-company-name").textContent = c.name;
+    setPerUserSwitch(!!c.perUserEnabled);
+    A.openOverlay("peruser-overlay");
+    try {
+      managingUsers = await fetchUsers(c.id);
+      applyCounts(c, managingUsers);
+      renderUsers();
+      render();
+    } catch (err) { A.toast(err.message, "error"); }
+  }
+
   list.addEventListener("click", async e => {
     const btn = e.target.closest("[data-toggle]");
-    if (!btn) return;
-    const c = COMPANIES.find(x => x.id === +btn.getAttribute("data-toggle"));
+    if (btn) {
+      const c = COMPANIES.find(x => x.id === +btn.getAttribute("data-toggle"));
+      try {
+        const res = await A.fetchJSON("/api/toggle-web-access", { method: "POST", body: { company_id: c.id, enabled: !c.enabled } });
+        c.enabled = res.enabled ? 1 : 0;
+        A.toast((c.enabled ? "Enabled" : "Disabled") + " web access for " + c.name);
+        render();
+      } catch (err) { A.toast(err.message, "error"); }
+      return;
+    }
+
+    const puaBtn = e.target.closest("[data-toggle-peruser]");
+    if (puaBtn) {
+      const c = COMPANIES.find(x => x.id === +puaBtn.getAttribute("data-toggle-peruser"));
+      try {
+        const res = await A.fetchJSON("/api/toggle-per-user-mode", { method: "POST", body: { company_id: c.id, enabled: !c.perUserEnabled } });
+        c.perUserEnabled = res.enabled ? 1 : 0;
+        const users = await fetchUsers(c.id);
+        applyCounts(c, users);
+        if (managingCompany && managingCompany.id === c.id) {
+          managingUsers = users;
+          renderUsers();
+          setPerUserSwitch(c.perUserEnabled);
+        }
+        const createdNote = res.created && res.created.length ? " — " + res.created.length + " account(s) created" : "";
+        A.toast((c.perUserEnabled ? "Enabled" : "Disabled") + " per-user login for " + c.name + createdNote);
+        render();
+      } catch (err) { A.toast(err.message, "error"); }
+      return;
+    }
+
+    const manageBtn = e.target.closest("[data-manage]");
+    if (manageBtn) {
+      openManageDrawer(COMPANIES.find(x => x.id === +manageBtn.getAttribute("data-manage")));
+    }
+  });
+
+  document.getElementById("peruser-mode-switch").addEventListener("click", async () => {
+    if (!managingCompany) return;
+    const c = managingCompany;
     try {
-      const res = await A.fetchJSON("/api/toggle-web-access", {
-        method: "POST",
-        body: { company_id: c.id, enabled: !c.enabled },
-      });
-      c.enabled = res.enabled ? 1 : 0;
-      A.toast((c.enabled ? "Enabled" : "Disabled") + " web access for " + c.name);
+      const res = await A.fetchJSON("/api/toggle-per-user-mode", { method: "POST", body: { company_id: c.id, enabled: !c.perUserEnabled } });
+      c.perUserEnabled = res.enabled ? 1 : 0;
+      setPerUserSwitch(c.perUserEnabled);
+      managingUsers = await fetchUsers(c.id);
+      applyCounts(c, managingUsers);
+      renderUsers();
+      const createdNote = res.created && res.created.length ? " — " + res.created.length + " account(s) created" : "";
+      A.toast((c.perUserEnabled ? "Enabled" : "Disabled") + " per-user login" + createdNote);
       render();
+    } catch (err) { A.toast(err.message, "error"); }
+  });
+
+  document.getElementById("peruser-sync-btn").addEventListener("click", async () => {
+    if (!managingCompany) return;
+    try {
+      const res = await A.fetchJSON("/api/per-user-access/sync", { method: "POST", body: { company_id: managingCompany.id } });
+      managingUsers = await fetchUsers(managingCompany.id);
+      applyCounts(managingCompany, managingUsers);
+      renderUsers();
+      render();
+      A.toast(res.count ? (res.count + " new account(s) created") : "Already up to date");
+    } catch (err) { A.toast(err.message, "error"); }
+  });
+
+  document.getElementById("peruser-export-btn").addEventListener("click", () => {
+    if (!managingCompany) return;
+    window.location.href = "/api/per-user-access/export-pdf?company_id=" + managingCompany.id;
+  });
+
+  document.getElementById("peruser-add-btn").addEventListener("click", async () => {
+    if (!managingCompany) return;
+    const emailInput = document.getElementById("peruser-add-email");
+    const passwordInput = document.getElementById("peruser-add-password");
+    const email = emailInput.value.trim();
+    const password = passwordInput.value.trim();
+    if (!email) { A.toast("Enter an email address", "error"); return; }
+    try {
+      const res = await A.fetchJSON("/api/per-user-access/add", { method: "POST", body: { company_id: managingCompany.id, email: email, password: password } });
+      managingUsers.push(res.user);
+      managingUsers.sort((a, b) => a.email.localeCompare(b.email));
+      applyCounts(managingCompany, managingUsers);
+      emailInput.value = ""; passwordInput.value = "";
+      renderUsers();
+      render();
+      A.toast("User added");
+    } catch (err) { A.toast(err.message, "error"); }
+  });
+
+  document.getElementById("peruser-list").addEventListener("click", async e => {
+    const revealBtn = e.target.closest("[data-reveal]");
+    if (revealBtn) {
+      const id = +revealBtn.getAttribute("data-reveal");
+      const u = managingUsers.find(x => x.id === id);
+      const span = revealBtn.closest(".pua-row").querySelector(".pua-pass-text");
+      const wasMasked = span.getAttribute("data-mask") !== "0";
+      span.textContent = wasMasked ? (u.password || "(unavailable)") : "•".repeat(10);
+      span.setAttribute("data-mask", wasMasked ? "0" : "1");
+      revealBtn.querySelector(".ico").innerHTML = wasMasked ? A.ICONS.eyeOff : A.ICONS.eye;
+      return;
+    }
+
+    const copyBtn = e.target.closest("[data-copy]");
+    if (copyBtn) {
+      const id = +copyBtn.getAttribute("data-copy");
+      const u = managingUsers.find(x => x.id === id);
+      if (u && u.password) { A.copyText(u.password); A.toast("Password copied"); }
+      return;
+    }
+
+    const toggleBtn = e.target.closest("[data-user-toggle]");
+    if (toggleBtn) {
+      const id = +toggleBtn.getAttribute("data-user-toggle");
+      const u = managingUsers.find(x => x.id === id);
+      try {
+        const res = await A.fetchJSON("/api/per-user-access/toggle", { method: "POST", body: { id: id, enabled: !u.enabled } });
+        u.enabled = !!res.enabled;
+        applyCounts(managingCompany, managingUsers);
+        renderUsers();
+        render();
+        A.toast((u.enabled ? "Enabled" : "Disabled") + " " + u.email);
+      } catch (err) { A.toast(err.message, "error"); }
+      return;
+    }
+
+    const setpwBtn = e.target.closest("[data-setpw]");
+    if (setpwBtn) {
+      const id = +setpwBtn.getAttribute("data-setpw");
+      const u = managingUsers.find(x => x.id === id);
+      if (!u) return;
+      setpwTargetId = id;
+      document.getElementById("pua-setpw-email").textContent = u.email;
+      document.getElementById("pua-setpw-input").value = "";
+      A.openOverlay("pua-setpw-overlay");
+      return;
+    }
+
+    const regenBtn = e.target.closest("[data-regen]");
+    if (regenBtn) {
+      const id = +regenBtn.getAttribute("data-regen");
+      try {
+        const res = await A.fetchJSON("/api/per-user-access/set-password", { method: "POST", body: { id: id } });
+        const u = managingUsers.find(x => x.id === id);
+        if (u) u.password = res.password;
+        renderUsers();
+        A.toast("Password regenerated");
+      } catch (err) { A.toast(err.message, "error"); }
+      return;
+    }
+
+    const removeBtn = e.target.closest("[data-remove]");
+    if (removeBtn) {
+      const id = +removeBtn.getAttribute("data-remove");
+      try {
+        await A.fetchJSON("/api/per-user-access/delete", { method: "POST", body: { id: id } });
+        managingUsers = managingUsers.filter(x => x.id !== id);
+        applyCounts(managingCompany, managingUsers);
+        renderUsers();
+        render();
+        A.toast("Account removed");
+      } catch (err) { A.toast(err.message, "error"); }
+    }
+  });
+
+  document.getElementById("pua-setpw-confirm").addEventListener("click", async () => {
+    if (setpwTargetId == null) return;
+    const id = setpwTargetId;
+    const password = document.getElementById("pua-setpw-input").value.trim();
+    try {
+      const res = await A.fetchJSON("/api/per-user-access/set-password", { method: "POST", body: { id: id, password: password } });
+      const u = managingUsers.find(x => x.id === id);
+      if (u) u.password = res.password;
+      renderUsers();
+      A.closeOverlay("pua-setpw-overlay");
+      A.toast("Password set");
     } catch (err) { A.toast(err.message, "error"); }
   });
 

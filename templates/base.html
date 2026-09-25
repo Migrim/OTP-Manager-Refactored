@@ -49,20 +49,20 @@
     <div class="sidebar-sep"></div>
 
     <nav>
-      <a href="/" class="nav-item {{ 'active' if active_page == 'home' else '' }}">
+      <a href="/" class="nav-item {{ 'active' if active_page == 'home' else '' }}" title="Home">
         <span class="nav-ico" data-icon="home"></span><span class="nav-label">Home</span>
       </a>
       {% if can_add_secrets %}
-      <a href="/add" class="nav-item {{ 'active' if active_page == 'add' else '' }}">
+      <a href="/add" class="nav-item {{ 'active' if active_page == 'add' else '' }}" title="Add">
         <span class="nav-ico" data-icon="plus"></span><span class="nav-label">Add</span>
       </a>
       {% endif %}
       {% if can_add_companies or can_delete_companies %}
-      <a href="/companies" class="nav-item {{ 'active' if active_page == 'companies' else '' }}">
+      <a href="/companies" class="nav-item {{ 'active' if active_page == 'companies' else '' }}" title="Companies">
         <span class="nav-ico" data-icon="building"></span><span class="nav-label">Companies</span>
       </a>
       {% endif %}
-      <a href="/settings" class="nav-item {{ 'active' if active_page == 'settings' else '' }}">
+      <a href="/settings" class="nav-item {{ 'active' if active_page == 'settings' else '' }}" title="Settings">
         <span class="nav-ico" data-icon="settings"></span><span class="nav-label">Settings</span>
         <span class="nav-dot" id="settings-dirty-dot" style="display:none" title="You have unsaved settings changes — save them or revert on the Settings page."></span>
       </a>
@@ -71,23 +71,23 @@
       <div class="nav-section">Admin</div>
       {% endif %}
       {% if can_add_users %}
-      <a href="/users" class="nav-item {{ 'active' if active_page == 'users' else '' }}">
+      <a href="/users" class="nav-item {{ 'active' if active_page == 'users' else '' }}" title="Users">
         <span class="nav-ico" data-icon="users"></span><span class="nav-label">Users</span>
       </a>
       {% endif %}
       {% if is_admin %}
-      <a href="/logs" class="nav-item {{ 'active' if active_page == 'logs' else '' }}">
+      <a href="/logs" class="nav-item {{ 'active' if active_page == 'logs' else '' }}" title="Logs">
         <span class="nav-ico" data-icon="logs"></span><span class="nav-label">Logs</span>
       </a>
-      <a href="/database" class="nav-item {{ 'active' if active_page == 'database' else '' }}">
+      <a href="/database" class="nav-item {{ 'active' if active_page == 'database' else '' }}" title="Database">
         <span class="nav-ico" data-icon="database"></span><span class="nav-label">Database</span>
       </a>
       {% if is_licensed %}
-      <a href="/webaccess" class="nav-item {{ 'active' if active_page == 'webaccess' else '' }}">
+      <a href="/webaccess" class="nav-item {{ 'active' if active_page == 'webaccess' else '' }}" title="Web Access">
         <span class="nav-ico" data-icon="globe"></span><span class="nav-label">Web Access</span>
       </a>
       {% endif %}
-      <a href="/server" class="nav-item {{ 'active' if active_page == 'server' else '' }}">
+      <a href="/server" class="nav-item {{ 'active' if active_page == 'server' else '' }}" title="Server Config">
         <span class="nav-ico" data-icon="wrench"></span><span class="nav-label">Server Config</span>
         <span class="nav-dot" id="update-dot" style="display:none"></span>
       </a>
@@ -141,10 +141,6 @@
       </div>
     </div>
   </aside>
-
-  <button class="sidebar-expand" data-toggle-sidebar title="Show sidebar" type="button">
-    <span style="width:15px;height:15px;display:flex" data-icon="collapse"></span>
-  </button>
   {% endif %}
 
   <script>if (window.App) App.hydrateIcons();</script>

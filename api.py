@@ -3,10 +3,12 @@ from binascii import Error as BinasciiError
 import io, datetime, re
 import sqlite3
 import os
+import json
 import pyotp
 import re
 import base64
 import time
+import secrets as pysecrets
 from extensions import bcrypt
 from logger import logger
 from reportlab.pdfgen import canvas
@@ -15,9 +17,82 @@ from reportlab.lib.units import mm
 from reportlab.lib import colors
 from reportlab.lib.utils import ImageReader
 import qrcode
+import sync as sync_crypto
 
 api_bp = Blueprint("api", __name__)
 DB_PATH = os.path.join("instance", "otp.db")
+PUA_KEY_PATH = os.path.join("instance", "per_user_access.key")
+
+_PUA_WORDS = [
+    "Haus", "Wasser", "Gabel", "Baum", "Stuhl", "Fenster", "Tisch", "Lampe", "Garten", "Blume",
+    "Berg", "Fluss", "Wolke", "Sonne", "Mond", "Stern", "Feuer", "Erde", "Wind", "Regen",
+    "Hund", "Vogel", "Fisch", "Pferd", "Maus", "Wolf", "Adler", "Hase", "Igel", "Affe",
+    "Brot", "Apfel", "Milch", "Zucker", "Salz", "Suppe", "Kuchen", "Kaffee", "Honig", "Butter",
+    "Buch", "Stift", "Karte", "Uhr", "Spiegel", "Kerze", "Koffer", "Seil", "Korb", "Schluessel",
+    "Turm", "Strand", "Wald", "Wiese", "Feld", "Wagen", "Rad", "Schiff", "Boot", "Insel",
+    "Tal", "Park", "Markt", "Strasse", "Bruecke", "Dach", "Wand", "Boden", "Decke", "Tuer",
+    "Ring", "Krone", "Schwert", "Schild", "Pfeil", "Bogen", "Muenze", "Truhe", "Fahne", "Glocke",
+]
+
+def _pua_secret():
+    try:
+        with open(PUA_KEY_PATH, "r", encoding="utf-8") as f:
+            key = f.read().strip()
+            if key:
+                return key
+    except FileNotFoundError:
+        pass
+    key = pysecrets.token_urlsafe(32)
+    os.makedirs(os.path.dirname(PUA_KEY_PATH), exist_ok=True)
+    with open(PUA_KEY_PATH, "w", encoding="utf-8") as f:
+        f.write(key)
+    try:
+        os.chmod(PUA_KEY_PATH, 0o600)
+    except OSError:
+        pass
+    return key
+
+def _pua_encrypt(password):
+    envelope = sync_crypto.encrypt_blob(_pua_secret(), password.encode("utf-8"))
+    return json.dumps(envelope)
+
+def _pua_decrypt(blob):
+    envelope = json.loads(blob)
+    return sync_crypto.decrypt_blob(_pua_secret(), envelope).decode("utf-8")
+
+def _pua_generate_password():
+    words = pysecrets.SystemRandom().sample(_PUA_WORDS, 3)
+    number = pysecrets.randbelow(90) + 10
+    return "-".join(words) + str(number)
+
+def _pua_sync_company(db, company_id):
+    """Create a per-user account for every distinct secret email in the company that
+    doesn't already have one. Existing accounts and their passwords are left untouched."""
+    c = db.cursor()
+    c.execute("""
+        SELECT DISTINCT TRIM(email) FROM otp_secrets
+        WHERE company_id = ? AND email IS NOT NULL AND TRIM(email) != '' AND LOWER(TRIM(email)) != 'none'
+    """, (company_id,))
+    seen_lower = set()
+    emails = []
+    for (raw_email,) in c.fetchall():
+        key = raw_email.lower()
+        if key not in seen_lower:
+            seen_lower.add(key)
+            emails.append(raw_email)
+
+    now = datetime.datetime.utcnow().isoformat()
+    created = []
+    for email in emails:
+        password = _pua_generate_password()
+        enc = _pua_encrypt(password)
+        c.execute("""
+            INSERT OR IGNORE INTO per_user_access (company_id, email, password_enc, enabled, created_at, updated_at)
+            VALUES (?, ?, ?, 1, ?, ?)
+        """, (company_id, email, enc, now, now))
+        if c.rowcount:
+            created.append(email)
+    return created
 
 def normalize_secret(s):
     s = (s or "").strip().upper()
@@ -662,6 +737,314 @@ def edit_company():
             "login_enabled": login_enabled,
         }})
     return redirect("/companies")
+
+@api_bp.route("/toggle-per-user-mode", methods=["POST"])
+def toggle_per_user_mode():
+    if not g.is_admin:
+        logger.warning(f"{u(getattr(g, 'user_id', None))} toggle_per_user_mode result=forbidden_not_admin")
+        return jsonify({"error": "Admin access required"}), 403
+    data = request.get_json() or {}
+    company_id = data.get("company_id")
+    enabled = 1 if data.get("enabled") else 0
+    if not company_id:
+        return jsonify({"error": "Missing company_id"}), 400
+    created = []
+    with sqlite3.connect(DB_PATH) as db:
+        cursor = db.cursor()
+        cursor.execute("UPDATE companies SET per_user_login_enabled = ? WHERE company_id = ?", (enabled, company_id))
+        if not cursor.rowcount:
+            return jsonify({"error": "Company not found"}), 404
+        if enabled:
+            created = _pua_sync_company(db, company_id)
+        db.commit()
+    logger.info(f"{u(getattr(g, 'user_id', None))} set per-user login enabled={bool(enabled)} for company id={company_id} created={len(created)}")
+    return jsonify({"enabled": bool(enabled), "created": created})
+
+@api_bp.route("/per-user-access/list", methods=["GET"])
+def per_user_access_list():
+    if not g.is_admin:
+        return jsonify({"error": "Admin access required"}), 403
+    company_id = request.args.get("company_id")
+    if not company_id:
+        return jsonify({"error": "Missing company_id"}), 400
+    with sqlite3.connect(DB_PATH) as db:
+        c = db.cursor()
+        c.execute("""
+            SELECT id, email, password_enc, enabled, created_at, updated_at
+            FROM per_user_access WHERE company_id = ? ORDER BY email COLLATE NOCASE
+        """, (company_id,))
+        rows = c.fetchall()
+    users = []
+    for uid, email, enc, enabled, created_at, updated_at in rows:
+        try:
+            password = _pua_decrypt(enc)
+        except Exception:
+            logger.exception(f"failed to decrypt per-user access password id={uid}")
+            password = None
+        users.append({
+            "id": uid, "email": email, "password": password,
+            "enabled": bool(enabled), "created_at": created_at, "updated_at": updated_at,
+        })
+    return jsonify({"users": users})
+
+@api_bp.route("/per-user-access/sync", methods=["POST"])
+def per_user_access_sync():
+    if not g.is_admin:
+        return jsonify({"error": "Admin access required"}), 403
+    data = request.get_json() or {}
+    company_id = data.get("company_id")
+    if not company_id:
+        return jsonify({"error": "Missing company_id"}), 400
+    with sqlite3.connect(DB_PATH) as db:
+        c = db.cursor()
+        c.execute("SELECT 1 FROM companies WHERE company_id = ?", (company_id,))
+        if not c.fetchone():
+            return jsonify({"error": "Company not found"}), 404
+        created = _pua_sync_company(db, company_id)
+        db.commit()
+    logger.info(f"{u(getattr(g, 'user_id', None))} synced per-user access for company id={company_id} created={len(created)}")
+    return jsonify({"created": created, "count": len(created)})
+
+@api_bp.route("/per-user-access/add", methods=["POST"])
+def per_user_access_add():
+    if not g.is_admin:
+        return jsonify({"error": "Admin access required"}), 403
+    data = request.get_json() or {}
+    company_id = data.get("company_id")
+    email = (data.get("email") or "").strip()
+    password = (data.get("password") or "").strip() or _pua_generate_password()
+    if not company_id or not email:
+        return jsonify({"error": "Missing company_id or email"}), 400
+    enc = _pua_encrypt(password)
+    now = datetime.datetime.utcnow().isoformat()
+    try:
+        with sqlite3.connect(DB_PATH) as db:
+            cursor = db.cursor()
+            cursor.execute("SELECT 1 FROM companies WHERE company_id = ?", (company_id,))
+            if not cursor.fetchone():
+                return jsonify({"error": "Company not found"}), 404
+            cursor.execute("""
+                INSERT INTO per_user_access (company_id, email, password_enc, enabled, created_at, updated_at)
+                VALUES (?, ?, ?, 1, ?, ?)
+            """, (company_id, email, enc, now, now))
+            db.commit()
+            new_id = cursor.lastrowid
+    except sqlite3.IntegrityError:
+        return jsonify({"error": "This email already has a per-user login for this company"}), 409
+    logger.info(f"{u(getattr(g, 'user_id', None))} added per-user access {email} for company id={company_id}")
+    return jsonify({"user": {"id": new_id, "email": email, "password": password, "enabled": True}})
+
+@api_bp.route("/per-user-access/set-password", methods=["POST"])
+def per_user_access_set_password():
+    if not g.is_admin:
+        return jsonify({"error": "Admin access required"}), 403
+    data = request.get_json() or {}
+    uid = data.get("id")
+    if not uid:
+        return jsonify({"error": "Missing id"}), 400
+    password = (data.get("password") or "").strip() or _pua_generate_password()
+    enc = _pua_encrypt(password)
+    now = datetime.datetime.utcnow().isoformat()
+    with sqlite3.connect(DB_PATH) as db:
+        cursor = db.cursor()
+        cursor.execute("UPDATE per_user_access SET password_enc = ?, updated_at = ? WHERE id = ?", (enc, now, uid))
+        if not cursor.rowcount:
+            return jsonify({"error": "User not found"}), 404
+        db.commit()
+    logger.info(f"{u(getattr(g, 'user_id', None))} reset per-user access password id={uid}")
+    return jsonify({"password": password})
+
+@api_bp.route("/per-user-access/toggle", methods=["POST"])
+def per_user_access_toggle():
+    if not g.is_admin:
+        return jsonify({"error": "Admin access required"}), 403
+    data = request.get_json() or {}
+    uid = data.get("id")
+    enabled = 1 if data.get("enabled") else 0
+    if not uid:
+        return jsonify({"error": "Missing id"}), 400
+    with sqlite3.connect(DB_PATH) as db:
+        cursor = db.cursor()
+        cursor.execute("UPDATE per_user_access SET enabled = ?, updated_at = ? WHERE id = ?",
+                        (enabled, datetime.datetime.utcnow().isoformat(), uid))
+        if not cursor.rowcount:
+            return jsonify({"error": "User not found"}), 404
+        db.commit()
+    logger.info(f"{u(getattr(g, 'user_id', None))} set per-user access enabled={bool(enabled)} id={uid}")
+    return jsonify({"enabled": bool(enabled)})
+
+@api_bp.route("/per-user-access/delete", methods=["POST"])
+def per_user_access_delete():
+    if not g.is_admin:
+        return jsonify({"error": "Admin access required"}), 403
+    data = request.get_json() or {}
+    uid = data.get("id")
+    if not uid:
+        return jsonify({"error": "Missing id"}), 400
+    with sqlite3.connect(DB_PATH) as db:
+        cursor = db.cursor()
+        cursor.execute("DELETE FROM per_user_access WHERE id = ?", (uid,))
+        if not cursor.rowcount:
+            return jsonify({"error": "User not found"}), 404
+        db.commit()
+    logger.info(f"{u(getattr(g, 'user_id', None))} deleted per-user access id={uid}")
+    return jsonify({"ok": True})
+
+@api_bp.route("/per-user-access/export-pdf", methods=["GET"])
+def per_user_access_export_pdf():
+    if not g.is_admin:
+        return jsonify({"error": "Admin access required"}), 403
+    company_id = request.args.get("company_id")
+    if not company_id:
+        return jsonify({"error": "Missing company_id"}), 400
+
+    with sqlite3.connect(DB_PATH) as db:
+        c = db.cursor()
+        c.execute("SELECT name FROM companies WHERE company_id = ?", (company_id,))
+        row = c.fetchone()
+        if not row:
+            return jsonify({"error": "Company not found"}), 404
+        company_name = row[0]
+        c.execute("""
+            SELECT email, password_enc, enabled FROM per_user_access
+            WHERE company_id = ? ORDER BY email COLLATE NOCASE
+        """, (company_id,))
+        rows = c.fetchall()
+
+    users = []
+    for email, enc, enabled in rows:
+        try:
+            password = _pua_decrypt(enc)
+        except Exception:
+            logger.exception(f"failed to decrypt per-user access password for pdf export company id={company_id}")
+            password = "(decryption failed)"
+        users.append((email, password, bool(enabled)))
+
+    buf = io.BytesIO()
+    page_w, page_h = A4
+    p = canvas.Canvas(buf, pagesize=A4)
+    p.setTitle(f"Per-User Web Access - {company_name}")
+
+    margin = 16 * mm
+    content_w = page_w - (margin * 2)
+    y = page_h - margin
+
+    # Mirrors the web app's design tokens (static/styles/app.css :root) — flat,
+    # sharp-cornered, muted palette instead of a bespoke PDF color scheme.
+    text_main = colors.HexColor("#14141a")
+    text_muted = colors.HexColor("#55554f")
+    accent = colors.HexColor("#a15c93")
+    panel_bg = colors.HexColor("#f5f5f2")
+    border = colors.HexColor("#c9c9c2")
+
+    def fit_text(text, font_name, font_size, max_width):
+        text = text or ""
+        if p.stringWidth(text, font_name, font_size) <= max_width:
+            return text
+        ellipsis = "..."
+        while text and p.stringWidth(text + ellipsis, font_name, font_size) > max_width:
+            text = text[:-1]
+        return text + ellipsis if text else ellipsis
+
+    def draw_header(first_page=False):
+        nonlocal y
+        if not first_page:
+            p.showPage()
+
+        # Layout is expressed as distance-from-top (dtop) so the band, the
+        # meta row below it and the divider can't drift into each other.
+        band_h = 24 * mm
+        p.setFillColor(panel_bg)
+        p.rect(0, page_h - band_h, page_w, band_h, fill=1, stroke=0)
+        p.setFillColor(accent)
+        p.rect(0, page_h - band_h, 2.2 * mm, band_h, fill=1, stroke=0)
+
+        p.setFillColor(text_muted)
+        p.setFont("Helvetica-Bold", 8.5)
+        p.drawString(margin, page_h - 9 * mm, "WEB ACCESS · PER-USER LOGINS")
+
+        p.setFillColor(text_main)
+        p.setFont("Helvetica-Bold", 17)
+        p.drawString(margin, page_h - 19 * mm, fit_text(company_name, "Helvetica-Bold", 17, content_w))
+
+        meta_y = page_h - band_h - 7 * mm
+        p.setFillColor(text_muted)
+        p.setFont("Helvetica", 9.5)
+        p.drawString(margin, meta_y, "Keep this document secure - it contains plaintext login credentials.")
+        p.drawRightString(page_w - margin, meta_y, datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))
+
+        divider_y = meta_y - 3 * mm
+        p.setStrokeColor(border)
+        p.setLineWidth(0.7)
+        p.line(margin, divider_y, margin + content_w, divider_y)
+
+        y = divider_y - 8 * mm
+
+    def draw_footer():
+        p.setFillColor(text_muted)
+        p.setFont("Helvetica", 8)
+        p.drawString(margin, 8 * mm, "Generated by OTP-Tool from One-Auth.net")
+        p.drawRightString(page_w - margin, 8 * mm, f"Page {p.getPageNumber()}")
+
+    dt = datetime.datetime.now().strftime("%Y-%m-%d_%H%M")
+    safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", company_name).strip("_")[:40] or "company"
+
+    draw_header(first_page=True)
+
+    if not users:
+        p.setFillColor(panel_bg)
+        p.setStrokeColor(border)
+        p.rect(margin, y - 18 * mm, content_w, 16 * mm, fill=1, stroke=1)
+        p.setFillColor(text_main)
+        p.setFont("Helvetica-Bold", 12)
+        p.drawString(margin + 8 * mm, y - 10 * mm, "No per-user accounts yet")
+        draw_footer()
+        p.save()
+        buf.seek(0)
+        return send_file(buf, mimetype="application/pdf", as_attachment=True,
+                          download_name=f"webaccess_{safe_name}_{dt}.pdf")
+
+    row_h = 12 * mm
+    col_email_w = content_w * 0.42
+
+    def draw_table_head():
+        nonlocal y
+        p.setFillColor(text_muted)
+        p.setFont("Helvetica-Bold", 8.5)
+        p.drawString(margin, y, "EMAIL")
+        p.drawString(margin + col_email_w, y, "PASSWORD")
+        y -= 4 * mm
+        p.setStrokeColor(border)
+        p.setLineWidth(0.7)
+        p.line(margin, y, margin + content_w, y)
+        y -= 7 * mm
+
+    draw_table_head()
+
+    for email, password, _enabled in users:
+        if y - row_h < 18 * mm:
+            draw_footer()
+            draw_header()
+            draw_table_head()
+
+        p.setFillColor(text_main)
+        p.setFont("Helvetica", 10)
+        p.drawString(margin, y - 3.5 * mm, fit_text(email, "Helvetica", 10, col_email_w - 4 * mm))
+
+        p.setFont("Courier", 10)
+        p.drawString(margin + col_email_w, y - 3.5 * mm, fit_text(password, "Courier", 10, content_w - col_email_w - 2 * mm))
+
+        p.setStrokeColor(border)
+        p.setLineWidth(0.4)
+        p.line(margin, y - row_h + 3 * mm, margin + content_w, y - row_h + 3 * mm)
+        y -= row_h
+
+    draw_footer()
+    p.save()
+    buf.seek(0)
+    logger.info(f"{u(getattr(g, 'user_id', None))} exported per-user access pdf for company id={company_id} count={len(users)}")
+    return send_file(buf, mimetype="application/pdf", as_attachment=True,
+                      download_name=f"webaccess_{safe_name}_{dt}.pdf")
 
 @api_bp.route("/delete-secret", methods=["POST"])
 def delete_secret():

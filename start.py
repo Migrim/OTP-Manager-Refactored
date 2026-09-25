@@ -1192,6 +1192,9 @@ def render_screen(title, lines, breadcrumb=None, hints=None, big_title=False):
         print(row)
 
 def get_db_status():
+    db_path = os.path.join(BASE_DIR, "instance", "otp.db")
+    if not os.path.exists(db_path):
+        return None, "Database not yet initialized"
     try:
         import importlib.util as _ilu
         _spec = _ilu.spec_from_file_location("database", os.path.join(BASE_DIR, "database.py"))

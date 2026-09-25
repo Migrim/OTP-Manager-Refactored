@@ -3,7 +3,6 @@ import sqlite3
 import json
 import os
 import sys
-import shutil
 import uuid
 import urllib.request
 import urllib.error
@@ -1022,7 +1021,15 @@ def admin_required_json(f):
 def webaccess():
     with sqlite3.connect(DB_PATH) as db:
         cursor = db.cursor()
-        cursor.execute("SELECT company_id, name, login_enabled FROM companies ORDER BY name ASC")
+        cursor.execute("""
+            SELECT c.company_id, c.name, c.login_enabled, c.per_user_login_enabled,
+                   COUNT(pua.id) AS pua_total,
+                   COALESCE(SUM(CASE WHEN pua.enabled = 1 THEN 1 ELSE 0 END), 0) AS pua_active
+            FROM companies c
+            LEFT JOIN per_user_access pua ON pua.company_id = c.company_id
+            GROUP BY c.company_id, c.name, c.login_enabled, c.per_user_login_enabled
+            ORDER BY c.name ASC
+        """)
         company_list = cursor.fetchall()
     return render_template("webaccess.html", companies=company_list)
 
@@ -1125,6 +1132,7 @@ _SCHEMA_COLUMN_DEFAULTS = {
     "users.blur_on_inactive_delay": "INTEGER DEFAULT 60",
     "users.full_width_layout": "INTEGER DEFAULT 0",
     "companies.login_enabled": "INTEGER DEFAULT 0",
+    "companies.per_user_login_enabled": "INTEGER DEFAULT 0",
 }
 
 @app.route("/api/db/task", methods=["POST"])
@@ -1211,9 +1219,20 @@ def db_load_backup():
     src = os.path.join(BACKUP_DIR, name)
     try:
         backup_db()
-        shutil.copyfile(src, os.path.join(BASE_DIR, DB_PATH))
+        # Restore via the SQLite backup API rather than a raw file copy: DB_PATH
+        # is a live WAL-mode database, and overwriting its bytes directly while
+        # a -wal file may still be attached can leave the file inconsistent.
+        src_conn = sqlite3.connect(src)
+        try:
+            dst_conn = sqlite3.connect(DB_PATH)
+            try:
+                src_conn.backup(dst_conn)
+            finally:
+                dst_conn.close()
+        finally:
+            src_conn.close()
         for suffix in ("-wal", "-shm"):
-            side = os.path.join(BASE_DIR, DB_PATH) + suffix
+            side = DB_PATH + suffix
             if os.path.exists(side):
                 os.remove(side)
         logger.warning(f"{u(g.user_id)} restored database backup {name}")

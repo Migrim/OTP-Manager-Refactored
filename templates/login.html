@@ -10,13 +10,8 @@
     <div class="auth-ascii-logo" id="auth-ascii-logo"></div>
     <div class="auth-loading-row" id="auth-loading-row">
       <div class="spinner sm"></div>
-      <span style="font-size:13px;font-weight:600;color:var(--dim);letter-spacing:0.02em">Loading</span>
+      <span style="font-size:13px;font-weight:600;color:var(--text-dim);letter-spacing:0.02em">Loading</span>
     </div>
-  </div>
-
-  <div class="auth-topbar left">
-    <div class="brand-icon"><span data-icon="lock"></span></div>
-    <span style="font-weight:700;font-size:17px;letter-spacing:-0.01em">OTP Manager</span>
   </div>
 
   <div class="auth-topbar right">
@@ -66,7 +61,7 @@
 
     <div class="auth-error" id="auth-error"></div>
 
-    <div class="auth-footnote">Don't have an account? <a href="#" id="auth-request-access">Request access</a></div>
+    <div class="auth-footnote">Having problems with OTP-Tool? <a href="https://www.one-auth.net/doc-otp-tool-docs" target="_blank" rel="noopener">Check the documentation</a></div>
   </div>
 </div>
 {% endblock %}
@@ -89,7 +84,7 @@
     return (getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#a15c93').trim();
   }
   function currentBg() {
-    return (getComputedStyle(document.documentElement).getPropertyValue('--bg') || '#fafafa').trim();
+    return (getComputedStyle(document.documentElement).getPropertyValue('--app-bg') || '#fafafa').trim();
   }
 
   /* ---------- ascii canvas background ---------- */
@@ -259,7 +254,6 @@
   /* ---------- cosmetic links ---------- */
 
   document.getElementById('auth-forgot').addEventListener('click', function (e) { e.preventDefault(); });
-  document.getElementById('auth-request-access').addEventListener('click', function (e) { e.preventDefault(); });
 
   /* ---------- autofocus username on first keystroke ---------- */
 

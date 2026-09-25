@@ -1,6 +1,5 @@
 import os
 import sqlite3
-import shutil
 import re
 import time
 import json
@@ -35,7 +34,19 @@ def backup_db():
         return None
     ts = datetime.now().strftime("%Y-%m-%d_%H%M%S")
     dest = os.path.join(BACKUP_DIR, f"otp_{ts}_{os.getpid()}.db")
-    shutil.copyfile(DB_PATH, dest)
+    # Use the SQLite online backup API rather than a raw file copy: connect()
+    # runs in WAL mode, where committed data (including schema) can still be
+    # sitting in the -wal side file and not yet in otp.db itself. A plain
+    # shutil.copyfile can therefore capture a snapshot with no tables at all.
+    src = sqlite3.connect(DB_PATH)
+    try:
+        dst = sqlite3.connect(dest)
+        try:
+            src.backup(dst)
+        finally:
+            dst.close()
+    finally:
+        src.close()
     backups = sorted(
         [os.path.join(BACKUP_DIR, f) for f in os.listdir(BACKUP_DIR) if f.startswith("otp_") and f.endswith(".db")],
         key=os.path.getmtime,
@@ -73,7 +84,21 @@ def init_db():
                 name TEXT NOT NULL UNIQUE,
                 kundennummer INTEGER UNIQUE,
                 password TEXT,
-                login_enabled INTEGER DEFAULT 0
+                login_enabled INTEGER DEFAULT 0,
+                per_user_login_enabled INTEGER DEFAULT 0
+            )
+        """)
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS per_user_access (
+                id INTEGER PRIMARY KEY,
+                company_id INTEGER NOT NULL,
+                email TEXT NOT NULL COLLATE NOCASE,
+                password_enc TEXT NOT NULL,
+                enabled INTEGER DEFAULT 1,
+                created_at TEXT,
+                updated_at TEXT,
+                UNIQUE(company_id, email),
+                FOREIGN KEY (company_id) REFERENCES companies (company_id)
             )
         """)
         c.execute("""
@@ -146,7 +171,7 @@ _REQUIRED_USER_COLUMNS = [
 
 _REQUIRED_TABLE_COLUMNS = {
     "users": _REQUIRED_USER_COLUMNS,
-    "companies": ["login_enabled"],
+    "companies": ["login_enabled", "per_user_login_enabled"],
 }
 
 _DEPRECATED_COLUMNS = ["show_content_titles", "alert_color", "text_color"]
@@ -154,6 +179,8 @@ _DEPRECATED_TABLES  = ["statistics"]
 
 def get_missing_columns():
     """Return a list of required table columns missing from the database."""
+    if not os.path.exists(DB_PATH):
+        return []
     try:
         with connect() as db:
             c = db.cursor()
@@ -170,6 +197,8 @@ def get_missing_columns():
 
 def get_deprecated_items():
     """Return (deprecated_columns, deprecated_tables) that still exist in the DB."""
+    if not os.path.exists(DB_PATH):
+        return [], []
     try:
         with connect() as db:
             c = db.cursor()

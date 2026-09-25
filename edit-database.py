@@ -216,13 +216,34 @@ def upgrade_database():
         if not _table_exists(cur, "companies"):
             print(f"  {yellow('!')} Table 'companies' not found")
             return False
+        changed_companies = False
         cur.execute("PRAGMA table_info(companies)")
         company_columns = [col[1] for col in cur.fetchall()]
         if "login_enabled" not in company_columns:
             cur.execute("ALTER TABLE companies ADD COLUMN login_enabled INTEGER DEFAULT 0")
             print(f"  {green('✓')} Added column: {gray('login_enabled')}")
-            return True
-        return False
+            changed_companies = True
+        if "per_user_login_enabled" not in company_columns:
+            cur.execute("ALTER TABLE companies ADD COLUMN per_user_login_enabled INTEGER DEFAULT 0")
+            print(f"  {green('✓')} Added column: {gray('per_user_login_enabled')}")
+            changed_companies = True
+        if not _table_exists(cur, "per_user_access"):
+            cur.execute("""
+                CREATE TABLE per_user_access (
+                    id INTEGER PRIMARY KEY,
+                    company_id INTEGER NOT NULL,
+                    email TEXT NOT NULL COLLATE NOCASE,
+                    password_enc TEXT NOT NULL,
+                    enabled INTEGER DEFAULT 1,
+                    created_at TEXT,
+                    updated_at TEXT,
+                    UNIQUE(company_id, email),
+                    FOREIGN KEY (company_id) REFERENCES companies (company_id)
+                )
+            """)
+            print(f"  {green('✓')} Created table: {gray('per_user_access')}")
+            changed_companies = True
+        return changed_companies
 
     print(dim("  Backing up database..."))
     backup_dir = os.path.join(BASE_DIR, "backup")
@@ -620,6 +641,10 @@ def check_schema_needs_update():
         if any(col not in columns for col in required):
             return True
         if "login_enabled" not in company_columns:
+            return True
+        if "per_user_login_enabled" not in company_columns:
+            return True
+        if "per_user_access" not in tables:
             return True
         if any(col in columns for col in deprecated_cols):
             return True

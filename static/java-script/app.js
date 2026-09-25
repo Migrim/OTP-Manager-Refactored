@@ -3,6 +3,8 @@
   "use strict";
 
   const ICONS = {
+    tabKey: '<svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M3 12h13M16 12l-4.5-4.5M16 12l-4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 5v14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+    commandKey: '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"/></svg>',
     home: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3.5 11L12 3.5 20.5 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 9.5V20a1 1 0 001 1h11a1 1 0 001-1V9.5" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
     plus: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
     users: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3.2" stroke="currentColor" stroke-width="1.8"/><path d="M2.5 20c1-3.6 3.7-5.5 6.5-5.5s5.5 1.9 6.5 5.5M16 8.2a3 3 0 110 5.9M21.5 20c-.7-2.5-2.2-4.2-4-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
@@ -277,6 +279,44 @@
   document.addEventListener("keydown", e => {
     if (e.key === "Escape") closeAllOverlays();
   });
+
+  /* [data-tip] tooltips: positioned in fixed/viewport space via JS rather than
+     an absolutely-positioned pseudo-element, so they aren't clipped by a
+     scrollable or overflow:hidden ancestor (e.g. a table body). */
+  let tipEl = null;
+  function tipShow(target) {
+    const text = target.getAttribute("data-tip");
+    if (!text) return;
+    if (!tipEl) {
+      tipEl = document.createElement("div");
+      tipEl.className = "app-tooltip";
+      document.body.appendChild(tipEl);
+    }
+    tipEl.textContent = text;
+    tipEl.style.display = "block";
+    const r = target.getBoundingClientRect();
+    const tr = tipEl.getBoundingClientRect();
+    let left = r.left + r.width / 2 - tr.width / 2;
+    left = Math.max(4, Math.min(left, window.innerWidth - tr.width - 4));
+    let top = r.top - tr.height - 7;
+    tipEl.classList.toggle("flip", top < 4);
+    if (top < 4) top = r.bottom + 7;
+    tipEl.style.left = left + "px";
+    tipEl.style.top = top + "px";
+  }
+  function tipHide() {
+    if (tipEl) tipEl.style.display = "none";
+  }
+  document.addEventListener("mouseover", e => {
+    const el = e.target.closest("[data-tip]");
+    if (el) tipShow(el);
+  });
+  document.addEventListener("mouseout", e => {
+    const el = e.target.closest("[data-tip]");
+    if (el && !el.contains(e.relatedTarget)) tipHide();
+  });
+  document.addEventListener("mousedown", tipHide);
+  document.addEventListener("scroll", tipHide, true);
 
   /* digits with staggered flip-in animation (pass animate:false to update quietly) */
   function digitsHTML(code, animate) {
@@ -825,7 +865,7 @@
       let html = '<span class="ac-typed">' + escapeHtml(value) + "</span>";
       if (remainder) html += '<span class="ac-suggest">' + escapeHtml(remainder) + "</span>";
       if (current.code) html += '<span class="ac-code">' + COPY_KEY_LABEL + " &middot; " + escapeHtml(current.code) + "</span>";
-      if (remainder) html += '<span class="ac-tabhint">Tab &#8677;</span>';
+      if (remainder) html += '<span class="ac-tabhint"><span>Tab</span>' + ICONS.tabKey + "</span>";
       ghost.innerHTML = html;
     }
 
@@ -894,9 +934,15 @@
     document.documentElement.style.setProperty("--accent-fg", accentForeground(color));
     setCookie("accent", color);
   }
+  function updateSidebarToggleTitle(closed) {
+    document.querySelectorAll("[data-toggle-sidebar]").forEach(b => {
+      b.title = closed ? "Show sidebar" : "Hide sidebar";
+    });
+  }
   function toggleSidebar() {
     const closed = document.documentElement.classList.toggle("sidebar-closed");
     setCookie("sidebar", closed ? "closed" : "open");
+    updateSidebarToggleTitle(closed);
   }
 
   /* ---------- sidebar profile menu ---------- */
@@ -1467,7 +1513,7 @@
   document.addEventListener("DOMContentLoaded", () => {
     hydrateIcons();
     const searchKbd = document.getElementById("home-search-kbd");
-    if (searchKbd) searchKbd.innerHTML = IS_MAC ? "&#8984;K" : "Alt+K";
+    if (searchKbd) searchKbd.innerHTML = IS_MAC ? ICONS.commandKey + "K" : "Alt+K";
     const copyHint = document.getElementById("cmdk-copy-hint");
     if (copyHint) copyHint.innerHTML = COPY_KEY_LABEL + " Copy code";
     cmdkMount();
@@ -1480,6 +1526,7 @@
     }
     document.querySelectorAll("[data-toggle-sidebar]").forEach(b =>
       b.addEventListener("click", toggleSidebar));
+    updateSidebarToggleTitle(document.documentElement.classList.contains("sidebar-closed"));
 
     document.querySelectorAll(".flash-msg").forEach(el => {
       toast(el.textContent.trim());
