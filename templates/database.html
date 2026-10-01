@@ -73,6 +73,21 @@
           </div>
         </div>
 
+        <div style="padding-top:12px;border-top:1px solid var(--edge)">
+          <label class="field-label-sm">Per-User Access Key</label>
+          <div class="task-desc" style="margin:0 0 5px 0">
+            Decrypts per-user web access passwords (<span class="mono">per_user_access.key</span>). Not sent with the
+            database push — copy it to the receiving end manually if it needs to decrypt those passwords.
+          </div>
+          <div style="position:relative">
+            <input class="text-input mono padded" type="password" id="pua-key" placeholder="Click Reveal to fetch" readonly autocomplete="off">
+            <div style="position:absolute;right:6px;top:50%;transform:translateY(-50%);display:flex;gap:4px">
+              <button id="pua-key-copy" type="button" style="display:none;padding:5px 9px;border-radius:6px;border:none;background:none;color:var(--dim);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Copy</button>
+              <button id="pua-key-reveal" type="button" style="padding:5px 9px;border-radius:6px;border:none;background:none;color:var(--dim);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Reveal</button>
+            </div>
+          </div>
+        </div>
+
         <div style="display:flex;align-items:center;gap:10px;padding-top:12px;border-top:1px solid var(--edge);flex-wrap:wrap">
           <div style="flex:1;min-width:180px">
             <div class="task-desc" style="margin:0" id="sync-next-push">Automatic push is off</div>
@@ -352,6 +367,32 @@
         document.getElementById("sync-secret-toggle").textContent = "Hide";
         A.toast("New secret generated — click Save, then set the same secret on the counterpart");
       } catch (err) { A.toast(err.message, "error"); }
+    });
+
+    const puaKeyInput = document.getElementById("pua-key");
+    const puaKeyReveal = document.getElementById("pua-key-reveal");
+    const puaKeyCopy = document.getElementById("pua-key-copy");
+    let puaKeyFetched = false;
+
+    puaKeyReveal.addEventListener("click", async () => {
+      if (!puaKeyFetched) {
+        try {
+          const res = await A.fetchJSON("/api/per-user-access/key");
+          puaKeyInput.value = res.key;
+          puaKeyFetched = true;
+          puaKeyCopy.style.display = "";
+        } catch (err) { A.toast(err.message, "error"); return; }
+      }
+      const show = puaKeyInput.type === "password";
+      puaKeyInput.type = show ? "text" : "password";
+      puaKeyReveal.textContent = show ? "Hide" : "Reveal";
+    });
+
+    puaKeyCopy.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(puaKeyInput.value);
+        A.toast("Key copied to clipboard");
+      } catch (err) { A.toast("Could not copy — select and copy manually", "error"); }
     });
 
     enabledSwitch.addEventListener("click", () => {

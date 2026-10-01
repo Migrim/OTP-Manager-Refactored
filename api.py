@@ -1046,6 +1046,19 @@ def per_user_access_export_pdf():
     return send_file(buf, mimetype="application/pdf", as_attachment=True,
                       download_name=f"webaccess_{safe_name}_{dt}.pdf")
 
+@api_bp.route("/per-user-access/key", methods=["GET"])
+def per_user_access_key():
+    """Reveals the local encryption key for per-user access passwords, so an
+    admin can copy it to wherever the database ends up being decrypted (e.g.
+    a remote sync endpoint). Deliberately manual: the key is never included
+    in the db push payload itself, since bundling it with the data it
+    protects would defeat the point of encrypting these passwords at all."""
+    if not g.is_admin:
+        return jsonify({"error": "Admin access required"}), 403
+    key = _pua_secret()
+    logger.warning(f"{u(getattr(g, 'user_id', None))} revealed the per-user access encryption key")
+    return jsonify({"key": key})
+
 @api_bp.route("/delete-secret", methods=["POST"])
 def delete_secret():
     t0 = time.perf_counter()
