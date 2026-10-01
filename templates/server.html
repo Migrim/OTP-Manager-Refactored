@@ -312,7 +312,7 @@
         document.getElementById("update-uptodate").classList.add("open");
         try { localStorage.removeItem("otp-update-available"); } catch (e) {}
         var dot = document.getElementById("update-dot");
-        if (dot) dot.style.display = "none";
+        if (dot) dot.classList.remove("is-on");
       }
     }
     checkBtn.disabled = false;

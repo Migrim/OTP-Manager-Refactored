@@ -218,7 +218,7 @@
       else sessionStorage.removeItem("otp-settings-dirty");
     } catch (e) {}
     const dot = document.getElementById("settings-dirty-dot");
-    if (dot) dot.style.display = dirty ? "inline-block" : "none";
+    if (dot) dot.classList.toggle("is-on", dirty);
     const revertBtn = document.getElementById("revert-settings");
     if (revertBtn) revertBtn.style.display = dirty ? "" : "none";
     const saveBtn = document.getElementById("save-settings");

@@ -75,11 +75,7 @@
 
         <div style="padding-top:12px;border-top:1px solid var(--edge)">
           <label class="field-label-sm">Per-User Access Key</label>
-          <div class="task-desc" style="margin:0 0 5px 0">
-            Decrypts per-user web access passwords (<span class="mono">per_user_access.key</span>). Not sent with the
-            database push — copy it to the receiving end manually if it needs to decrypt those passwords.
-          </div>
-          <div style="position:relative">
+          <div style="position:relative;margin-top:5px">
             <input class="text-input mono padded" type="password" id="pua-key" placeholder="Click Reveal to fetch" readonly autocomplete="off">
             <div style="position:absolute;right:6px;top:50%;transform:translateY(-50%);display:flex;gap:4px">
               <button id="pua-key-copy" type="button" style="display:none;padding:5px 9px;border-radius:6px;border:none;background:none;color:var(--dim);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Copy</button>

@@ -983,7 +983,7 @@
   function clearSettingsDirty() {
     try { sessionStorage.removeItem("otp-settings-dirty"); } catch (e) {}
     const dot = document.querySelector("#settings-dirty-dot");
-    if (dot) dot.style.display = "none";
+    if (dot) dot.classList.remove("is-on");
   }
   function confirmLeaveUnsaved() {
     if (!hasUnsavedSettings()) return Promise.resolve(true);
@@ -1056,13 +1056,13 @@
 
       const curNav = document.querySelector(".sidebar nav");
       const oldDot = curNav.querySelector("#update-dot");
-      const dotVisible = !!oldDot && oldDot.style.display !== "none";
+      const dotVisible = !!oldDot && oldDot.classList.contains("is-on");
       curNav.innerHTML = newNav.innerHTML;
       const newDot = curNav.querySelector("#update-dot");
-      if (newDot && dotVisible) newDot.style.display = "inline-block";
+      if (newDot && dotVisible) newDot.classList.add("is-on");
       try {
         const newSettingsDot = curNav.querySelector("#settings-dirty-dot");
-        if (newSettingsDot && sessionStorage.getItem("otp-settings-dirty") === "1") newSettingsDot.style.display = "inline-block";
+        if (newSettingsDot && sessionStorage.getItem("otp-settings-dirty") === "1") newSettingsDot.classList.add("is-on");
       } catch (e) {}
       if (sidebarPinned.secrets) sidebarPinnedRender();
       sidebarPinnedFetch();

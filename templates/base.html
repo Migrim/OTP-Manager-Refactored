@@ -64,7 +64,7 @@
       {% endif %}
       <a href="/settings" class="nav-item {{ 'active' if active_page == 'settings' else '' }}" title="Settings">
         <span class="nav-ico" data-icon="settings"></span><span class="nav-label">Settings</span>
-        <span class="nav-dot" id="settings-dirty-dot" style="display:none" title="You have unsaved settings changes — save them or revert on the Settings page."></span>
+        <span class="nav-dot" id="settings-dirty-dot" title="You have unsaved settings changes — save them or revert on the Settings page."></span>
       </a>
 
       {% if can_add_users or is_admin %}
@@ -89,7 +89,7 @@
       {% endif %}
       <a href="/server" class="nav-item {{ 'active' if active_page == 'server' else '' }}" title="Server Config">
         <span class="nav-ico" data-icon="wrench"></span><span class="nav-label">Server Config</span>
-        <span class="nav-dot" id="update-dot" style="display:none"></span>
+        <span class="nav-dot" id="update-dot"></span>
       </a>
       {% endif %}
 
@@ -182,13 +182,13 @@
       var flag = localStorage.getItem("otp-update-available");
       if (flag && flag !== cur) {
         var dot = document.getElementById("update-dot");
-        if (dot) dot.style.display = "inline-block";
+        if (dot) dot.classList.add("is-on");
       }
     } catch (e) {}
     try {
       if (sessionStorage.getItem("otp-settings-dirty") === "1") {
         var settingsDot = document.getElementById("settings-dirty-dot");
-        if (settingsDot) settingsDot.style.display = "inline-block";
+        if (settingsDot) settingsDot.classList.add("is-on");
       }
     } catch (e) {}
   })();
