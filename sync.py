@@ -15,6 +15,8 @@ import base64
 import json
 import os
 import secrets as pysecrets
+import sqlite3
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -136,8 +138,27 @@ def push_database(endpoint: str, secret: str, db_path: str, timeout: int = 60):
     if not os.path.exists(db_path):
         return False, "No database file found to push"
 
-    with open(db_path, "rb") as f:
-        raw = f.read()
+    # db_path is a live WAL-mode database (see database.py's connect()), so a
+    # raw read can miss recently committed data still sitting in the -wal
+    # side file. Use the SQLite online backup API to produce a consistent,
+    # fully-checkpointed snapshot to push instead — same technique as
+    # database.py's own backup_db().
+    fd, snapshot_path = tempfile.mkstemp(prefix="otp_push_", suffix=".db")
+    os.close(fd)
+    try:
+        src = sqlite3.connect(db_path)
+        try:
+            dst = sqlite3.connect(snapshot_path)
+            try:
+                src.backup(dst)
+            finally:
+                dst.close()
+        finally:
+            src.close()
+        with open(snapshot_path, "rb") as f:
+            raw = f.read()
+    finally:
+        os.remove(snapshot_path)
 
     payload = json.dumps({
         "filename": "otp.db",

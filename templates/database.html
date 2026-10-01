@@ -44,12 +44,11 @@
             <div style="display:flex;align-items:center;gap:10px">
               <span class="task-title">Remote Sync</span>
             </div>
-            <div class="task-desc">Pushes an end-to-end encrypted copy of this database to another endpoint. Both sides use the same secret to encrypt and decrypt — the plaintext database never leaves this machine.</div>
           </div>
           <button class="switch" id="sync-enabled" type="button"><span class="switch-cell switch-cell-off">OFF</span><span class="switch-cell switch-cell-on">ON</span></button>
         </div>
 
-        <div style="display:flex;gap:12px;margin-top:14px">
+        <div style="display:flex;gap:12px">
           <div style="flex:1;min-width:0">
             <label class="field-label-sm">Endpoint</label>
             <input class="text-input mono" id="sync-endpoint" placeholder="https://otp-backup.example.com" autocomplete="off">
@@ -63,30 +62,29 @@
           </div>
         </div>
 
-        <div style="margin-top:12px">
-          <label class="field-label-sm">Shared Secret</label>
+        <div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
+            <label class="field-label-sm" style="margin:0">Shared Secret</label>
+            <button id="sync-secret-generate" type="button" class="btn-outline" style="padding:2px 8px;font-size:10.5px;flex:none">Generate</button>
+          </div>
           <div style="position:relative">
             <input class="text-input mono padded" type="password" id="sync-secret" placeholder="Shared secret used to encrypt and decrypt" autocomplete="off">
             <button id="sync-secret-toggle" type="button" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);padding:5px 9px;border-radius:6px;border:none;background:none;color:var(--dim);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Show</button>
           </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">
-            <div class="task-desc" style="margin:0">Same secret must be set on the counterpart — see the setup notes it comes with.</div>
-            <button id="sync-secret-generate" type="button" class="btn-outline" style="padding:4px 10px;font-size:11px;flex:none">Generate</button>
-          </div>
         </div>
 
-        <div style="display:flex;align-items:center;gap:10px;margin-top:16px;padding-top:14px;border-top:1px solid var(--edge);flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:10px;padding-top:12px;border-top:1px solid var(--edge);flex-wrap:wrap">
           <div style="flex:1;min-width:180px">
             <div class="task-desc" style="margin:0" id="sync-next-push">Automatic push is off</div>
             <div class="task-desc" style="margin:2px 0 0 0" id="sync-last-push"></div>
           </div>
-          <button class="btn-outline" id="sync-check" type="button" style="padding:8px 14px;display:flex;align-items:center;gap:8px">
-            <span class="spinner sm" id="sync-check-spinner" style="display:none"></span>
+          <button class="btn-outline" id="sync-check" type="button" style="padding:8px 14px;display:flex;align-items:center;justify-content:center;gap:8px;min-width:148px">
+            <span class="spinner xs" id="sync-check-spinner" style="display:none;flex:none"></span>
             <span id="sync-check-label">Check Connection</span>
           </button>
-          <button class="btn-outline" id="sync-push-now" type="button" style="padding:8px 14px;display:flex;align-items:center;gap:8px">
-            <span class="spinner sm" id="sync-push-spinner" style="display:none"></span>
-            <span id="sync-push-label">Push Now</span>
+          <button class="btn-outline" id="sync-push-now" type="button" style="padding:8px 14px;display:flex;align-items:center;justify-content:center;gap:8px;min-width:148px">
+            <span class="spinner xs" id="sync-push-now-spinner" style="display:none;flex:none"></span>
+            <span id="sync-push-now-label">Push Now</span>
           </button>
           <button class="btn-accent" id="sync-save" type="button" style="padding:8px 16px">Save</button>
         </div>
@@ -119,6 +117,17 @@
       <button class="btn-outline" data-close-overlay type="button">Cancel</button>
       <button class="btn-danger" id="load-backup-confirm" type="button">Load backup</button>
     </div>
+  </div>
+</div>
+
+<!-- Push progress fullscreen modal -->
+<div class="overlay center" id="push-progress-overlay" style="z-index:99999;background:var(--app-bg)">
+  <div style="display:flex;flex-direction:column;align-items:center;gap:18px;text-align:center;max-width:420px;padding:20px">
+    <span class="spinner" id="push-progress-spinner" style="width:42px;height:42px;border-width:4px"></span>
+    <span id="push-progress-icon" style="display:none;width:42px;height:42px;align-items:center;justify-content:center"></span>
+    <div id="push-progress-title" style="font-size:17px;font-weight:700;color:var(--text)">Pushing database…</div>
+    <div id="push-progress-sub" class="task-desc" style="margin:0"></div>
+    <button class="btn-outline" id="push-progress-close" type="button" style="display:none;padding:8px 18px;margin-top:6px">Close</button>
   </div>
 </div>
 {% endblock %}
@@ -263,6 +272,9 @@
     const lastPushEl = document.getElementById("sync-last-push");
     let enabled = false;
     let status = null;
+    let lastPushDurationMs = null;
+    let pushing = false;
+    let pushStart = null;
 
     function setBtnBusy(idPrefix, busy, busyText, idleText) {
       const btn = document.getElementById(idPrefix);
@@ -300,8 +312,9 @@
         nextPushEl.textContent = "Automatic push is off";
       }
       if (status.last_push_at) {
+        const durSuffix = lastPushDurationMs != null ? " (took " + (lastPushDurationMs / 1000).toFixed(1) + "s)" : "";
         lastPushEl.textContent = "Last push " + fmtAgo(status.last_push_at) + " — " +
-          (status.last_push_ok ? "succeeded" : "failed: " + (status.last_push_message || "unknown error"));
+          (status.last_push_ok ? "succeeded" : "failed: " + (status.last_push_message || "unknown error")) + durSuffix;
         lastPushEl.style.color = status.last_push_ok ? "" : "var(--danger)";
       } else {
         lastPushEl.textContent = "Never pushed yet";
@@ -377,17 +390,74 @@
       setBtnBusy("sync-check", false, "Checking…", "Check Connection");
     });
 
+    /* push progress: fullscreen, blocks dismissal while a push is running */
+    const pushOverlay = document.getElementById("push-progress-overlay");
+    const pushSpinner = document.getElementById("push-progress-spinner");
+    const pushIcon = document.getElementById("push-progress-icon");
+    const pushTitle = document.getElementById("push-progress-title");
+    const pushSub = document.getElementById("push-progress-sub");
+    const pushClose = document.getElementById("push-progress-close");
+
+    pushOverlay.addEventListener("click", e => { if (pushing) e.stopPropagation(); });
+    document.addEventListener("keydown", e => { if (pushing && e.key === "Escape") e.stopPropagation(); }, true);
+    pushClose.addEventListener("click", () => A.closeOverlay("push-progress-overlay"));
+
+    function setPushProgress(secs) {
+      pushSub.textContent = "To " + (endpointInput.value.trim() || "endpoint") + " — " + secs + "s elapsed";
+    }
+
+    function finishPushProgress(ok, message) {
+      pushSpinner.style.display = "none";
+      pushIcon.style.display = "flex";
+      pushIcon.style.color = ok ? "var(--ok)" : "var(--danger)";
+      pushIcon.innerHTML = ok ? A.ICONS.check : A.ICONS.xmark;
+      pushTitle.textContent = ok ? "Push succeeded" : "Push failed";
+      pushSub.textContent = message;
+      pushClose.style.display = "inline-flex";
+      if (ok) setTimeout(() => A.closeOverlay("push-progress-overlay"), 2000);
+    }
+
     document.getElementById("sync-push-now").addEventListener("click", async () => {
+      if (pushing) return;
+      pushing = true;
+      pushStart = Date.now();
+      document.getElementById("sync-check").disabled = true;
+      document.getElementById("sync-save").disabled = true;
       setBtnBusy("sync-push-now", true, "Pushing…", "Push Now");
+
+      pushSpinner.style.display = "block";
+      pushIcon.style.display = "none";
+      pushClose.style.display = "none";
+      pushTitle.textContent = "Pushing database…";
+      setPushProgress(0);
+      A.openOverlay("push-progress-overlay");
+
+      const tick = setInterval(() => {
+        const secs = Math.floor((Date.now() - pushStart) / 1000);
+        setBtnBusy("sync-push-now", true, "Pushing… " + secs + "s", "Push Now");
+        setPushProgress(secs);
+      }, 1000);
       try {
         const res = await A.fetchJSON("/api/sync/push-now", { method: "POST" });
+        lastPushDurationMs = Date.now() - pushStart;
+        pushing = false;
         applyStatus(res);
-        A.toast("Database pushed");
-      } catch (err) { A.toast(err.message, "error"); }
+        finishPushProgress(true, "Database pushed in " + (lastPushDurationMs / 1000).toFixed(1) + "s");
+      } catch (err) {
+        lastPushDurationMs = Date.now() - pushStart;
+        pushing = false;
+        await loadStatus();
+        finishPushProgress(false, err.message);
+      }
+      clearInterval(tick);
+      document.getElementById("sync-check").disabled = false;
+      document.getElementById("sync-save").disabled = false;
       setBtnBusy("sync-push-now", false, "Pushing…", "Push Now");
+      renderTimers();
     });
 
-    setInterval(renderTimers, 15000);
+    setInterval(renderTimers, 1000);
+    setInterval(loadStatus, 30000);
     loadStatus();
   })();
 })();
