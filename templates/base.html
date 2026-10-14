@@ -147,6 +147,39 @@
 
   <main class="main {{ '' if is_logged_in else 'no-side' }}">
     {% block page %}{% endblock %}
+    {% if is_logged_in and license_status.state in ('expiring', 'expired', 'revoked', 'invalid') %}
+    <div class="license-banner {{ license_status.state }}" id="license-banner" role="alert">
+      <span>
+        {% if license_status.state == 'revoked' %}
+          Your license has been revoked. Licensed features are disabled.
+        {% elif license_status.state == 'invalid' %}
+          Your license key is no longer recognized. Licensed features are disabled.
+        {% elif license_status.state == 'expired' %}
+          Your license expired on {{ license_status.expires_at }}. Licensed features are disabled.
+        {% elif license_status.days_left == 0 %}
+          Your license expires today ({{ license_status.expires_at }}).
+        {% else %}
+          Your license expires in {{ license_status.days_left }} day{{ '' if license_status.days_left == 1 else 's' }} ({{ license_status.expires_at }}).
+        {% endif %}
+      </span>
+      <span class="license-banner-actions">
+        {% if is_admin %}<a href="/server">Manage license</a>{% endif %}
+        <a href="#" id="license-banner-dismiss">Don't show this</a>
+      </span>
+    </div>
+    <script>
+      (function () {
+        var banner = document.getElementById("license-banner");
+        var key = "otp-license-banner-hidden:{{ license_status.state }}:{{ license_status.expires_at }}";
+        try { if (localStorage.getItem(key)) { banner.style.display = "none"; return; } } catch (e) {}
+        document.getElementById("license-banner-dismiss").addEventListener("click", function (ev) {
+          ev.preventDefault();
+          banner.style.display = "none";
+          try { localStorage.setItem(key, "1"); } catch (e) {}
+        });
+      })();
+    </script>
+    {% endif %}
   </main>
 
   {% if is_logged_in %}
@@ -183,6 +216,20 @@
       if (flag && flag !== cur) {
         var dot = document.getElementById("update-dot");
         if (dot) dot.classList.add("is-on");
+      }
+    } catch (e) {}
+    try {
+      var lic = {{ license_status|tojson }};
+      if ({{ 'true' if is_logged_in else 'false' }} && (lic.state !== "ok" && lic.state !== "none")) {
+        var key = "otp-license-notified:" + lic.state + ":" + lic.expires_at;
+        if (!sessionStorage.getItem(key)) {
+          sessionStorage.setItem(key, "1");
+          var msg = lic.state === "revoked" ? "License has been revoked"
+            : lic.state === "invalid" ? "License key is no longer recognized"
+            : lic.state === "expired" ? "License expired on " + lic.expires_at
+            : (lic.days_left === 0 ? "License expires today" : "License expires in " + lic.days_left + " day" + (lic.days_left === 1 ? "" : "s"));
+          window.addEventListener("load", function () { if (window.App) App.toast(msg, "error"); });
+        }
       }
     } catch (e) {}
     try {

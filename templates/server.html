@@ -90,9 +90,9 @@
         </div>
         <div class="task-desc" id="cfg-license-status" style="margin-top:10px">
           {% if is_licensed %}
-            Licensed to <b style="color:var(--ink)">{{ company_brand }}</b>{% if license_expires_at %} · expires {{ license_expires_at }}{% endif %}{% if license_contact_email %} · contact {{ license_contact_email }}{% endif %}
+            Licensed to <b style="color:var(--ink)">{{ company_brand }}</b>{% if license_expires_at %} · expires {{ license_expires_at }}{% endif %}{% if license_status.state == 'expiring' %} · <b class="license-warn">{{ 'expires today' if license_status.days_left == 0 else 'expires in ' ~ license_status.days_left ~ ' day(s)' }}</b>{% endif %}{% if license_contact_email %} · contact {{ license_contact_email }}{% endif %}
           {% else %}
-            No license configured — some features are unavailable
+            {% if license_status.state == 'revoked' %}<b class="license-expired">License revoked</b> — licensed features are disabled. Enter a new key to restore them.{% elif license_status.state == 'invalid' %}<b class="license-expired">License key not recognized</b> — licensed features are disabled.{% elif license_status.state == 'expired' %}<b class="license-expired">License expired on {{ license_status.expires_at }}</b> — licensed features are disabled. Enter a new key to renew.{% else %}No license configured — some features are unavailable{% endif %}
           {% endif %}
         </div>
       </div>

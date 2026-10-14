@@ -304,6 +304,7 @@ html.dark-mode .sidebar-pinned::-webkit-scrollbar-thumb { background: #ffffff22;
 html.sidebar-closed .main:not(.no-side) { margin-left: 80px; }
 .main.no-side { margin-left: 10px; }
 
+.main > .page { height: auto; flex: 1 1 0; }
 .page { display: flex; flex-direction: column; height: 100%; min-height: 0; position: relative; }
 .page-topbar {
   display: flex; align-items: stretch; height: 38px; flex: none;
@@ -1542,3 +1543,16 @@ html.dark-mode .toast-btn:hover { filter: brightness(1.2); }
 .auth-ascii-logo .row { opacity: 0; }
 .auth-loading-row { display: flex; align-items: center; gap: 10px; transition: opacity 0.6s ease; }
 .auth-toasts { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); z-index: 99999; }
+
+.license-banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  flex: none; width: 100%; max-width: 1100px; margin: 5px auto 10px; padding: 12px 14px; border-radius: 0; font-size: 12.5px; line-height: 1.5;
+  border: 1px solid var(--border); border-left: 3px solid var(--accent);
+  background: var(--modal-bg); color: var(--text);
+}
+.license-banner.expired { border-left-color: var(--danger); }
+.license-banner-actions { display: flex; align-items: center; gap: 14px; flex: none; }
+.license-banner a { color: var(--accent); font-weight: 600; text-decoration: none; white-space: nowrap; }
+.license-banner a:hover { text-decoration: underline; }
+.license-warn { color: var(--accent); }
+.license-expired { color: var(--danger); }

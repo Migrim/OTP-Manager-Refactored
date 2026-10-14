@@ -272,7 +272,8 @@ def load_app_settings():
         "license_key": license_key,
         "company_name": company_name,
         "contact_email": contact_email,
-        "expires_at": expires_at
+        "expires_at": expires_at,
+        "license_invalid_reason": data.get("license_invalid_reason") or None
     }
 
 APP_SETTINGS = load_app_settings()
@@ -337,7 +338,7 @@ def parse_license_date(value):
 
 def format_license_date(value):
     dt = parse_license_date(value)
-    return dt.strftime("%Y-%m-%d") if dt else ""
+    return dt.strftime("%d.%m.%Y") if dt else ""
 
 app.secret_key = APP_SETTINGS["secret_key"]
 app.register_blueprint(api_bp, url_prefix="/api")
@@ -404,6 +405,8 @@ def admin_required(f):
 
 def is_app_licensed():
     if not (APP_SETTINGS.get("license_key") and APP_SETTINGS.get("company_name")):
+        return False
+    if APP_SETTINGS.get("license_invalid_reason"):
         return False
     expires = parse_license_date(APP_SETTINGS.get("expires_at"))
     if expires and expires < datetime.now(timezone.utc):
@@ -582,6 +585,74 @@ def load_user():
                     "full_width_layout": int(row[27] or 0),
                 }
 
+LICENSE_WARN_DAYS = 14
+
+def get_license_status():
+    """Return {"state": "none"|"ok"|"expiring"|"expired", "days_left", "expires_at"} for the stored license."""
+    if not (APP_SETTINGS.get("license_key") and APP_SETTINGS.get("company_name")):
+        return {"state": "none", "days_left": None, "expires_at": ""}
+    invalid = APP_SETTINGS.get("license_invalid_reason")
+    if invalid in ("revoked", "not_found"):
+        state = "revoked" if invalid == "revoked" else "invalid"
+        return {"state": state, "days_left": None, "expires_at": format_license_date(APP_SETTINGS.get("expires_at"))}
+    expires = parse_license_date(APP_SETTINGS.get("expires_at"))
+    if invalid == "expired":
+        return {"state": "expired", "days_left": 0, "expires_at": format_license_date(APP_SETTINGS.get("expires_at"))}
+    if not expires:
+        return {"state": "ok", "days_left": None, "expires_at": ""}
+    seconds = (expires - datetime.now(timezone.utc)).total_seconds()
+    days_left = int(seconds // 86400) if seconds > 0 else 0
+    if seconds <= 0:
+        state = "expired"
+    elif days_left < LICENSE_WARN_DAYS:
+        state = "expiring"
+    else:
+        state = "ok"
+    return {"state": state, "days_left": days_left, "expires_at": format_license_date(APP_SETTINGS.get("expires_at"))}
+
+LICENSE_RECHECK_SECONDS = 3600
+LICENSE_INVALID_REASONS = ("revoked", "not_found", "expired")
+
+def recheck_license():
+    """Re-verify the stored license with the licensing service so revocations, renewals
+    and changed expiry dates are picked up. Network/server errors never invalidate it."""
+    key = APP_SETTINGS.get("license_key")
+    if not key:
+        return
+    ok, result = verify_license(key)
+    if ok:
+        updates = {
+            "company_name": str(result.get("company") or APP_SETTINGS.get("company_name") or "").strip()[:60],
+            "contact_email": str(result.get("contact_email") or "").strip(),
+            "expires_at": result.get("expires_at") or None,
+            "license_invalid_reason": None,
+        }
+    elif result in LICENSE_INVALID_REASONS:
+        if APP_SETTINGS.get("license_invalid_reason") == result:
+            return
+        logger.warning(f"license check: license is no longer valid ({result})")
+        updates = {"license_invalid_reason": result}
+    else:
+        return
+    if all(APP_SETTINGS.get(k) == v for k, v in updates.items()):
+        return
+    APP_SETTINGS.update(updates)
+    settings = _read_settings_file()
+    for k, v in updates.items():
+        if v is None:
+            settings.pop(k, None)
+        else:
+            settings[k] = v
+    _write_settings_file(settings)
+
+def license_loop():
+    while True:
+        try:
+            recheck_license()
+        except Exception as e:
+            logger.critical(f"License check loop error: {e}")
+        time.sleep(LICENSE_RECHECK_SECONDS)
+
 @app.context_processor
 def inject_user():
     return dict(
@@ -601,7 +672,8 @@ def inject_user():
         app_version=get_app_version(),
         current_year=datetime.now().year,
         company_brand=APP_SETTINGS.get("company_name", ""),
-        is_licensed=is_app_licensed()
+        is_licensed=is_app_licensed(),
+        license_status=get_license_status()
     )
 
 @app.route("/login", methods=["GET", "POST"])
@@ -1497,12 +1569,14 @@ def server_license():
     settings["company_name"] = company_name
     settings["contact_email"] = contact_email
     settings["expires_at"] = expires_at
+    settings.pop("license_invalid_reason", None)
     _write_settings_file(settings)
 
     APP_SETTINGS["license_key"] = license_key
     APP_SETTINGS["company_name"] = company_name
     APP_SETTINGS["contact_email"] = contact_email
     APP_SETTINGS["expires_at"] = expires_at
+    APP_SETTINGS.pop("license_invalid_reason", None)
     logger.info(f"{u(g.user_id)} updated license (licensed={is_app_licensed()})")
     msg = f"Licensed to {company_name}" if company_name else "License removed"
     return jsonify({
@@ -1620,4 +1694,5 @@ if __name__ == "__main__":
         t.start()
         st = threading.Thread(target=sync_loop, daemon=True)
         st.start()
+        threading.Thread(target=license_loop, daemon=True).start()
     socketio.run(app, host=APP_SETTINGS["host"], port=APP_SETTINGS["port"], debug=True, use_reloader=True, allow_unsafe_werkzeug=True)
