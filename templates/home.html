@@ -819,7 +819,7 @@
 
   /* ---------- edit / delete ---------- */
 
-  function openEdit(entry) {
+  async function openEdit(entry) {
     if (!entry) return;
     editEntry = entry;
     document.getElementById("edit-name").value = entry.name || "";
@@ -827,6 +827,10 @@
     document.getElementById("edit-secret").value = entry.secret || "";
     const companies = {};
     secrets.forEach(s => { if (s.company_id != null) companies[s.company_id] = s.company_name || ("Company " + s.company_id); });
+    try {
+      const all = await A.fetchJSON("/api/companies");
+      (all || []).forEach(c => { companies[c.id] = c.name || ("Company " + c.id); });
+    } catch (e) { /* fall back to companies derived from existing secrets */ }
     const sel = document.getElementById("edit-company");
     sel.innerHTML = Object.entries(companies)
       .sort((a, b) => a[1].localeCompare(b[1]))

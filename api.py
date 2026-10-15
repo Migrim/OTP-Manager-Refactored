@@ -242,6 +242,14 @@ def get_username(uid):
     except:
         return None
 
+@api_bp.route("/companies", methods=["GET"])
+def list_companies():
+    with sqlite3.connect(DB_PATH) as db:
+        cursor = db.cursor()
+        cursor.execute("SELECT company_id, name FROM companies ORDER BY name ASC")
+        rows = cursor.fetchall()
+    return jsonify([{"id": r[0], "name": r[1]} for r in rows])
+
 @api_bp.route("/secrets", methods=["GET"])
 def get_all_secrets():
     t0 = time.perf_counter()
