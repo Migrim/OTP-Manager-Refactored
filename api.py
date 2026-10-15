@@ -641,8 +641,14 @@ def create_company():
             db.commit()
             new_id = cursor.lastrowid
     except sqlite3.IntegrityError as e:
-        msg = "Kundennummer already in use" if "kundennummer" in str(e) else "A company with this name already exists"
-        logger.warning(f"{u(getattr(g, 'user_id', None))} create_company result=duplicate name={name} kundennummer={kundennummer}")
+        err = str(e).lower()
+        if "kundennummer" in err:
+            msg = "Kundennummer already in use"
+        elif "companies.name" in err:
+            msg = "A company with this name already exists"
+        else:
+            msg = "Could not save company (database constraint failed)"
+        logger.warning(f"{u(getattr(g, 'user_id', None))} create_company result=integrity_error name={name} kundennummer={kundennummer} error={e}")
         if wants_json_response():
             return jsonify({"error": msg}), 409
         flash(msg, "error")
@@ -722,8 +728,14 @@ def edit_company():
                 )
             db.commit()
     except sqlite3.IntegrityError as e:
-        msg = "Kundennummer already in use" if "kundennummer" in str(e) else "A company with this name already exists"
-        logger.warning(f"{u(getattr(g, 'user_id', None))} edit_company result=duplicate id={company_id} name={name} kundennummer={kundennummer}")
+        err = str(e).lower()
+        if "kundennummer" in err:
+            msg = "Kundennummer already in use"
+        elif "companies.name" in err:
+            msg = "A company with this name already exists"
+        else:
+            msg = "Could not save company (database constraint failed)"
+        logger.warning(f"{u(getattr(g, 'user_id', None))} edit_company result=integrity_error id={company_id} name={name} kundennummer={kundennummer} error={e}")
         if wants_json_response():
             return jsonify({"error": msg}), 409
         flash(msg, "error")
