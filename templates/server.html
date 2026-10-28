@@ -125,6 +125,21 @@
         </div>
       </div>
 
+      <!-- API token -->
+      <div class="task-card">
+        <div class="task-main">
+          <div style="flex:1">
+            <div class="task-title">API Token</div>
+            <div class="task-desc" id="tok-status">Grants read access to <span class="mono">GET /api/v1/codes</span>.</div>
+          </div>
+          <button class="btn-danger" id="tok-revoke" type="button" style="padding:9px 16px;display:none">Revoke</button>
+          <button class="btn-accent" id="tok-generate" type="button" style="padding:9px 16px">Generate</button>
+        </div>
+        <div id="tok-box" style="display:none;margin-top:12px">
+          <input class="text-input mono" id="tok-value" readonly>
+        </div>
+      </div>
+
       <!-- CLI -->
       <div class="task-card">
         <div class="task-main">
@@ -520,6 +535,38 @@
       });
       A.toast(res.message || "Server configuration saved");
     } catch (err) { A.toast(err.message, "error"); } finally { saveBtn.disabled = false; }
+  });
+
+  /* ---- api token ---- */
+  const tokStatus = document.getElementById("tok-status");
+  const tokRevoke = document.getElementById("tok-revoke");
+  const tokGen = document.getElementById("tok-generate");
+  function renderTokenState(has, createdAt) {
+    tokRevoke.style.display = has ? "inline-flex" : "none";
+    tokGen.textContent = has ? "Regenerate" : "Generate";
+    if (has) tokStatus.textContent = "Token active";
+  }
+  A.fetchJSON("/api/server/token").then(r => renderTokenState(r.has_token, r.created_at)).catch(() => {});
+  tokGen.addEventListener("click", async () => {
+    if (tokRevoke.style.display !== "none" && !confirm("Generating a new token invalidates the current one. Continue?")) return;
+    tokGen.disabled = true;
+    try {
+      const res = await A.fetchJSON("/api/server/token", { method: "POST", body: {} });
+      document.getElementById("tok-value").value = res.token;
+      document.getElementById("tok-box").style.display = "block";
+      renderTokenState(true, res.created_at);
+      A.toast("API token generated");
+    } catch (err) { A.toast(err.message, "error"); } finally { tokGen.disabled = false; }
+  });
+  tokRevoke.addEventListener("click", async () => {
+    if (!confirm("Revoke the API token? Clients using it will lose access.")) return;
+    try {
+      const res = await A.fetchJSON("/api/server/token", { method: "DELETE" });
+      document.getElementById("tok-box").style.display = "none";
+      tokStatus.innerHTML = 'Grants read access to <span class="mono">GET /api/v1/codes</span>.';
+      renderTokenState(false);
+      A.toast(res.message);
+    } catch (err) { A.toast(err.message, "error"); }
   });
 
   function licenseStatusHTML(prefix, info) {

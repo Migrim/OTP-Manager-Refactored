@@ -9,10 +9,14 @@ import urllib.error
 import subprocess
 import signal
 import struct
+import hashlib
+import hmac
+import secrets
+import pyotp
 from datetime import datetime, timezone
 import time
 from functools import wraps
-from api import api_bp
+from api import api_bp, normalize_secret
 from extensions import bcrypt
 from logger import logger
 import sync
@@ -1526,6 +1530,74 @@ def server_config():
     if changed_runtime:
         msg += " — restart the server to apply port/secret changes"
     return jsonify({"message": msg})
+
+def _hash_api_token(token):
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+@app.route("/api/server/token", methods=["GET"])
+@admin_required_json
+def server_token_status():
+    settings = _read_settings_file()
+    return jsonify({"has_token": bool(settings.get("api_token_hash")), "created_at": settings.get("api_token_created_at")})
+
+@app.route("/api/server/token", methods=["POST"])
+@admin_required_json
+def server_token_generate():
+    token = "otp_" + secrets.token_urlsafe(32)
+    settings = _read_settings_file()
+    settings["api_token_hash"] = _hash_api_token(token)
+    settings["api_token_created_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    _write_settings_file(settings)
+    logger.info(f"{u(g.user_id)} generated a new API token")
+    return jsonify({"token": token, "created_at": settings["api_token_created_at"]})
+
+@app.route("/api/server/token", methods=["DELETE"])
+@admin_required_json
+def server_token_revoke():
+    settings = _read_settings_file()
+    settings.pop("api_token_hash", None)
+    settings.pop("api_token_created_at", None)
+    _write_settings_file(settings)
+    logger.info(f"{u(g.user_id)} revoked the API token")
+    return jsonify({"message": "API token revoked"})
+
+@app.route("/api/v1/codes", methods=["GET"])
+def token_codes():
+    auth = request.headers.get("Authorization", "")
+    token = auth[7:].strip() if auth.lower().startswith("bearer ") else request.headers.get("X-API-Token", "").strip()
+    stored = _read_settings_file().get("api_token_hash")
+    if not token or not stored or not hmac.compare_digest(_hash_api_token(token), stored):
+        logger.warning(f"invalid API token used from {request.remote_addr} path={request.path}")
+        return jsonify({"error": "Invalid or missing API token"}), 401
+
+    with sqlite3.connect(DB_PATH) as db:
+        rows = db.execute("""
+            SELECT s.name, s.email, s.secret, s.refresh_time, c.name
+            FROM otp_secrets s
+            LEFT JOIN companies c ON s.company_id = c.company_id
+            ORDER BY c.name, s.name
+        """).fetchall()
+
+    now = time.time()
+    out = []
+    for name, email, secret, refresh, company in rows:
+        try:
+            interval = int(refresh) if refresh and int(refresh) > 0 else 30
+            totp = pyotp.TOTP(normalize_secret(secret), interval=interval)
+            code = totp.now()
+            remaining = interval - (int(now) % interval)
+        except Exception:
+            code, remaining = "", 0
+        out.append({
+            "name": name,
+            "email": email,
+            "company": company,
+            "code": code,
+            "seconds_remaining": remaining,
+        })
+    resp = jsonify({"server_time": int(now), "count": len(out), "codes": out})
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 @app.route("/api/server/license/check", methods=["POST"])
 @admin_required_json
