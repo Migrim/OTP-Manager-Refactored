@@ -268,7 +268,9 @@ def load_app_settings():
     license_key = str(data.get("license_key") or "").strip()
     company_name = str(data.get("company_name") or "").strip()
     contact_email = str(data.get("contact_email") or "").strip()
+    contact_name = str(data.get("contact_name") or "").strip()
     expires_at = data.get("expires_at") or None
+    avatar = str(data.get("avatar") or "")
     return {
         "host": host,
         "port": port,
@@ -276,14 +278,19 @@ def load_app_settings():
         "license_key": license_key,
         "company_name": company_name,
         "contact_email": contact_email,
+        "contact_name": contact_name,
+        "avatar": avatar,
         "expires_at": expires_at,
         "license_invalid_reason": data.get("license_invalid_reason") or None
     }
 
 APP_SETTINGS = load_app_settings()
 
-LICENSE_API_URL = "https://www.one-auth.net/api/v1/licenses/verify"
+import one_auth
+
+LICENSE_API_URL = one_auth.api_url("/api/v1/licenses/verify")
 LICENSE_API_KEY = "fWC_L4Tyt9sdoAEiUHzdpXtPdIQCrqGY7uK__pnpKP4"
+one_auth.configure(LICENSE_API_KEY, lambda: get_app_version())
 LICENSE_PRODUCT = "otp-tool"
 LICENSE_REASON_MESSAGES = {
     "missing_key": "Enter a license key",
@@ -330,6 +337,36 @@ def verify_license(key):
     if not body.get("valid"):
         return False, body.get("reason", "unreachable")
     return True, body
+
+LICENSE_DEVICE_BASE = one_auth.api_url("/api/v1/licenses/device")
+LICENSE_REASON_MESSAGES.update({
+    "access_denied": "Sign-in was denied on One-Auth",
+    "expired_token": "The sign-in request expired — start again",
+    "no_license": "This One-Auth account has no OTP-Tool license",
+    "suspended": "This One-Auth account is suspended",
+    "invalid_token": "Your One-Auth session ended — sign in again",
+})
+
+def one_auth_post(url, payload):
+    """POST JSON to the One-Auth licensing API. Returns (http_status, body_dict); status 0 on network failure."""
+    return one_auth.post_json(url, payload)
+
+LICENSE_AVATAR_MAX = 600_000
+LICENSE_AVATAR_PREFIXES = ("data:image/png;base64,", "data:image/jpeg;base64,", "data:image/webp;base64,", "data:image/gif;base64,")
+
+def extract_account(body):
+    """Pull the One-Auth account identity out of a license response. Prefers the `user`
+    object and falls back to the contact_* / company fields."""
+    user = body.get("user") if isinstance(body.get("user"), dict) else {}
+    avatar = str(user.get("avatar") or "").strip()
+    if not avatar.startswith(LICENSE_AVATAR_PREFIXES) or len(avatar) > LICENSE_AVATAR_MAX:
+        avatar = ""
+    return {
+        "company_name": str(user.get("company") or body.get("company") or "").strip()[:60],
+        "contact_name": str(user.get("full_name") or body.get("contact_name") or "").strip()[:80],
+        "contact_email": str(user.get("email") or body.get("contact_email") or "").strip(),
+        "avatar": avatar,
+    }
 
 def parse_license_date(value):
     if not value:
@@ -596,8 +633,8 @@ def get_license_status():
     if not (APP_SETTINGS.get("license_key") and APP_SETTINGS.get("company_name")):
         return {"state": "none", "days_left": None, "expires_at": ""}
     invalid = APP_SETTINGS.get("license_invalid_reason")
-    if invalid in ("revoked", "not_found"):
-        state = "revoked" if invalid == "revoked" else "invalid"
+    if invalid in ("revoked", "not_found", "suspended", "no_license"):
+        state = {"revoked": "revoked", "suspended": "suspended"}.get(invalid, "invalid")
         return {"state": state, "days_left": None, "expires_at": format_license_date(APP_SETTINGS.get("expires_at"))}
     expires = parse_license_date(APP_SETTINGS.get("expires_at"))
     if invalid == "expired":
@@ -625,9 +662,12 @@ def recheck_license():
         return
     ok, result = verify_license(key)
     if ok:
+        acct = extract_account(result)
         updates = {
-            "company_name": str(result.get("company") or APP_SETTINGS.get("company_name") or "").strip()[:60],
-            "contact_email": str(result.get("contact_email") or "").strip(),
+            "company_name": acct["company_name"] or APP_SETTINGS.get("company_name") or "",
+            "contact_email": acct["contact_email"],
+            "contact_name": acct["contact_name"] or APP_SETTINGS.get("contact_name") or "",
+            "avatar": acct["avatar"] or ("" if "user" in result else APP_SETTINGS.get("avatar", "")),
             "expires_at": result.get("expires_at") or None,
             "license_invalid_reason": None,
         }
@@ -638,6 +678,9 @@ def recheck_license():
         updates = {"license_invalid_reason": result}
     else:
         return
+    _apply_settings_updates(updates)
+
+def _apply_settings_updates(updates):
     if all(APP_SETTINGS.get(k) == v for k, v in updates.items()):
         return
     APP_SETTINGS.update(updates)
@@ -649,13 +692,49 @@ def recheck_license():
             settings[k] = v
     _write_settings_file(settings)
 
+def refresh_account():
+    """Refresh the One-Auth account + license via the stored account token and apply the result.
+    Never raises; network failures keep the last known license state. Returns the one_auth.refresh() result."""
+    result = one_auth.refresh()
+    state, reason, body, user = result["state"], result["reason"], result["body"], result["user"]
+    if state == one_auth.SIGNED_OUT:
+        _store_license("", "", "", None)
+        logger.warning("One-Auth session ended (invalid_token): signed out, sign in again to restore the license")
+        return result
+    if state not in (one_auth.OK, one_auth.LICENSE_INVALID):
+        if state in (one_auth.NETWORK_ERROR, one_auth.RATE_LIMITED, one_auth.UNAUTHORIZED):
+            logger.warning(f"One-Auth refresh did not complete: {state} ({reason})")
+        return result
+    user = user or {}
+    updates = {
+        "company_name": user.get("company") or APP_SETTINGS.get("company_name") or "",
+        "contact_email": user.get("email") or "",
+        "contact_name": user.get("name") or "",
+        "avatar": user.get("avatar") or "",
+    }
+    if state == one_auth.OK:
+        updates["license_key"] = str(body.get("key") or APP_SETTINGS.get("license_key") or "").strip()
+        updates["expires_at"] = body.get("expires_at") or None
+        updates["license_invalid_reason"] = None
+    else:
+        logger.warning(f"One-Auth refresh: license is not valid ({reason})")
+        updates["license_invalid_reason"] = reason
+    _apply_settings_updates(updates)
+    return result
+
 def license_loop():
     while True:
+        delay = one_auth.REFRESH_INTERVAL
         try:
-            recheck_license()
+            if one_auth.has_account():
+                state = refresh_account()["state"]
+                delay = one_auth.next_delay(state)
+            else:
+                recheck_license()  # installs activated before account tokens existed
         except Exception as e:
             logger.critical(f"License check loop error: {e}")
-        time.sleep(LICENSE_RECHECK_SECONDS)
+            delay = one_auth.RETRY_AFTER_FAILURE
+        time.sleep(delay)
 
 @app.context_processor
 def inject_user():
@@ -1463,6 +1542,8 @@ def server_page():
         server_port=stored.get("port", APP_SETTINGS.get("port", 7440)),
         server_secret=stored.get("secret_key", ""),
         license_key=stored.get("license_key", APP_SETTINGS.get("license_key", "")),
+        license_avatar=stored.get("avatar", APP_SETTINGS.get("avatar", "")),
+        license_contact_name=stored.get("contact_name", APP_SETTINGS.get("contact_name", "")),
         company_brand=stored.get("company_name", APP_SETTINGS.get("company_name", "")),
         license_contact_email=stored.get("contact_email", APP_SETTINGS.get("contact_email", "")),
         license_expires_at=format_license_date(stored.get("expires_at", APP_SETTINGS.get("expires_at"))),
@@ -1599,47 +1680,13 @@ def token_codes():
     resp.headers["Cache-Control"] = "no-store"
     return resp
 
-@app.route("/api/server/license/check", methods=["POST"])
-@admin_required_json
-def server_license_check():
-    data = request.get_json() or {}
-    license_key = str(data.get("license_key") or "").strip()
-
-    ok, result = verify_license(license_key)
-    if not ok:
-        return jsonify({"valid": False, "error": LICENSE_REASON_MESSAGES.get(result, f"License verification failed ({result})")}), 400
-
-    return jsonify({
-        "valid": True,
-        "company_name": str(result.get("company") or "").strip(),
-        "contact_email": str(result.get("contact_email") or "").strip(),
-        "contact_name": str(result.get("contact_name") or "").strip(),
-        "expires_at": format_license_date(result.get("expires_at")),
-        "product_name": str(result.get("product_name") or "").strip(),
-    })
-
-@app.route("/api/server/license", methods=["POST"])
-@admin_required_json
-def server_license():
-    data = request.get_json() or {}
-    license_key = str(data.get("license_key") or "").strip()
-
-    company_name = ""
-    contact_email = ""
-    expires_at = None
-    if license_key:
-        ok, result = verify_license(license_key)
-        if not ok:
-            logger.warning(f"{u(g.user_id)} license verification failed: {result}")
-            return jsonify({"error": LICENSE_REASON_MESSAGES.get(result, f"License verification failed ({result})")}), 400
-        company_name = str(result.get("company") or "").strip()[:60]
-        contact_email = str(result.get("contact_email") or "").strip()
-        expires_at = result.get("expires_at") or None
-
+def _store_license(license_key, company_name, contact_email, expires_at, contact_name="", avatar=""):
     settings = _read_settings_file()
     settings["license_key"] = license_key
     settings["company_name"] = company_name
     settings["contact_email"] = contact_email
+    settings["contact_name"] = contact_name
+    settings["avatar"] = avatar
     settings["expires_at"] = expires_at
     settings.pop("license_invalid_reason", None)
     _write_settings_file(settings)
@@ -1647,17 +1694,115 @@ def server_license():
     APP_SETTINGS["license_key"] = license_key
     APP_SETTINGS["company_name"] = company_name
     APP_SETTINGS["contact_email"] = contact_email
+    APP_SETTINGS["contact_name"] = contact_name
+    APP_SETTINGS["avatar"] = avatar
     APP_SETTINGS["expires_at"] = expires_at
     APP_SETTINGS.pop("license_invalid_reason", None)
-    logger.info(f"{u(g.user_id)} updated license (licensed={is_app_licensed()})")
-    msg = f"Licensed to {company_name}" if company_name else "License removed"
+
+# Pending One-Auth device sign-in. The device_code is a secret and stays server-side.
+_device_login = {"device_code": None, "user_code": None, "expires": 0.0, "user_id": None}
+_device_login_lock = threading.Lock()
+
+@app.route("/api/server/license/device/start", methods=["POST"])
+@admin_required_json
+def server_license_device_start():
+    status, body = one_auth_post(LICENSE_DEVICE_BASE + "/start", {"product": LICENSE_PRODUCT})
+    if status != 200 or not body.get("device_code"):
+        reason = body.get("reason") or {401: "unauthorized", 429: "rate_limited"}.get(status, "unreachable")
+        logger.warning(f"{u(g.user_id)} One-Auth device sign-in start failed: status={status} reason={reason}")
+        return jsonify({"error": LICENSE_REASON_MESSAGES.get(reason, f"Could not start sign-in ({reason})")}), 502
+    with _device_login_lock:
+        _device_login.update(
+            device_code=body["device_code"],
+            user_code=body.get("user_code"),
+            expires=time.time() + int(body.get("expires_in") or 600),
+            user_id=g.user_id,
+        )
+    logger.info(f"{u(g.user_id)} started One-Auth sign-in for license activation")
     return jsonify({
-        "message": msg,
+        "user_code": body.get("user_code"),
+        "verification_uri_complete": body.get("verification_uri_complete") or body.get("verification_uri"),
+        "interval": int(body.get("interval") or 5),
+        "expires_in": int(body.get("expires_in") or 600),
+    })
+
+@app.route("/api/server/license/device/poll", methods=["POST"])
+@admin_required_json
+def server_license_device_poll():
+    with _device_login_lock:
+        device_code = _device_login["device_code"]
+        expired = time.time() > _device_login["expires"]
+        owner = _device_login["user_id"]
+    if not device_code or owner != g.user_id:
+        return jsonify({"error": "No sign-in in progress — start again"}), 400
+    if expired:
+        with _device_login_lock:
+            _device_login["device_code"] = None
+        return jsonify({"error": LICENSE_REASON_MESSAGES["expired_token"]}), 400
+
+    status, body = one_auth_post(LICENSE_DEVICE_BASE + "/token", {"device_code": device_code, "device": one_auth.get_device_info()})
+    reason = body.get("reason") or body.get("error")
+    if status == 428 or reason == "authorization_pending":
+        return jsonify({"pending": True})
+    if status == 429 or reason == "slow_down":
+        return jsonify({"pending": True})  # keep polling; the client interval already backs off
+    if status == 0:
+        return jsonify({"pending": True})  # transient network failure
+    if status != 200 or body.get("valid") is False or not body.get("key"):
+        with _device_login_lock:
+            _device_login["device_code"] = None
+        reason = reason or "unreachable"
+        logger.warning(f"{u(g.user_id)} One-Auth sign-in failed: {reason}")
+        return jsonify({"error": LICENSE_REASON_MESSAGES.get(reason, f"Sign-in failed ({reason})")}), 400
+
+    with _device_login_lock:
+        _device_login["device_code"] = None
+    acct = extract_account(body)
+    company_name, contact_email, contact_name = acct["company_name"], acct["contact_email"], acct["contact_name"]
+    expires_at = body.get("expires_at") or None
+    try:
+        one_auth.on_sign_in(body)
+    except Exception as e:
+        logger.warning(f"could not store One-Auth account token: {type(e).__name__}")
+    _store_license(str(body["key"]).strip(), company_name, contact_email, expires_at, contact_name, acct["avatar"])
+    logger.info(f"{u(g.user_id)} activated license via One-Auth sign-in (licensed={is_app_licensed()})")
+    return jsonify({
+        "pending": False,
+        "message": f"Licensed to {company_name}" if company_name else "License activated",
+        "license_key": str(body["key"]).strip(),
         "company_name": company_name,
+        "contact_name": contact_name,
         "contact_email": contact_email,
         "expires_at": format_license_date(expires_at),
         "is_licensed": is_app_licensed(),
     })
+
+@app.route("/api/server/license/refresh", methods=["POST"])
+@admin_required_json
+def server_license_refresh():
+    if not one_auth.has_account():
+        recheck_license()
+        return jsonify({"state": "no_account", "message": "License re-checked. Sign in again to link this server to your account.", "is_licensed": is_app_licensed()})
+    result = refresh_account()
+    state = result["state"]
+    messages = {
+        one_auth.OK: "Account refreshed",
+        one_auth.SIGNED_OUT: LICENSE_REASON_MESSAGES["invalid_token"],
+        one_auth.LICENSE_INVALID: LICENSE_REASON_MESSAGES.get(result["reason"], "License is not valid"),
+        one_auth.RATE_LIMITED: LICENSE_REASON_MESSAGES["rate_limited"],
+        one_auth.UNAUTHORIZED: LICENSE_REASON_MESSAGES["unauthorized"],
+        one_auth.NETWORK_ERROR: LICENSE_REASON_MESSAGES["unreachable"],
+    }
+    logger.info(f"{u(g.user_id)} refreshed the One-Auth account: {state}")
+    return jsonify({"state": state, "message": messages.get(state, "Done"), "is_licensed": is_app_licensed()})
+
+@app.route("/api/server/license/signout", methods=["POST"])
+@admin_required_json
+def server_license_signout():
+    _store_license("", "", "", None)
+    one_auth.clear_account()
+    logger.info(f"{u(g.user_id)} signed out of One-Auth (license removed)")
+    return jsonify({"message": "Signed out of One-Auth", "is_licensed": is_app_licensed()})
 
 def _restart_process():
     logger.warning("server restart requested from web UI")

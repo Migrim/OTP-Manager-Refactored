@@ -147,11 +147,13 @@
 
   <main class="main {{ '' if is_logged_in else 'no-side' }}">
     {% block page %}{% endblock %}
-    {% if is_logged_in and license_status.state in ('expiring', 'expired', 'revoked', 'invalid') %}
+    {% if is_logged_in and license_status.state in ('expiring', 'expired', 'revoked', 'suspended', 'invalid') %}
     <div class="license-banner {{ license_status.state }}" id="license-banner" role="alert">
       <span>
         {% if license_status.state == 'revoked' %}
           Your license has been revoked. Licensed features are disabled.
+        {% elif license_status.state == 'suspended' %}
+          Your One-Auth account is suspended. Licensed features are disabled.
         {% elif license_status.state == 'invalid' %}
           Your license key is no longer recognized. Licensed features are disabled.
         {% elif license_status.state == 'expired' %}
