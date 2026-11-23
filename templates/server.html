@@ -40,7 +40,7 @@
           </div>
           <button class="btn-accent" id="check-updates" type="button" style="padding:9px 16px">
             <span style="width:16px;height:16px;display:flex;align-items:center;justify-content:center" data-icon="refresh" id="check-updates-ico"></span>
-            <span class="spinner sm light" id="check-updates-spinner" style="display:none"></span>
+            <span class="spinner sm light" id="check-updates-spinner" style="display:none;width:16px;height:16px;flex:none"></span>
             <span id="check-updates-label">Check for Updates</span>
           </button>
         </div>
@@ -184,7 +184,7 @@
             <div class="task-title">Remote Console</div>
             <div class="task-desc">Opens a terminal session in your browser.</div>
           </div>
-          <button class="btn-accent" id="console-connect" type="button" style="padding:9px 16px">Connect</button>
+          <button class="btn-accent" id="console-connect" type="button" style="padding:9px 16px"><span style="width:14px;height:14px;display:flex" data-icon="play"></span>Connect</button>
         </div>
       </div>
 
@@ -321,7 +321,12 @@
   const checkBtnSpinner = document.getElementById("check-updates-spinner");
   const checkBtnLabel = document.getElementById("check-updates-label");
   let latestAvailableVersion = null;
-  checkBtn.addEventListener("click", async () => {
+  async function runUpdateCheck() {
+    if (checkBtn.disabled) return;
+    /* lock the current size so swapping icon/spinner/label never resizes the button */
+    checkBtn.style.width = checkBtn.offsetWidth + "px";
+    checkBtn.style.height = checkBtn.offsetHeight + "px";
+    checkBtn.style.justifyContent = "center";
     checkBtn.disabled = true;
     checkBtnIco.style.display = "none";
     checkBtnSpinner.style.display = "flex";
@@ -355,7 +360,9 @@
     checkBtnSpinner.style.display = "none";
     checkBtnIco.style.display = "flex";
     checkBtnLabel.textContent = "Check for Updates";
-  });
+  }
+  checkBtn.addEventListener("click", runUpdateCheck);
+  runUpdateCheck(); /* check automatically when the page opens */
 
   /* ---- update now: stop -> update -> start, with a live full-page wait screen ---- */
   const updateOverlay = document.getElementById("update-overlay");

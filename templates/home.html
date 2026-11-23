@@ -107,6 +107,9 @@
   let fetching = false;
   let sectionsKey = null;
   let animateDigits = true;
+  const PAGE_SIZE = 40;
+  let renderLimit = PAGE_SIZE;
+  let hasMore = false;
 
   const content = document.getElementById("home-content");
   const scroller = document.getElementById("home-scroll");
@@ -127,6 +130,13 @@
       else visibleCards.delete(entry.target);
     });
   }, { root: scroller, rootMargin: "600px 0px" });
+
+  const lazyObserver = new IntersectionObserver(entries => {
+    if (!entries.some(en => en.isIntersecting) || !hasMore) return;
+    lazyObserver.disconnect();
+    renderLimit += PAGE_SIZE;
+    render();
+  }, { root: scroller, rootMargin: "800px 0px" });
 
   function observeCards() {
     cardObserver.disconnect();
@@ -300,7 +310,8 @@
     return cardHTMLCodeFirst(e, isPinnedGroup);
   }
 
-  function sectionHTML(title, entries, isPinnedGroup) {
+  function sectionHTML(title, entries, isPinnedGroup, shown) {
+    shown = shown || entries;
     const ids = entries.map(e => e.id);
     const allSel = ids.length && ids.every(id => selected.has(id));
     const head =
@@ -317,14 +328,14 @@
 
     let body;
     if (LAYOUT === "cards") {
-      body = '<div class="otp-cards">' + entries.map(e => cardHTML(e, isPinnedGroup)).join("") + "</div>";
+      body = '<div class="otp-cards">' + shown.map(e => cardHTML(e, isPinnedGroup)).join("") + "</div>";
     } else {
       let cols = '<div class="otp-cols" style="grid-template-columns:' + gridCols() + '">' +
         "<div>Name</div><div>Code</div>" +
         (SHOW_EMAILS ? "<div>E-Mail</div>" : "") +
         (SHOW_SECRET ? "<div>Secret</div>" : "") +
         '<div style="text-align:right">Actions</div></div>';
-      body = '<div class="otp-panel">' + cols + entries.map(e => rowHTML(e, isPinnedGroup)).join("") + "</div>";
+      body = '<div class="otp-panel">' + cols + shown.map(e => rowHTML(e, isPinnedGroup)).join("") + "</div>";
     }
     return '<section class="otp-section' + (animateDigits ? " enter" : "") + '" data-section="' + A.escapeHtml(title) + '">' + head + body + "</section>";
   }
@@ -371,9 +382,20 @@
     const filtered = secrets.filter(matches);
     const { pinnedEntries, byCompany, names } = computeSections(filtered);
 
+    /* lazy loading: only the first `renderLimit` entries (across all sections, in
+       display order) are put in the DOM; a sentinel at the bottom loads more on scroll */
+    let budget = renderLimit;
+    const part = (title, list, isPinned) => {
+      if (budget <= 0) return "";
+      const shown = list.slice(0, budget);
+      budget -= shown.length;
+      return sectionHTML(title, list, isPinned, shown);
+    };
     let html = "";
-    if (pinnedEntries.length) html += sectionHTML("__pinned__", pinnedEntries, true);
-    names.forEach(n => { html += sectionHTML(n, sortEntries(byCompany[n]), false); });
+    if (pinnedEntries.length) html += part("__pinned__", pinnedEntries, true);
+    names.forEach(n => { html += part(n, sortEntries(byCompany[n]), false); });
+    hasMore = budget <= 0 && filtered.length > renderLimit;
+    if (hasMore) html += '<div id="lazy-sentinel" style="height:1px"></div>';
     if (!filtered.length) {
       html += secrets.length ? searchEmptyHTML() : vaultEmptyHTML();
     }
@@ -381,6 +403,7 @@
     sectionsKey = sectionsKeyOf(pinnedEntries, names, byCompany);
     animateDigits = false;
     observeCards();
+    if (hasMore) lazyObserver.observe(document.getElementById("lazy-sentinel"));
     updateTimers(true);
     renderBulkBar();
     topbar.style.display = secrets.length ? "" : "none";
@@ -485,9 +508,9 @@
   let searchDebounceTimer = null;
   searchInput.addEventListener("input", () => {
     clearTimeout(searchDebounceTimer);
-    searchDebounceTimer = setTimeout(() => { query = searchInput.value; render(); }, 150);
+    searchDebounceTimer = setTimeout(() => { query = searchInput.value; renderLimit = PAGE_SIZE; render(); }, 150);
   });
-  filterSelect.addEventListener("change", () => { companyFilter = filterSelect.value; render(); });
+  filterSelect.addEventListener("change", () => { companyFilter = filterSelect.value; renderLimit = PAGE_SIZE; render(); });
   const searchAC = A.attachAutocomplete(searchInput, () => {
     const c = [];
     secrets.forEach(e => {
@@ -504,6 +527,7 @@
     query = ""; companyFilter = "";
     searchInput.value = ""; filterSelect.value = "";
     searchAC.refresh();
+    renderLimit = PAGE_SIZE;
     render();
   }
 
@@ -604,11 +628,14 @@
       const title = selGroup.getAttribute("data-select-group");
       const section = content.querySelector('[data-section="' + CSS.escape(title) + '"]');
       const checkNow = selGroup.checked;
-      section.querySelectorAll("[data-select]").forEach(cb => {
-        cb.checked = checkNow;
-        const id = +cb.getAttribute("data-select");
-        if (checkNow) selected.add(id); else selected.delete(id);
+      /* include entries not yet lazy-rendered */
+      const isPin = title === "__pinned__";
+      secrets.filter(matches).forEach(e => {
+        const inGroup = isPin ? pinned.has(String(e.id)) : (!pinned.has(String(e.id)) || ONLY_PINNED_SIDEBAR) && (e.company_name || "No company") === title;
+        if (!inGroup) return;
+        if (checkNow) selected.add(+e.id); else selected.delete(+e.id);
       });
+      syncSelectionUI();
       renderBulkBar();
       return;
     }
@@ -701,7 +728,7 @@
   /* ---------- bulk bar ---------- */
 
   function selectAll() {
-    content.querySelectorAll("[data-select]").forEach(cb => selected.add(+cb.getAttribute("data-select")));
+    secrets.filter(matches).forEach(e => selected.add(+e.id));
     syncSelectionUI();
     renderBulkBar();
   }

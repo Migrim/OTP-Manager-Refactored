@@ -533,8 +533,7 @@ html.dark-mode select.text-input {
 
 /* ---------- OTP sections (home) ---------- */
 
-#home-content { max-width: 1100px; margin: 0 auto; padding: 0 22px; box-sizing: border-box; }
-html.full-width-layout #home-content { max-width: none; }
+#home-content { max-width: none; margin: 0 auto; padding: 0 22px; box-sizing: border-box; }
 html.full-width-layout .table-panel { max-width: none !important; }
 .otp-section { margin: 0 0 22px 0; }
 .otp-section.enter { animation: sectionFadeIn 0.4s ease-out; }
